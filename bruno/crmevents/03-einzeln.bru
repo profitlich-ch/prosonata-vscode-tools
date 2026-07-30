@@ -1,0 +1,17 @@
+meta {
+  name: CRM-Ereignisse, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/crmevent/{{crmEventId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/crmevent/{id}`
+
+  Braucht `crmEventId` in der `.env`.
+}

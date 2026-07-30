@@ -1,0 +1,18 @@
+meta {
+  name: crmevents
+  seq: 6
+}
+
+docs {
+  **Quelle:** `docs/prosonata-api/crm.md` – CRM-Ereignisse
+
+  Zugriff nicht eigens genannt.
+
+  **Achtung, Eigenheit der Dokumentation:** Der Einzelabruf lautet dort
+  `GET /api/v1/crmevent/{id}` – **ohne** das Plural-s, anders als bei allen anderen
+  Ressourcen. Ob das ein Fehler in der Doku ist, zeigt erst der Aufruf. Die Anfrage
+  `03 Einzeln` nutzt die Singularform wie dokumentiert.
+
+  Das Werkzeug benutzt diese Ressource **nicht**. Sie ist abgebildet, damit die Sammlung
+  die Dokumentation vollständig wiedergibt.
+}

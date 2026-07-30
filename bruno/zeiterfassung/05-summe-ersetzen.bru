@@ -1,0 +1,33 @@
+meta {
+  name: Ersetzt oder addiert ein PUT die Summe?
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/projecttimes/{{createdId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "workingTime": 10.5
+  }
+}
+
+docs {
+  Der Testeintrag wurde mit **1.75** angelegt. Diese Anfrage schickt **3.5**.
+  
+  - Steht danach **3.5** im Eintrag → die API **ersetzt**. So setzt es KONZEPT.md §3
+    voraus: `workingTime` ist die absolute Summe, jeder Schreibzugriff idempotent, ein
+    Wiederholungsversuch verdoppelt nichts.
+  - Steht **5.25** → die API **addiert**. Dann fällt die Grundlage weg: das Konzept müsste
+    auf Differenzen umgestellt werden, mit allen Folgen für Wiederholungsversuche und den
+    fremden Anteil bei mehreren Rechnern.
+  
+  Mit `projecttimes/03 Einzeln` nachsehen.
+  
+  **Ebenfalls prüfen:** Bleibt `detail` unverändert, obwohl es nicht mitgeschickt wurde?
+  Ein Teilrumpf darf keine Felder zurücksetzen.
+}

@@ -1,0 +1,35 @@
+meta {
+  name: Firmen und Gruppen filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/customers?perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+  ~customerName: 
+  ~companyCode: 
+  ~companyStatus: 
+  ~companyTags: 
+  ~comments: 
+  ~hourlyRateDiscount: 
+  ~customerCostRate: 
+  ~customerPriceGroup: 
+  ~customerPaymentTarget: 
+  ~customerCashDiscountRate: 
+  ~customerCashDiscountPaymentTarget: 
+  ~orderBy: 
+}
+
+docs {
+  Alle in `docs/prosonata-api/kontakte-firmen.md` genannten Filter, sämtlich **abgeschaltet** und
+  ohne Wert – zum Ausprobieren in Bruno anklicken und füllen.
+
+  Bei Datumsfeldern erlauben vorangestellte `>` und `<` eine Suche ab bzw. bis zu einem
+  Datum, wie in `grundlagen.md` beschrieben.
+}

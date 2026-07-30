@@ -1,0 +1,51 @@
+meta {
+  name: Testeintrag mit Marker anlegen
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/projecttimes
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "projectID": {{projectId}},
+    "category": {{categoryId}},
+    "workingTime": 1.75,
+    "date": "{{heute}}",
+    "detail": "[LAUFEND:a3f9c1] Testeintrag der Bruno-Sammlung"
+  }
+}
+
+script:pre-request {
+  const d = new Date();
+  const iso = d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+  bru.setVar("heute", iso);
+}
+
+assert {
+  res.status: eq 201
+}
+
+vars:post-response {
+  createdId: res.body.data.timeID
+}
+
+docs {
+  Legt den Zeiteintrag an, auf dem die folgenden Prüfungen aufbauen – mit dem Marker
+  `[LAUFEND:a3f9c1]` aus KONZEPT.md §3 im Text.
+
+  Der Unterschied zu `projecttimes/04 Anlegen`: dort steht das dokumentierte Beispiel, hier
+  unser Anwendungsfall. Beide legen einen Eintrag an; **beide brauchen anschliessend
+  `projecttimes/06 Löschen`.**
+
+  Der Marker besteht aus dem konfigurierbaren Wort `LAUFEND` und einer Kennung, die aus
+  Root-Commit-SHA des Repos und Branchname gebildet wird. `a3f9c1` steht hier stellvertretend.
+
+  Setzt `createdId` für `04` bis `06`.
+}

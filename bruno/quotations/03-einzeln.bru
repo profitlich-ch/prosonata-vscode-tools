@@ -1,0 +1,17 @@
+meta {
+  name: Angebote, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/quotations/{{quotationId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/quotations/{id}`
+
+  Braucht `quotationId` in der `.env`.
+}

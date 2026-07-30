@@ -1,0 +1,38 @@
+meta {
+  name: Sucht der detail-Filter als Teilstring?
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/projecttimes?detail=LAUFEND:a3f9c1&isInvoiced=0&projectID={{projectId}}
+  body: none
+  auth: none
+}
+
+params:query {
+  detail: LAUFEND:a3f9c1
+  isInvoiced: 0
+  projectID: {{projectId}}
+}
+
+docs {
+  **Die Prüfung mit der grössten Tragweite.** An ihr hängt das Wiederfinden aus
+  KONZEPT.md §3 – der Schritt, mit dem der Heimrechner den Zeiteintrag findet, den der
+  Bürorechner angelegt hat.
+
+  Der volle `detail`-Wert des Testeintrags lautet
+  `[LAUFEND:a3f9c1] Testeintrag der Bruno-Sammlung`. Gesucht wird nur nach dem Mittelteil.
+
+  - **Ein Treffer** → der Filter sucht als Teilstring. Das Wiederfinden ist ein einziger
+    gezielter Aufruf, und das Konzept bleibt, wie es ist.
+  - **Kein Treffer** → der Filter sucht exakt. Dann filtert die Extension auf
+    `projectID` und `isInvoiced=0` und durchsucht die Trefferliste selbst nach dem Marker.
+    Das kostet mehr Daten, aber keinen zusätzlichen Aufruf.
+
+  **Voraussetzung:** `projecttimes/04 Anlegen` ist gelaufen und `06 Löschen` noch nicht.
+
+  **Nebenbei prüfen:** Sind die eckigen Klammern im gespeicherten `detail` erhalten
+  geblieben? In der Antwort nachsehen. Werden sie escaped oder entfernt, muss der Marker
+  anders aussehen.
+}

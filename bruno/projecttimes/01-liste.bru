@@ -1,0 +1,38 @@
+meta {
+  name: Zeiteinträge auflisten
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/projecttimes?perPage=25&orderBy=timeID DESC
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 25
+  orderBy: timeID DESC
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  `GET /api/v1/projecttimes`
+
+  Die neuesten 25 Einträge. Paginierung über `perPage` (Default 100, Maximum 1000) und
+  `page`.
+
+  **Zu prüfen:**
+  - Enthält die Liste **`isInvoiced`**? Das Listenbeispiel der Doku bricht mit „…" ab. Der
+    Einzelabruf hat es. Fehlt es in der Liste, ist das unkritisch – filtern lässt sich
+    danach, und mehr braucht die Extension nicht.
+  - Kommt `workingTime` als Zahl oder als String?
+  - `meta.totalCount` notieren: zeigt, warum die Suche nach dem Marker gefiltert erfolgen
+    muss und nicht über die volle Liste.
+
+  Sortierbar nach `timeID`, `category`, `date`, `projectID`, `customerID`, `userID`,
+  `notInvoiceable`, `isInvoiced`.
+}

@@ -1,0 +1,17 @@
+meta {
+  name: Leistungsvorlagen, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/servicetemplates/{{serviceTemplateId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/servicetemplates/{id}`
+
+  Braucht `serviceTemplateId` in der `.env`.
+}

@@ -1,0 +1,22 @@
+meta {
+  name: Eine Kategorie aufrufen
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/projecttimecategories/{{categoryId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/projecttimecategories/{id}`
+
+  Liefert dieselben Felder wie ein Listeneintrag: `category`, `categoryOrder`,
+  `categoryName`, `active`, `categoryCostRate`, `group`, `groupName`,
+  `linkedCustomerID`, `priceGroup`.
+
+  Für die Extension ohne Nutzen – sie cacht die vollständige Liste. Hier nur zur
+  Vollständigkeit der dokumentierten Endpunkte.
+}

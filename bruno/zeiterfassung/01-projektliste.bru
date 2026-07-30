@@ -1,0 +1,38 @@
+meta {
+  name: Projektliste für den QuickPick
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/projects?projectStatus=0&activeStatus=1&userID=myself&orderBy=projectName
+  body: none
+  auth: none
+}
+
+params:query {
+  projectStatus: 0
+  activeStatus: 1
+  userID: myself
+  orderBy: projectName
+}
+
+docs {
+  Genau die Liste, die der Projekt-QuickPick aus KONZEPT.md §8 zeigen soll – die mittlere
+  seiner drei Stufen.
+
+  - `projectStatus=0` – nur **offene** Projekte
+  - `activeStatus=1` – keine **ruhenden**
+  - `userID=myself` – nur **mir zugeordnete**
+
+  Ohne diese Filter stünden nach ein paar Jahren abgeschlossene Projekte und Vorlagen in
+  der Liste.
+
+  **Zu prüfen:**
+  - Wieviel kürzer ist die Antwort als die ungefilterte Liste in `projects/01`?
+  - Trägt die Antwort `isProjectTemplate`? Als Filter ist es nicht dokumentiert, Vorlagen
+    müssten also clientseitig aussortiert werden.
+  - Stehen `timeNeeded` und `timePlanned` schon in der Liste? Falls ja, braucht das Panel
+    für die Anzeige „15,25 von 20 h" keinen Einzelabruf.
+  - Ist `userID=myself` bei einer App-Integration sinnvoll besetzt? Siehe `07`.
+}

@@ -1,0 +1,17 @@
+meta {
+  name: Firmen und Gruppen, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/customers/{{customerId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/customers/{id}`
+
+  Braucht `customerId` in der `.env`.
+}

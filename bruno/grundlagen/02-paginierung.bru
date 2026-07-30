@@ -1,0 +1,33 @@
+meta {
+  name: Paginierung
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/projecttimes?perPage=5&page=2
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 5
+  page: 2
+}
+
+docs {
+  `?perPage=100&page=2`
+
+  Standard sind 100 Datensätze pro Seite, das Maximum ist 1000.
+
+  In `meta` stehen `perPage`, `page` und `totalCount`. Daraus ergibt sich die Seitenzahl –
+  die API nennt sie nicht selbst.
+
+  **Wozu das Werkzeug es braucht:** Beim Wiederfinden eines Zeiteintrags über
+  Rechnergrenzen (KONZEPT.md §3). Sucht der `detail`-Filter exakt statt als Teilstring,
+  muss die Extension die gefilterte Liste selbst durchsehen – und darf dabei nicht auf der
+  ersten Seite stehen bleiben.
+
+  **Zu prüfen:** Was liefert eine Seite jenseits von `totalCount` – eine leere Liste oder
+  einen Fehler?
+}

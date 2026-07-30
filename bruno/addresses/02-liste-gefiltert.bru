@@ -1,0 +1,39 @@
+meta {
+  name: Adressen filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/addresses?perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+  ~customerID: 
+  ~customerName: 
+  ~companyStatus: 
+  ~name1: 
+  ~name2: 
+  ~name3: 
+  ~addressName: 
+  ~postalCode: 
+  ~city: 
+  ~country: 
+  ~comments: 
+  ~addressTags: 
+  ~taxID: 
+  ~fibuAccountNo: 
+  ~addressActive: 
+  ~orderBy: 
+}
+
+docs {
+  Alle in `docs/prosonata-api/kontakte-adressen.md` genannten Filter, sämtlich **abgeschaltet** und
+  ohne Wert – zum Ausprobieren in Bruno anklicken und füllen.
+
+  Bei Datumsfeldern erlauben vorangestellte `>` und `<` eine Suche ab bzw. bis zu einem
+  Datum, wie in `grundlagen.md` beschrieben.
+}

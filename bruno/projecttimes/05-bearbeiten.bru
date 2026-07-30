@@ -1,0 +1,34 @@
+meta {
+  name: Zeiteintrag bearbeiten
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/projecttimes/{{createdId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "detail": "Testeintrag der Bruno-Sammlung, abgeschlossen"
+  }
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  `PUT /api/v1/projecttimes/{id}`
+
+  Es stehen dieselben Parameter zur Verfügung wie beim Anlegen, und **es müssen nicht alle
+  übergeben werden**. Hier nur `detail` – das entspricht dem Abschluss eines Zeiteintrags
+  nach KONZEPT.md §3, bei dem der Marker wegfällt und der endgültige Text gesetzt wird.
+
+  Antwort ist 200 mit dem vollständigen Objekt.
+
+  **Zu prüfen:** Bleibt `workingTime` unverändert, wenn es nicht mitgeschickt wird? Ein
+  Teilrumpf darf keine Felder zurücksetzen.
+}

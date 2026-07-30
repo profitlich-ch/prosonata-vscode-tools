@@ -1,0 +1,38 @@
+meta {
+  name: Ansprechpartner filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/contacts?perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+  ~firstName: 
+  ~lastName: 
+  ~customerID: 
+  ~customerName: 
+  ~addressID: 
+  ~name1: 
+  ~name2: 
+  ~name3: 
+  ~addressName: 
+  ~postalCode: 
+  ~city: 
+  ~country: 
+  ~comments: 
+  ~active: 
+  ~orderBy: 
+}
+
+docs {
+  Alle in `docs/prosonata-api/kontakte-ansprechpartner.md` genannten Filter, sämtlich **abgeschaltet** und
+  ohne Wert – zum Ausprobieren in Bruno anklicken und füllen.
+
+  Bei Datumsfeldern erlauben vorangestellte `>` und `<` eine Suche ab bzw. bis zu einem
+  Datum, wie in `grundlagen.md` beschrieben.
+}

@@ -1,0 +1,42 @@
+meta {
+  name: CRM-Ereignisse filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/crmevents?perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+  ~contactID: 
+  ~firstName: 
+  ~lastName: 
+  ~customerID: 
+  ~customerName: 
+  ~name1: 
+  ~name2: 
+  ~showToUsergroup: 
+  ~eventDate: 
+  ~media: 
+  ~projectID: 
+  ~projectNo: 
+  ~projectName: 
+  ~eventPrio: 
+  ~crmTags: 
+  ~followUpDate: 
+  ~followUpUser: 
+  ~followUpDone: 
+  ~orderBy: 
+}
+
+docs {
+  Alle in `docs/prosonata-api/crm.md` genannten Filter, sämtlich **abgeschaltet** und
+  ohne Wert – zum Ausprobieren in Bruno anklicken und füllen.
+
+  Bei Datumsfeldern erlauben vorangestellte `>` und `<` eine Suche ab bzw. bis zu einem
+  Datum, wie in `grundlagen.md` beschrieben.
+}

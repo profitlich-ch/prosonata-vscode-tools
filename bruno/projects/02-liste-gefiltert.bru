@@ -1,0 +1,59 @@
+meta {
+  name: Projekte filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/projects?perPage=10&customerID={{customerId}}
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+  customerID: {{customerId}}
+  ~projectNo: 26-11-001
+  ~projectName: Website
+  ~customerName: Muster
+  ~contactID: 53
+  ~lastName: Maier
+  ~userID: myself
+  ~username: admin
+  ~projectStatus: 0
+  ~financeStatus: 0
+  ~activeStatus: 1
+  ~projectDate: >2026-01-01
+  ~projectDateEnd: <2026-12-31
+  ~projectQuickInfo: Wartung
+  ~projectTags: intern
+  ~internalDepartment: 0
+  ~recurringProject: 0
+  ~userResponsibleID: 1
+  ~orderBy: projectName
+}
+
+docs {
+  Alle in der Dokumentation genannten Filter der Ressource, sämtlich **abgeschaltet** –
+  zum Ausprobieren in Bruno anklicken. Die Werte sind Beispiele.
+  
+  | Parameter | Werte |
+  |---|---|
+  | `projectStatus` | 0 = offen, 1 = in Abrechnung, 2 = abgeschlossen, 3 = abgebrochen, 4 = bereit zur Abrechnung |
+  | `financeStatus` | 0 = kein Angebot/Rechnung, 1 = Angebot, 2 = Rechnung, 3–5 = Mahnungen |
+  | `activeStatus` | 0 = inaktiv (Projekt ruht), 1 = aktiv |
+  | `recurringProject` | 0 = nicht wiederkehrend, 1 = monatlich, 2 = zweimonatlich, 3 = quartalsweise, 4 = halbjährlich, 5 = jährlich, 6 = zweijährlich |
+  | `internalDepartment` | 0 bis 9 |
+  | `userID` | ID oder der Sonderwert `myself` |
+  
+  Bei `projectDate` und `projectDateEnd` erlauben vorangestellte `>` und `<` eine Suche ab
+  bzw. bis zu einem Datum.
+  
+  **Nicht als Filter dokumentiert:** `isProjectTemplate`, obwohl das Feld in der Antwort
+  steht.
+  
+  Sortierbar nach `projectID`, `projectName`, `customerID`, `customerName`, `contactID`,
+  `lastName`, `projectDate`, `projectDateEnd`, `projectStatus`, `timeNeeded`.
+  
+  Wie das Werkzeug diese Filter nutzt, steht in `zeiterfassung/01`.
+}

@@ -1,0 +1,29 @@
+meta {
+  name: JSONP
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/projecttimecategories?jsonp=meinCallback&perPage=1
+  body: none
+  auth: none
+}
+
+params:query {
+  jsonp: meinCallback
+  perPage: 1
+}
+
+docs {
+  `?jsonp[=callback]` – die Antwort wird in einen Funktionsaufruf verpackt. Ohne Wert
+  lautet die Funktion `callback`.
+
+  **Für dieses Werkzeug ohne Nutzen.** JSONP löst das Problem fremder Herkunft im Browser;
+  die Extension und die CLI laufen in Node und kennen es nicht. Die Anfrage steht hier nur
+  zur Vollständigkeit der Dokumentation.
+
+  Zu erwarten ist `meinCallback({...})` statt reinem JSON, also Inhaltstyp
+  `application/javascript` – gut zu wissen, falls der Parameter versehentlich gesetzt wird
+  und der Client dann beim Auswerten scheitert.
+}

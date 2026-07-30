@@ -1,0 +1,60 @@
+meta {
+  name: Zeiteintrag anlegen
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/projecttimes
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "projectID": {{projectId}},
+    "category": {{categoryId}},
+    "workingTime": 1.25,
+    "date": "{{heute}}",
+    "detail": "Testeintrag der Bruno-Sammlung"
+  }
+}
+
+script:pre-request {
+  const d = new Date();
+  const iso = d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+  bru.setVar("heute", iso);
+}
+
+assert {
+  res.status: eq 201
+}
+
+vars:post-response {
+  createdId: res.body.data.timeID
+}
+
+docs {
+  `POST /api/v1/projecttimes`
+
+  Pflicht sind nur **`category`** und **`projectID`**. `date` hat als Default den
+  aktuellen Tag, `workingTime` den Wert 0.00, `detail` ist optional (max. 200 Zeichen).
+  Dezimalwerte mit Punkt.
+
+  Weitere mögliche Felder: `userID` (nur Administratoren dürfen für andere buchen),
+  `linkedTaskID`, `notInvoiceable`, `isInvoiced`, `workingTimeStart`, `workingTimeEnd`.
+  Die letzten beiden bleiben laut KONZEPT.md §3 **immer leer**.
+
+  Antwort ist **201** mit dem vollständigen Objekt unter `data`. Die ID heisst `timeID`.
+
+  **Zu prüfen:**
+  - Welchen **`userID`** trägt der Eintrag? Siehe `zeiterfassung/07`.
+  - Kommt `timeViaApi: 1` zurück?
+  - `meta.apiLimitRemaining` notieren.
+
+  **Aufräumen:** `06 Löschen` entfernt den Eintrag wieder.
+
+  Den Eintrag mit dem Marker des Werkzeugs legt `zeiterfassung/03` an.
+}

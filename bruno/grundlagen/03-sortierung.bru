@@ -1,0 +1,29 @@
+meta {
+  name: Sortierung
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/projecttimes?orderBy=date DESC,timeID DESC&perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  orderBy: date DESC,timeID DESC
+  perPage: 10
+}
+
+docs {
+  `?orderBy=feld ASC|DESC`, mehrere Sortierungen kommasepariert. Ohne Richtungsangabe wird
+  aufsteigend sortiert.
+
+  Sortierbar bei `projecttimes`: `timeID`, `category`, `date`, `projectID`, `customerID`,
+  `userID`, `notInvoiceable`, `isInvoiced`.
+
+  **Zu prüfen:** Wie muss das Leerzeichen zwischen Feld und Richtung übertragen werden?
+  Die Doku schreibt an einer Stelle `orderBy=username+DESC` mit Pluszeichen, an anderer
+  `orderBy=feld DESC` mit Leerzeichen. Bruno kodiert das Leerzeichen als `%20`. Falls die
+  Sortierung nicht greift, hier `+` statt Leerzeichen probieren.
+}

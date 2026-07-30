@@ -1,0 +1,17 @@
+meta {
+  name: Ansprechpartner, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/contacts/{{contactId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/contacts/{id}`
+
+  Braucht `contactId` in der `.env`.
+}

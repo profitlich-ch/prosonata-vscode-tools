@@ -1,0 +1,38 @@
+meta {
+  name: Kategorienliste für den Timer
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/projecttimecategories?active=1&orderBy=categoryOrder
+  body: none
+  auth: none
+}
+
+params:query {
+  active: 1
+  orderBy: categoryOrder
+  ~linkedCustomerID: {{customerId}}
+}
+
+docs {
+  Die Liste für das Kategorien-Dropdown am Timer (KONZEPT.md §6): nur aktive, in der
+  vorgesehenen Reihenfolge.
+
+  Kategorien sind **global** – die Ressource kennt keinen Projektbezug. Eine Kategorie kann
+  über `linkedCustomerID` an einen **Kunden** hängen; ein Projekt trägt `customerID`.
+  Daraus ergibt sich die Auswahl.
+
+  **Die offene Frage:** Der Parameter `linkedCustomerID` ist abgeschaltet, zum Einschalten
+  in Bruno anklicken. Liefert er **nur** die Kategorien dieses Kunden, oder **auch** die
+  allgemeinen mit `linkedCustomerID: null`?
+
+  Für die Extension zählt die Vereinigung beider Mengen – eine allgemeine Kategorie wie
+  „Programmierung" gilt für jeden Kunden. Kommt nur die kundeneigene Teilmenge, holt die
+  Extension die vollständige Liste und filtert selbst auf
+  `linkedCustomerID === null || linkedCustomerID === customerID`.
+
+  **Zu prüfen:** Wie viele Kategorien tragen überhaupt ein gesetztes `linkedCustomerID`?
+  Sind es keine, ist die Kundenbindung im Alltag bedeutungslos.
+}

@@ -1,0 +1,11 @@
+# Zugangsdaten – niemals ins Repo (siehe KONZEPT.md §10)
+.env
+bruno/.env
+*.local
+
+node_modules/
+dist/
+out/
+*.vsix
+
+.DS_Store

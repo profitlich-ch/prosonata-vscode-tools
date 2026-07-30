@@ -1,0 +1,45 @@
+meta {
+  name: Fehlerfall
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/projecttimes/999999999
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 404
+}
+
+docs {
+  Ruft eine `timeID` ab, die es nicht gibt. Erwartet wird der dokumentierte Umschlag:
+
+  ```
+  {
+    "meta": {
+      "status": 404,
+      "message": "Data not found.",
+      "requestUserID": 1,
+      "usergroupName": "Administrator",
+      "apiLimitRemaining": 493,
+      "apiLimitReset": 583
+    },
+    "data": []
+  }
+  ```
+
+  **Zwei Dinge klärt diese Anfrage:**
+
+  1. **Ist `meta.message` brauchbar?** KONZEPT.md §10 verlangt, Fehler verständlich zu
+     melden statt zu verschlucken. Ist die Meldung aussagekräftig, reicht die Extension sie
+     durch, statt eigene Formulierungen zu erfinden.
+  2. **Wie sieht ein API-Fehler gegenüber einem Routing-Fehler aus?** Kommt hier JSON,
+     antwortet die API. Kommt HTML, ist die Basis-URL falsch – genau daran war die Suche
+     nach dem Demo-Zugang gescheitert.
+
+  Ausserdem stehen in `meta` `requestUserID` und `usergroupName`. Das beantwortet
+  nebenbei `zeiterfassung/07`: Man sieht, als welcher Benutzer die App-Integration auftritt.
+}

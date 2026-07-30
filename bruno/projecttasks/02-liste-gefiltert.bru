@@ -1,0 +1,40 @@
+meta {
+  name: Projektaufgaben filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/projecttasks?perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+  ~projectID: 
+  ~projectNo: 
+  ~projectName: 
+  ~customerID: 
+  ~customerName: 
+  ~userID: 
+  ~username: 
+  ~taskName: 
+  ~taskDateStart: 
+  ~taskDateEnd: 
+  ~recurringTask: 
+  ~taskTimeCategory: 
+  ~taskPrio: 
+  ~type: 
+  ~read: 
+  ~done: 
+  ~orderBy: 
+}
+
+docs {
+  Alle in `docs/prosonata-api/projektaufgaben.md` genannten Filter, sämtlich **abgeschaltet** und
+  ohne Wert – zum Ausprobieren in Bruno anklicken und füllen.
+
+  Bei Datumsfeldern erlauben vorangestellte `>` und `<` eine Suche ab bzw. bis zu einem
+  Datum, wie in `grundlagen.md` beschrieben.
+}

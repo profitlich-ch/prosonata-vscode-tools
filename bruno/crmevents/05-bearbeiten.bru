@@ -1,0 +1,26 @@
+meta {
+  name: CRM-Ereignisse bearbeiten (SCHREIBT)
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/crmevents/{{crmEventId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+  }
+}
+
+docs {
+  `PUT /api/v1/crmevents/{id}`
+
+  **Schreibt in echte Daten.** Der Rumpf ist bewusst leer – die zu ändernden Felder von
+  Hand eintragen. Es müssen nicht alle Parameter übergeben werden; es stehen dieselben zur
+  Verfügung wie beim Anlegen.
+
+  Antwort ist 200 mit dem vollständigen Objekt.
+}

@@ -1,0 +1,28 @@
+meta {
+  name: Ansprechpartner auflisten
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/contacts?perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  `GET /api/v1/contacts`
+
+  Antwortumschlag `{ meta, data }`; in `meta` stehen `perPage`, `page`, `totalCount`,
+  `apiLimitRemaining` und `apiLimitReset`.
+
+  Die ID für den Einzelabruf hier entnehmen und als `contactId` in die `.env` eintragen.
+}

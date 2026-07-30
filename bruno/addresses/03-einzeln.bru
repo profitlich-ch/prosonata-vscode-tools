@@ -1,0 +1,17 @@
+meta {
+  name: Adressen, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/addresses/{{addressId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/addresses/{id}`
+
+  Braucht `addressId` in der `.env`.
+}

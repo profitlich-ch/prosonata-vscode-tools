@@ -1,0 +1,23 @@
+meta {
+  name: Aufräumen – Eintrag aus 08 löschen
+  type: http
+  seq: 9
+}
+
+delete {
+  url: {{baseUrl}}/projecttimes/{{dateTestId}}
+  body: none
+  auth: none
+}
+
+docs {
+  Löscht den Zeiteintrag, den `08 Datumsformat` angelegt hat. Die ID steht in der Variablen
+  `dateTestId`, die `08` gesetzt hat.
+
+  Ist die Variable leer – etwa weil Bruno neu geladen wurde –, die `timeID` von Hand in die
+  URL eintragen.
+
+  **Nebenbei zu beobachten:** Was kommt beim zweiten Aufruf mit derselben ID? Ein 404 wäre
+  gut, dann darf ein wiederholter Löschversuch als Erfolg gelten und der Versand bleibt
+  idempotent.
+}

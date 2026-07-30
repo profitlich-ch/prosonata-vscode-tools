@@ -1,0 +1,17 @@
+meta {
+  name: Projektaufgaben, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/projecttasks/{{projectTaskId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/projecttasks/{id}`
+
+  Braucht `projectTaskId` in der `.env`.
+}

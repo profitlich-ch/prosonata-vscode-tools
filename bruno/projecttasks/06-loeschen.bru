@@ -1,0 +1,17 @@
+meta {
+  name: Projektaufgaben löschen (SCHREIBT)
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/projecttasks/{{projectTaskId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `DELETE /api/v1/projecttasks/{id}`
+
+  **Löscht endgültig.** Keine weiteren Parameter nötig, Antwort 200.
+}

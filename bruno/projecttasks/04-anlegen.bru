@@ -1,0 +1,30 @@
+meta {
+  name: Projektaufgaben anlegen (SCHREIBT)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/projecttasks
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "taskName": "Testaufgabe",
+    "projectID": {{projectId}}
+  }
+}
+
+docs {
+  `POST /api/v1/projecttasks`
+
+  **Diese Anfrage schreibt in echte Daten.** Der Rumpf enthält nur die Pflichtfelder:
+  `taskName`, `projectID`. Die weiteren möglichen Felder stehen in
+  `docs/prosonata-api/projektaufgaben.md`.
+
+  Löschen ist bei dieser Ressource dokumentiert – siehe `06`.
+
+  Antwort ist 201 mit dem vollständigen Objekt.
+}

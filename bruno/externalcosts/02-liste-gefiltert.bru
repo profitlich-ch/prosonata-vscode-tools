@@ -1,0 +1,47 @@
+meta {
+  name: Fremdkosten filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/externalcosts?perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+  ~addressID: 
+  ~name1: 
+  ~type: 
+  ~projectID: 
+  ~projectNo: 
+  ~projectName: 
+  ~customerID: 
+  ~customerName: 
+  ~costName: 
+  ~documentNo: 
+  ~documentDate: 
+  ~receiptDate: 
+  ~paymentType: 
+  ~recurringDoc: 
+  ~createdByUserID: 
+  ~currency: 
+  ~reverseCharge: 
+  ~paymentDate: 
+  ~notInvoiceable: 
+  ~kskMember: 
+  ~useForCalculation: 
+  ~serviceCategory: 
+  ~datevExport: 
+  ~orderBy: 
+}
+
+docs {
+  Alle in `docs/prosonata-api/fremdkosten.md` genannten Filter, sämtlich **abgeschaltet** und
+  ohne Wert – zum Ausprobieren in Bruno anklicken und füllen.
+
+  Bei Datumsfeldern erlauben vorangestellte `>` und `<` eine Suche ab bzw. bis zu einem
+  Datum, wie in `grundlagen.md` beschrieben.
+}

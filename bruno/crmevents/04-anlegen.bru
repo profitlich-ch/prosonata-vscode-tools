@@ -1,0 +1,30 @@
+meta {
+  name: CRM-Ereignisse anlegen (SCHREIBT)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/crmevents
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "contactID": {{contactId}},
+    "eventDate": "2026-07-30"
+  }
+}
+
+docs {
+  `POST /api/v1/crmevents`
+
+  **Diese Anfrage schreibt in echte Daten.** Der Rumpf enthält nur die Pflichtfelder:
+  `contactID`, `eventDate`. Die weiteren möglichen Felder stehen in
+  `docs/prosonata-api/crm.md`.
+
+  Löschen ist bei dieser Ressource dokumentiert – siehe `06`.
+
+  Antwort ist 201 mit dem vollständigen Objekt.
+}

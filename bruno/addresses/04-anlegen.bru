@@ -1,0 +1,30 @@
+meta {
+  name: Adressen anlegen (SCHREIBT)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/addresses
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "customerID": {{customerId}},
+    "city": "Musterstadt"
+  }
+}
+
+docs {
+  `POST /api/v1/addresses`
+
+  **Diese Anfrage schreibt in echte Daten.** Der Rumpf enthält nur die Pflichtfelder:
+  `customerID`, `city`. Die weiteren möglichen Felder stehen in
+  `docs/prosonata-api/kontakte-adressen.md`.
+
+  **Kein DELETE dokumentiert:** Was hier entsteht, lässt sich über die API nicht wieder entfernen, nur in ProSonata selbst.
+
+  Antwort ist 201 mit dem vollständigen Objekt.
+}

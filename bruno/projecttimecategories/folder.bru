@@ -1,0 +1,19 @@
+meta {
+  name: projecttimecategories
+  seq: 3
+}
+
+docs {
+  **Quelle:** `docs/prosonata-api/projektkategorien.md`
+
+  `GET /api/v1/projecttimecategories` – Liste und Einzelabruf. Die Ressource ist **nur
+  lesend**; POST, PUT und DELETE gibt es nicht.
+
+  Kategorien sind **global**. Es gibt keinen Projektbezug – nur `linkedCustomerID`, das
+  eine Kategorie an einen Kunden binden kann.
+
+  **Am Live-Konto festgestellt:** 25 Kategorien, davon 23 aktiv, und **keine einzige** mit
+  gesetztem `linkedCustomerID`. Die Kundenbindung ist in diesem Konto ungenutzt; für das
+  Kategorien-Dropdown genügt `active=1`. Die Auswertung von `linkedCustomerID` bleibt
+  trotzdem nötig – andere Konten nutzen sie womöglich.
+}

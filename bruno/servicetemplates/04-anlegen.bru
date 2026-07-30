@@ -1,0 +1,30 @@
+meta {
+  name: Leistungsvorlagen anlegen (SCHREIBT)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/servicetemplates
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "category": {{categoryId}},
+    "templateName": "Vorlage Test"
+  }
+}
+
+docs {
+  `POST /api/v1/servicetemplates`
+
+  **Diese Anfrage schreibt in echte Daten.** Der Rumpf enthält nur die Pflichtfelder:
+  `category`, `templateName`. Die weiteren möglichen Felder stehen in
+  `docs/prosonata-api/leistungsvorlagen.md`.
+
+  Löschen ist bei dieser Ressource dokumentiert – siehe `06`.
+
+  Antwort ist 201 mit dem vollständigen Objekt.
+}

@@ -1,0 +1,42 @@
+meta {
+  name: Welchem Benutzer gehört ein per App erzeugter Eintrag?
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/projecttimes?userID=myself&orderBy=timeID DESC&perPage=5
+  body: none
+  auth: none
+}
+
+params:query {
+  userID: myself
+  orderBy: timeID DESC
+  perPage: 5
+}
+
+docs {
+  **Die Frage mit der grössten Tragweite ausserhalb des Konzepts.**
+
+  Die Doku beschreibt zwei Wege der Authentifizierung: über einen **Benutzer** mit
+  persönlichem Key, oder über eine **App-Integration** mit App-ID und Key. Beim POST steht
+  als Default für `userID` „ID des anfragenden Benutzers". Bei einer App-Integration ist
+  aber nicht dokumentiert, **wer** das ist.
+
+  Landet die Zeit auf einem Systembenutzer statt auf deinem Konto, stimmen weder
+  Auswertungen noch Stundenlisten – und der Filter `userID=myself`, auf den sich der
+  Projekt-QuickPick und die Markersuche stützen, greift ins Leere.
+
+  **So prüfen:** Erst `projecttimes/04 Anlegen` laufen lassen, dann diese Anfrage.
+
+  - Taucht der neue Eintrag auf → `myself` ist sinnvoll besetzt, alles gut.
+  - Taucht er **nicht** auf → `myself` bezeichnet einen anderen Benutzer als den, dem der
+    Eintrag gehört. Dann in `projecttimes/03 Einzeln` nachsehen, welchen `userID` und
+    `username` der Eintrag trägt.
+
+  **Falls das Ergebnis unbrauchbar ist:** Die Extension müsste `userID` beim Anlegen
+  explizit mitschicken – was laut Doku nur Administratoren dürfen – oder es wäre statt
+  einer App-Integration ein persönlicher Benutzer-Key zu verwenden. Das wäre eine
+  Änderung an KONZEPT.md §7 und §9.
+}

@@ -1,0 +1,17 @@
+meta {
+  name: Fremdkosten, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/externalcosts/{{externalCostId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/externalcosts/{id}`
+
+  Braucht `externalCostId` in der `.env`.
+}

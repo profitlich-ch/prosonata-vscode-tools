@@ -1,0 +1,39 @@
+meta {
+  name: Auth per Query-Parameter
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/projects?appID={{appId}}&apiKey={{apiKey}}&perPage=1
+  body: none
+  auth: none
+}
+
+params:query {
+  appID: {{appId}}
+  apiKey: {{apiKey}}
+  perPage: 1
+}
+
+headers {
+  X-API-Key:
+  X-APP-ID:
+}
+
+docs {
+  Die Doku beschreibt **zwei** Wege, Key und App-ID zu übermitteln: im Header oder als
+  Query-Parameter. Die Sammlung nutzt überall den Header; diese Anfrage belegt die zweite
+  Form. Die beiden Header sind hier bewusst leer gesetzt und überschreiben damit die auf
+  Sammlungsebene gesetzten.
+
+  **Für das Werkzeug bleibt es beim Header.** Ein Key in der URL landet in Server-Logs, in
+  Proxy-Protokollen und in der Shell-History – ein vermeidbares Risiko, das KONZEPT.md §9
+  ausdrücklich benennt.
+
+  Diese Anfrage ist trotzdem nützlich: Schlägt der Header-Weg fehl, zeigt sie, ob es an
+  den Zugangsdaten liegt oder daran, dass ein Proxy die `X-`-Header entfernt.
+
+  **Nebenbei:** In `meta` stehen `apiLimitRemaining` und `apiLimitReset` – die Felder, an
+  denen das Werkzeug sein Verhalten ausrichtet, statt das Limit zu schätzen.
+}

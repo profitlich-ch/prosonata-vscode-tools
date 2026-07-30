@@ -1,0 +1,33 @@
+meta {
+  name: Fremdkosten anlegen (SCHREIBT)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/externalcosts
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "projectID": {{projectId}},
+    "addressID": {{addressId}},
+    "netValue": "100.00",
+    "grossValue": "119.00",
+    "tax": "19.0"
+  }
+}
+
+docs {
+  `POST /api/v1/externalcosts`
+
+  **Diese Anfrage schreibt in echte Daten.** Der Rumpf enthält nur die Pflichtfelder:
+  `projectID`, `addressID`, `netValue`, `grossValue`, `tax`. Die weiteren möglichen Felder stehen in
+  `docs/prosonata-api/fremdkosten.md`.
+
+  **Kein DELETE dokumentiert:** Was hier entsteht, lässt sich über die API nicht wieder entfernen, nur in ProSonata selbst.
+
+  Antwort ist 201 mit dem vollständigen Objekt.
+}

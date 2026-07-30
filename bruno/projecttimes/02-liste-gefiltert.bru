@@ -1,0 +1,52 @@
+meta {
+  name: Zeiteinträge filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/projecttimes?perPage=10
+  body: none
+  auth: none
+}
+
+params:query {
+  perPage: 10
+  ~category: {{categoryId}}
+  ~categoryName: Programmierung
+  ~date: >2026-01-01
+  ~date2: <2026-12-31
+  ~detail: Besprechung
+  ~projectID: {{projectId}}
+  ~projectNo: 26-11-001
+  ~projectName: Website
+  ~customerID: {{customerId}}
+  ~userID: myself
+  ~username: admin
+  ~linkedTaskID: 1
+  ~notInvoiceable: 0
+  ~isInvoiced: 0
+  ~orderBy: date DESC
+}
+
+docs {
+  Alle in der Dokumentation genannten Filter der Ressource, sämtlich **abgeschaltet** –
+  zum Ausprobieren in Bruno anklicken.
+
+  | Parameter | Bedeutung |
+  |---|---|
+  | `category`, `categoryName` | Zeitkategorie |
+  | `date`, `date2` | Datum; mit `>` oder `<` davor als ab/bis, `date2` als zweite Grenze |
+  | `detail` | Details/Beschreibung |
+  | `projectID`, `projectNo`, `projectName` | Projekt |
+  | `customerID` | Firma/Gruppe |
+  | `userID`, `username` | Benutzer; `myself` für den anfragenden Account |
+  | `linkedTaskID` | verknüpfte Aufgabe |
+  | `notInvoiceable` | nicht berechenbar: 0 = nein, 1 = ja |
+  | `isInvoiced` | berechnet: 0 = nein, 1 = ja |
+
+  Sortierbar nach `timeID`, `category`, `date`, `projectID`, `customerID`, `userID`,
+  `notInvoiceable`, `isInvoiced`.
+
+  Wie das Werkzeug den `detail`-Filter nutzt, steht in `zeiterfassung/04`.
+}

@@ -1,0 +1,41 @@
+meta {
+  name: Kategorien filtern
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/projecttimecategories
+  body: none
+  auth: none
+}
+
+params:query {
+  ~category: {{categoryId}}
+  ~categoryName: Gestaltung
+  ~active: 1
+  ~linkedCustomerID: {{customerId}}
+  ~priceGroup: 1
+  ~orderBy: categoryOrder
+}
+
+docs {
+  Alle in der Dokumentation genannten Filter der Ressource, sämtlich **abgeschaltet** –
+  zum Ausprobieren in Bruno anklicken.
+
+  | Parameter | Bedeutung |
+  |---|---|
+  | `category` | ID der Zeitkategorie |
+  | `categoryName` | Bezeichnung |
+  | `active` | 0 = nein, 1 = ja |
+  | `linkedCustomerID` | ID der Firma/Gruppe |
+  | `priceGroup` | Preisgruppe |
+
+  **Kein `projectID`.** Die Ressource kennt keinen Projektbezug – Kategorien sind global
+  und höchstens an einen Kunden gebunden.
+
+  Sortierbar nach `category`, `categoryOrder`, `group`, `categoryName`, `active`,
+  `priceGroup`.
+
+  Wie das Werkzeug diese Liste nutzt, steht in `zeiterfassung/02`.
+}

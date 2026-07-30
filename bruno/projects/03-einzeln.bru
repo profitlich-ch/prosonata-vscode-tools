@@ -1,0 +1,34 @@
+meta {
+  name: Ein Projekt aufrufen
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/projects/{{projectId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  `GET /api/v1/projects/{id}`
+
+  Liefert deutlich mehr als die Liste, darunter zwei Felder, die das Panel aus §8 zeigen
+  soll:
+
+  - **`timeNeeded`** – bereits verbrauchte Stunden
+  - **`timePlanned`** – geplante Stunden
+
+  „15,25 von 20 h" ist beim Zeiterfassen die nützlichste Zahl, die die API hergibt.
+
+  **Zu prüfen:** Stehen beide auch in der **Liste**? Das Listenbeispiel der Doku bricht
+  mit „…" ab. Falls nein, braucht das Panel für das aktive Projekt einen Einzelabruf –
+  vertretbar, denn es ist genau einer, und nur wenn sich das Projekt ändert.
+
+  Ausserdem enthalten: `customerID` für den Kategorienfilter, `usersAssigned`,
+  `projectCostRate`, `isProjectTemplate`.
+}

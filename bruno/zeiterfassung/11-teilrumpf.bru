@@ -1,0 +1,35 @@
+meta {
+  name: Setzt ein Teilrumpf andere Felder zurück?
+  type: http
+  seq: 11
+}
+
+put {
+  url: {{baseUrl}}/projecttimes/{{timeId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "detail": "Teilrumpf-Test, nur detail geschickt"
+  }
+}
+
+docs {
+  **Braucht `PROSONATA_TIME_ID` in der `.env`** – die `timeID` eines vorhandenen
+  Testeintrags. Anders als `createdId` ist das keine Laufzeitvariable: Sie überlebt das
+  Neuladen der Sammlung und macht diese Prüfung unabhängig davon, ob vorher etwas angelegt
+  wurde.
+
+  Geschickt wird **nur `detail`**. Danach `12 Nachsehen` aufrufen und prüfen:
+
+  - **`workingTime` unverändert** → ein Teilrumpf lässt andere Felder in Ruhe. So setzt es
+    das Konzept voraus: Beim Abschluss eines Zeiteintrags schickt die Extension nur den
+    endgültigen Text, beim Wachsen nur die Summe.
+  - **`workingTime` auf 0.00 zurückgesetzt** → jeder Schreibzugriff muss den vollständigen
+    Datensatz mitschicken. Das betrifft §3 und §4: Die Extension müsste vor jedem PUT den
+    aktuellen Stand lesen, statt nur das geänderte Feld zu senden.
+
+  Ebenso zu prüfen: Bleiben `date`, `category` und `projectID` erhalten?
+}

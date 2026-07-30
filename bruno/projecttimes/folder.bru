@@ -1,0 +1,23 @@
+meta {
+  name: projecttimes
+  seq: 4
+}
+
+docs {
+  **Quelle:** `docs/prosonata-api/projektzeiten.md`
+
+  Die Ressource, auf der das Werkzeug arbeitet. Vollständig abgebildet: Liste, gefilterte
+  Liste, Einzelabruf, Anlegen, Bearbeiten, Löschen.
+
+  **Am Live-Konto festgestellt:**
+
+  - Die **Liste enthält `detail` und `isInvoiced`** – für die Prüfung vor einem PUT ist
+    kein Einzelabruf nötig.
+  - **`workingTime` kommt als String** zurück (`"0.15"`), während `isInvoiced`,
+    `notInvoiceable` und `timeViaApi` Zahlen sind. Beim Auswerten berücksichtigen.
+  - Der **`detail`-Filter sucht als Teilstring.** Acht Zeichen aus der Mitte eines
+    vorhandenen Textes lieferten genau den zugehörigen Eintrag. Darauf stützt sich das
+    Wiederfinden über Rechnergrenzen in KONZEPT.md §3.
+  - In der Liste ausserdem enthalten, in der Doku nicht gezeigt: `creationDate`,
+    `customerName`, `projectName`, `projectNo`, `username`.
+}

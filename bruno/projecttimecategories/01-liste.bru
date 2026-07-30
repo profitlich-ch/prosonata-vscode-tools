@@ -1,0 +1,31 @@
+meta {
+  name: Kategorien auflisten
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/projecttimecategories
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  `GET /api/v1/projecttimecategories`
+
+  **Nur lesend** – die Ressource kennt kein POST, PUT oder DELETE.
+
+  Und **global**: Es gibt keinen `projectID`-Filter. Der Projektbezug entsteht indirekt
+  über `linkedCustomerID`, das eine Kategorie an einen **Kunden** bindet. Ein Projekt
+  trägt `customerID` – daraus ergibt sich, welche Kategorien gelten.
+
+  **Für `.env` notieren:** eine `category`-ID für die Schreibtests.
+
+  **Zu prüfen:** `meta.totalCount`, und wie viele Kategorien ein gesetztes
+  `linkedCustomerID` tragen. Sind es keine, ist die Kundenbindung im Alltag bedeutungslos
+  und die Liste schlicht global.
+}

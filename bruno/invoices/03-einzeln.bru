@@ -1,0 +1,17 @@
+meta {
+  name: Rechnungen, einzeln
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/invoices/{{invoiceId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/invoices/{id}`
+
+  Braucht `invoiceId` in der `.env`.
+}

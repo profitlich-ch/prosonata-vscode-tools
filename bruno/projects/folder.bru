@@ -1,0 +1,20 @@
+meta {
+  name: projects
+  seq: 2
+}
+
+docs {
+  **Quelle:** `docs/prosonata-api/projekte.md`
+
+  `GET /api/v1/projects` – Liste und Einzelabruf.
+
+  POST und PUT sind dokumentiert, aber bewusst **nicht** abgebildet: Das Werkzeug greift
+  auf Projekte ausschliesslich lesend zu. Ein per API angelegtes Projekt liesse sich
+  ausserdem nicht wieder entfernen – die Ressource kennt kein DELETE.
+
+  **Am Live-Konto festgestellt:** Die Liste enthält bereits `timeNeeded`, `timePlanned`
+  und `isProjectTemplate` – für die Anzeige „15,25 von 20 h" im Panel ist also kein
+  Einzelabruf nötig, und Vorlagen lassen sich clientseitig aussortieren. Ausserdem
+  vorhanden, aber nicht dokumentiert: `projectViaApi`, `projectContractNo`,
+  `projectPurchaseOrderNo`, `createdByUserID`.
+}

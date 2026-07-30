@@ -1,0 +1,35 @@
+meta {
+  name: Zeiteintrag löschen (aufräumen)
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/projecttimes/{{createdId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  `DELETE /api/v1/projecttimes/{id}`
+
+  Keine weiteren Parameter nötig, Antwort 200.
+
+  **Immer laufen lassen**, sonst bleibt der Testeintrag im Demo-Mandanten stehen. Die
+  Demo wird zwar täglich zurückgesetzt, aber darauf ist kein Verlass, solange am selben
+  Tag weitergetestet wird.
+
+  Zugleich der Beleg, dass DELETE verfügbar ist. KONZEPT.md §3 stützt sich darauf: Beim
+  Zusammenführen zurückgerollter Zeiteinträge wird der überzählige gelöscht, statt ihn
+  auf `workingTime = 0` zu setzen und als Leiche stehen zu lassen.
+
+  **Zu prüfen:**
+  - Was kommt beim **zweiten** Aufruf mit derselben ID? Ein 404 wäre gut: dann kann ein
+    wiederholter Löschversuch als Erfolg gewertet werden, was den Versand idempotent hält.
+  - Lässt sich ein **fakturierter** Eintrag löschen? Vermutlich nicht – braucht einen
+    fakturierten Testeintrag im Demo-Mandanten.
+}

@@ -1,0 +1,25 @@
+meta {
+  name: zeiterfassung
+  seq: 20
+}
+
+docs {
+  **Quelle:** `../KONZEPT.md` – nicht die API-Dokumentation.
+
+  Hier steht, was nur wegen dieses Projekts existiert: die Anfragen so, wie die Extension
+  sie stellt, und die Prüfungen der Annahmen aus dem Konzept.
+
+  Die übrigen Ordner bilden die API-Dokumentation ab und bleiben davon frei.
+
+  **Stand der Prüfungen:**
+
+  | Frage | Stand |
+  |---|---|
+  | Sucht der `detail`-Filter als Teilstring? | **Ja**, am Live-Konto belegt |
+  | Liefert `linkedCustomerID` auch die allgemeinen Kategorien? | gegenstandslos – keine Kategorie nutzt das Feld |
+  | Ersetzt oder addiert ein PUT `workingTime`? | offen, braucht einen Schreibzugriff |
+  | `detail` über 200 Zeichen | offen, braucht einen Schreibzugriff |
+  | Welchem Benutzer gehört ein per API erzeugter Eintrag? | offen. `meta` nennt nur `requestAppID` und `requestIntegration`, keinen Benutzer |
+  | Welches Datumsformat gilt? | offen, braucht einen Schreibzugriff |
+  | Bleiben eckige Klammern im `detail` erhalten? | offen, braucht einen Schreibzugriff |
+}

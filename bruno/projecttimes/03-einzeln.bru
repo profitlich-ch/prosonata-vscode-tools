@@ -1,0 +1,28 @@
+meta {
+  name: Einen Zeiteintrag aufrufen
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/projecttimes/{{createdId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `GET /api/v1/projecttimes/{id}`
+
+  Liest den Eintrag, den `04 Anlegen` erzeugt hat – läuft also erst danach.
+
+  Die dokumentierte Antwort enthält: `timeID`, `category`, `categoryName`, `date`,
+  `detail`, `workingTime`, `projectID`, `projectNo`, `projectName`, `customerID`,
+  `customerName`, `userID`, `username`, `linkedTaskID`, `notInvoiceable`, `isInvoiced`,
+  `creationDate`, `workingTimeStart`, `workingTimeEnd`, `freeTimeInput`, `timeViaApi`.
+
+  **Zu prüfen:**
+  - Wie ist `isInvoiced` typisiert – `0`/`1` oder `false`/`true`?
+  - Steht `timeViaApi` auf 1?
+  - Welche dieser Felder fehlen in der Liste? Nur die machen einen zweiten Aufruf nötig.
+    Für die Extension zählt vor allem `isInvoiced`.
+}

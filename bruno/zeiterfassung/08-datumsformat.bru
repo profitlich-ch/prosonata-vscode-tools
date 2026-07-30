@@ -1,0 +1,48 @@
+meta {
+  name: Welches Datumsformat gilt?
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/projecttimes
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "projectID": {{projectId}},
+    "category": {{categoryId}},
+    "workingTime": 0.01,
+    "date": "01.06.2026",
+    "detail": "Datumsformat-Test der Bruno-Sammlung"
+  }
+}
+
+vars:post-response {
+  dateTestId: res.body.data.timeID
+}
+
+docs {
+  **Die Dokumentation widerspricht sich.** Bei `projecttimes` steht im Beispiel
+  `"date": "2019-03-02"` – ISO. Bei `projects` steht im Beispiel
+  `"projectDateEnd": "25.06.2019"` – deutsches Format. Beide sind als Typ `Date`
+  deklariert.
+
+  Diese Anfrage schickt bewusst das **deutsche** Format an `projecttimes`.
+
+  - **Angenommen und als 1. Juni 2026 gespeichert** → die API versteht beide Formate. Die
+    Extension nimmt ISO, weil eindeutig.
+  - **Fehler** → nur ISO gilt bei dieser Ressource, das Beispiel in der Projekt-Doku ist
+    dann eine Eigenheit von `projects` oder schlicht falsch.
+  - **Angenommen, aber falsch interpretiert** – etwa als 6. Januar – → der gefährlichste
+    Ausgang. Dann müsste die Extension das Format zwingend prüfen. Deshalb ein Tag und ein
+    Monat, die sich nicht verwechseln lassen: 01.06. wäre bei falscher Deutung der
+    6. Januar.
+
+  Mit `projecttimes/03 Einzeln` und der ID aus `dateTestId` nachsehen, welches Datum
+  gespeichert wurde.
+
+  **Aufräumen:** `projecttimes/06 Löschen` mit `dateTestId`.
+}

@@ -1,0 +1,29 @@
+meta {
+  name: Projekte auflisten
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/projects
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  `GET /api/v1/projects`
+
+  Die erste Anfrage, die laufen muss: Kommt 200 und JSON, stimmen Basis-URL und
+  Zugangsdaten. Kommt eine HTML-Seite, stimmt die Basis-URL nicht – dann greift die
+  Authentifizierung gar nicht erst.
+
+  Antwort ist umschlagen in `{ meta, data }`. In `meta` stehen `perPage`, `page`,
+  `totalCount`, `apiLimitRemaining` und `apiLimitReset`.
+
+  **Für `.env` notieren:** `projectID` und `customerID` eines Testprojekts, dazu ein
+  zweites Projekt als `PROJECT_ID_ALT`.
+}

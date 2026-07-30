@@ -1,0 +1,29 @@
+headers {
+  X-API-Key: {{apiKey}}
+  Accept: application/json
+}
+
+auth {
+  mode: none
+}
+
+docs {
+  # ProSonata API
+
+  Der Header `X-API-Key` gilt für alle Anfragen der Sammlung und wird hier auf
+  Sammlungsebene gesetzt.
+
+  **Es wird ein persönlicher Benutzer-Key verwendet, keine App-Integration.** Der
+  Unterschied ist nicht bloss technisch: Eine App-Integration ist kein Benutzer – ihre
+  Antworten tragen `requestAppID` und `requestIntegration` statt `requestUserID` und
+  `usergroupName`. Damit wäre offen, welchem Benutzer ein erzeugter Zeiteintrag gehört, und
+  der Filter `userID=myself` hätte keinen Bezugspunkt. Siehe KONZEPT.md §9.
+
+  Wer die Sammlung mit einer App-Integration nutzen will, ergänzt hier
+  `X-APP-ID: {{appId}}` und setzt `PROSONATA_APP_ID` in der `.env`.
+
+  ## Einrichtung
+
+  Zugangsdaten stehen in `.env` im Sammlungsverzeichnis und sind über `.gitignore`
+  ausgeschlossen. Vorlage: `.env.example`.
+}

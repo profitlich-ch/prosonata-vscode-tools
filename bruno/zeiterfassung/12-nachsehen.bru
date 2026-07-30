@@ -1,0 +1,24 @@
+meta {
+  name: Nachsehen (fester Eintrag)
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/projecttimes/{{timeId}}
+  body: none
+  auth: none
+}
+
+docs {
+  Liest den Zeiteintrag aus `PROSONATA_TIME_ID`.
+
+  Gegenstück zu `11 Teilrumpf` – und allgemein die Anfrage, mit der sich nach jedem
+  Schreibzugriff nachsehen lässt, **was tatsächlich gespeichert wurde**. Das ist nicht
+  dasselbe wie die Antwort auf den Schreibzugriff: Beim Test zur `detail`-Länge spiegelte
+  die POST-Antwort die gesendeten 940 Zeichen zurück, gespeichert waren 800.
+
+  Der Unterschied zu `projecttimes/03 Einzeln`: Dort steht die Laufzeitvariable
+  `createdId`, die nur innerhalb einer Sitzung nach einem Anlegen gesetzt ist. Hier steht
+  eine feste ID aus der `.env`.
+}

@@ -1,0 +1,17 @@
+meta {
+  name: CRM-Ereignisse löschen (SCHREIBT)
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/crmevents/{{crmEventId}}
+  body: none
+  auth: none
+}
+
+docs {
+  `DELETE /api/v1/crmevents/{id}`
+
+  **Löscht endgültig.** Keine weiteren Parameter nötig, Antwort 200.
+}

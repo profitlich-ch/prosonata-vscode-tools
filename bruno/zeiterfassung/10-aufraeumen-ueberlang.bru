@@ -1,0 +1,21 @@
+meta {
+  name: Aufräumen – Eintrag aus 06 löschen
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/projecttimes/{{overlongId}}
+  body: none
+  auth: none
+}
+
+docs {
+  Löscht den Zeiteintrag, den `06 detail über 200 Zeichen` angelegt hat. Die ID steht in
+  der Variablen `overlongId`, die `06` gesetzt hat.
+
+  Ist die Variable leer, die `timeID` von Hand in die URL eintragen.
+
+  **Diesen Eintrag unbedingt löschen.** Er trägt einen 800 Zeichen langen, mitten im Wort
+  abgeschnittenen Text – genau die Art Zeile, die auf einer Rechnung nichts zu suchen hat.
+}
