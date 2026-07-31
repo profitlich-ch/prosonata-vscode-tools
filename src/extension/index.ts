@@ -3,9 +3,9 @@ import { readFileSync } from 'node:fs'
 import * as vscode from 'vscode'
 
 import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
-import { fetchPrune, isMerged, mainBranch, remoteBranchGone } from '../core/git.js'
+import { describeRepo, fetchPrune, isMerged, remoteBranchGone, type GitRepo } from '../core/git.js'
 import { hookNeedsRepair, installHook } from '../core/hooks.js'
-import { rememberProject, setGrid, setMode } from '../core/repo-config.js'
+import { readRepoConfig, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
 import { close, currentSeconds, openEntry } from '../core/tracking.js'
 import type { State } from '../core/types.js'
@@ -51,8 +51,8 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.pause', withContext((s, c) => void s.pause(c)))
   register(context, 'prosonata.toggle', withContext(toggle))
   register(context, 'prosonata.send', withContext(sendNow))
-  register(context, 'prosonata.chooseProject', withContext(chooseProject))
-  register(context, 'prosonata.chooseGrid', withContext(chooseGrid))
+  register(context, 'prosonata.chooseProject', withRepo(chooseProject))
+  register(context, 'prosonata.chooseGrid', withRepo(chooseGrid))
   register(context, 'prosonata.toggleMode', withContext(toggleMode))
   register(context, 'prosonata.closeEntry', withContext(closeEntry))
 
@@ -192,6 +192,34 @@ function readIfPresent() {
   }
 }
 
+/**
+ * For commands that set a repository up. They must not require a configured
+ * project — choosing one is exactly what they are for.
+ */
+function withRepo(action: (session: Session, repo: GitRepo) => Promise<void> | void): () => Promise<void> {
+  return async () => {
+    const active = currentSession()
+    if (!active) {
+      void vscode.window.showWarningMessage('ProSonata: no account configured yet — set it up first.')
+      return
+    }
+
+    const folder = vscode.workspace.workspaceFolders?.[0]
+    const repo = folder ? describeRepo(folder.uri.fsPath) : null
+    if (!repo) {
+      void vscode.window.showWarningMessage('ProSonata: this folder is not a git repository.')
+      return
+    }
+
+    try {
+      await action(active, repo)
+    } catch (error) {
+      void vscode.window.showErrorMessage(`ProSonata: ${(error as Error).message}`)
+    }
+    reload()
+  }
+}
+
 function toggle(session: Session, context: RepoContext): void {
   const running = session.state().timers.find(
     (timer) => timer.scope.repoPath === context.scope.repoPath && timer.scope.branch === context.scope.branch && timer.startedAt !== null,
@@ -213,9 +241,9 @@ async function sendNow(session: Session): Promise<void> {
   }
 }
 
-async function chooseProject(session: Session, context: RepoContext): Promise<void> {
+async function chooseProject(session: Session, repo: GitRepo): Promise<void> {
   const projects = await session.api.listProjects()
-  const known = new Set(context.config.projects.map((project) => project.id))
+  const known = new Set(readRepoConfig(repo.root).projects.map((project) => project.id))
 
   const picked = await vscode.window.showQuickPick(
     [
@@ -231,11 +259,11 @@ async function chooseProject(session: Session, context: RepoContext): Promise<vo
   )
   if (!picked) return
 
-  rememberProject(context.repo.root, { id: picked.project.projectID, name: picked.project.projectName })
+  rememberProject(repo.root, { id: picked.project.projectID, name: picked.project.projectName })
 
   // Without this the hook would only appear at the next window start, and the
   // commits in between would book nothing.
-  installHookHere(context.repo.root)
+  installHookHere(repo.root)
 }
 
 function installHookHere(repoRoot: string): void {
@@ -247,7 +275,7 @@ function installHookHere(repoRoot: string): void {
   }
 }
 
-async function chooseGrid(_session: Session, context: RepoContext): Promise<void> {
+async function chooseGrid(_session: Session, repo: GitRepo): Promise<void> {
   const options: { label: string; grid: TimeGrid }[] = [
     { label: 'exact', grid: { kind: 'exact' } },
     { label: '5 minutes', grid: { kind: 'minutes', minutes: 5 } },
@@ -255,7 +283,7 @@ async function chooseGrid(_session: Session, context: RepoContext): Promise<void
     { label: '30 minutes', grid: { kind: 'minutes', minutes: 30 } },
   ]
   const picked = await vscode.window.showQuickPick(options, { title: 'ProSonata: rounding grid' })
-  if (picked) setGrid(context.repo.root, picked.grid)
+  if (picked) setGrid(repo.root, picked.grid)
 }
 
 async function toggleMode(session: Session, context: RepoContext): Promise<void> {
@@ -428,11 +456,17 @@ function readHead(file: string): string | null {
 
 /** Reads the state from disk once, then draws. */
 function reload(): void {
+  const active = currentSession()
   try {
-    cached = currentSession()?.state() ?? null
+    cached = active?.state() ?? null
   } catch {
     cached = null
   }
+
+  // Drives the `when` clauses of the welcome content in package.json.
+  void vscode.commands.executeCommand('setContext', 'prosonata.hasAccount', active !== null)
+  void vscode.commands.executeCommand('setContext', 'prosonata.hasProject', currentContext() !== null)
+
   draw()
   panel.refresh()
 }

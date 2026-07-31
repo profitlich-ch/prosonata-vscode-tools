@@ -51,28 +51,13 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
   }
 
   getChildren(): PanelRow[] {
+    // Nothing to show means nothing at all: an empty tree is what makes VS Code
+    // display the welcome content from `contributes.viewsWelcome`, which can
+    // carry real buttons instead of rows that only look like data.
     const session = this.session()
-    if (!session) {
-      return [
-        new PanelRow('No account yet', 'click to set up', 'warning', {
-          command: 'prosonata.setup',
-          title: 'Set up account',
-        }),
-      ]
-    }
-
     const context = this.context()
-    if (!context) {
-      return [
-        new PanelRow('No project yet', 'click to choose one', 'warning', {
-          command: 'prosonata.chooseProject',
-          title: 'Choose project',
-        }),
-      ]
-    }
-
     const state = this.snapshot()
-    if (!state) return [new PanelRow('No state yet', 'start a timer', 'watch')]
+    if (!session || !context || !state) return []
     const project = context.config.projects.find((candidate) => candidate.id === context.projectId)
     const timer = state.timers.find((candidate) => candidate.scope.repoPath === context.scope.repoPath && candidate.scope.branch === context.scope.branch)
     const entry = openEntry(state, context.scope)

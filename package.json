@@ -1,12 +1,12 @@
 {
-  "name": "profitlich-vscode-tools",
+  "name": "prosonata-vscode-tools",
   "displayName": ":Profitlich",
-  "description": "Tools for my own work in VS Code. For now: time tracking tied to commits and branches, writing to ProSonata.",
-  "version": "0.1.0",
+  "description": "Tools for connecting VS Code with Prosonata. For now: time tracking tied to commits and branches.",
+  "version": "0.2.0",
   "publisher": "profitlich",
   "repository": {
     "type": "git",
-    "url": "https://github.com/profitlich-ch/prosonata-vscode-timer.git"
+    "url": "https://github.com/profitlich-ch/prosonata-vscode-tools.git"
   },
   "license": "MIT",
   "categories": [
@@ -114,7 +114,24 @@
           "group": "navigation"
         }
       ]
-    }
+    },
+    "viewsWelcome": [
+      {
+        "view": "prosonata.panel",
+        "contents": "No account set up yet.\n\nThe base URL and a personal API key go to ~/.prosonata/config.json \u2014 the hook needs to read them too, so VS Code's secret storage is not an option.\n\n[Set up account](command:prosonata.setup)",
+        "when": "!prosonata.hasAccount"
+      },
+      {
+        "view": "prosonata.panel",
+        "contents": "This repository has no project yet.\n\nChoosing one also installs the post-commit hook.\n\n[Choose project](command:prosonata.chooseProject)",
+        "when": "prosonata.hasAccount && !prosonata.hasProject"
+      },
+      {
+        "view": "prosonata.panel",
+        "contents": "Open a folder to track time for it.",
+        "when": "prosonata.hasAccount && !workspaceFolderCount"
+      }
+    ]
   },
   "scripts": {
     "build": "node scripts/build.mjs",
@@ -124,8 +141,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "npm run typecheck && npm run test && npm run build",
-    "sandbox": "node scripts/sandbox.mjs",
-    "package": "npm run build && npx --yes @vscode/vsce package --no-dependencies"
+    "package": "npm run build && npx --yes @vscode/vsce package --no-dependencies",
+    "install-local": "node scripts/install.mjs --link",
+    "install-vsix": "node scripts/install.mjs --vsix",
+    "sandbox": "node scripts/sandbox.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

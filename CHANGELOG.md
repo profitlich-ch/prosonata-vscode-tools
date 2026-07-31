@@ -4,6 +4,35 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), the versions follow
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] — 2026-07-31
+
+Setting up now works entirely inside the editor, and the extension can live in
+every window instead of only in a development host.
+
+### Fixed
+
+- **Choosing a project required a project to be chosen.** Every command hung in
+  the same wrapper, which insists on a full context — repository *and* project.
+  For "start timer" that is right; for "choose project" it is nonsense, since
+  that command exists to set the project. There are now two wrappers: one that
+  needs a configured project, one that only needs a git repository.
+  `chooseProject` also read the known projects from that context, i.e. from
+  something that does not exist without a project; it reads them from the
+  repository configuration instead.
+
+### Added
+
+- **Welcome content with real buttons** (`contributes.viewsWelcome`) instead of
+  tree rows that only look like data. Two context keys, `prosonata.hasAccount`
+  and `prosonata.hasProject`, decide which one shows.
+- **`npm run install-local`** links this repository into `~/.vscode/extensions`,
+  so the extension is in every window. Updating is then `git pull`, a build and
+  a window reload — the closest thing to an automatic update without a
+  marketplace, which is the only source VS Code ever checks.
+- **`npm run install-vsix`** for the packaged route, with a version number.
+  Both remove links left behind under an earlier package name — two folders with
+  the same extension id would otherwise be loaded twice.
+
 ## [0.1.0] — 2026-07-31
 
 First working version. Not published: build it yourself and install the `.vsix`.
