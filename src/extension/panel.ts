@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 
 import { currentSeconds, openEntry } from '../core/tracking.js'
+import type { RepoProject } from '../core/repo-config.js'
 import type { RepoContext, Session } from '../core/session.js'
 import type { State } from '../core/types.js'
 import { workingTime } from '../core/working-time.js'
@@ -64,7 +65,9 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     const grid = context.config.grid ?? session.config.grid
 
     const rows: PanelRow[] = [
-      new PanelRow('Projekt', project?.name ?? `#${context.projectId}`, 'briefcase', {
+      // With the number: that is what a customer call and an invoice refer to,
+      // and two projects of the same name are told apart by nothing else.
+      new PanelRow('Projekt', describeProject(project, context.projectId), 'briefcase', {
         command: 'prosonata.chooseProject',
         title: 'Projekt wählen',
       }),
@@ -125,6 +128,11 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
 
     return rows
   }
+}
+
+function describeProject(project: RepoProject | undefined, projectId: number): string {
+  if (!project) return `#${projectId}`
+  return project.no ? `${project.no} ${project.name}` : project.name
 }
 
 /** `1:23:45`. Seconds included, so a running timer is visibly running. */

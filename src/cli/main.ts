@@ -6,7 +6,7 @@ import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
-import { NotConfigured, Session } from '../core/session.js'
+import { NotConfigured, Session, type RepoContext } from '../core/session.js'
 import { applyCategory, applyProject, close, openEntry, setText } from '../core/tracking.js'
 import { workingTime, type TimeGrid } from '../core/working-time.js'
 import type { SendResult } from '../core/sender.js'
@@ -121,7 +121,7 @@ async function chooseProject(cwd: string): Promise<number> {
   const project = await pick(projects, (candidate) => `${candidate.projectNo}  ${candidate.projectName}`, 'Projektnummer: ')
   if (!project) return 1
 
-  rememberProject(repo.root, { id: project.projectID, name: project.projectName })
+  rememberProject(repo.root, { id: project.projectID, name: project.projectName, no: project.projectNo })
 
   let categoryId = readRepoConfig(repo.root).categories.get(project.projectID) ?? 0
   if (categoryId <= 0) categoryId = await askForCategory(session, repo.root, project)
@@ -434,8 +434,11 @@ function parseGrid(value: string): TimeGrid | null {
   return Number.isFinite(minutes) && minutes > 0 ? { kind: 'minutes', minutes } : null
 }
 
-function nameOfProject(context: { projectId: number; config: { projects: { id: number; name: string }[] } }): string {
-  return context.config.projects.find((project) => project.id === context.projectId)?.name ?? `Projekt ${context.projectId}`
+/** "24-017 Buchungsmodul" — the number is what a customer call refers to. */
+function nameOfProject(context: RepoContext): string {
+  const project = context.config.projects.find((candidate) => candidate.id === context.projectId)
+  if (!project) return `Projekt ${context.projectId}`
+  return project.no ? `${project.no} ${project.name}` : project.name
 }
 
 function notARepo(): number {

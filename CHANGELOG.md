@@ -4,7 +4,7 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unveröffentlicht
+## [0.3.1] — 2026-07-31
 
 ### Behoben
 
@@ -20,6 +20,12 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ### Geändert
 
+- **Das Panel zeigt die Projektnummer.** „24-017 Website" statt „Website" — die
+  Nummer ist es, worauf sich ein Kundenanruf und eine Rechnung beziehen, und
+  zwei gleichnamige Projekte sind an nichts anderem auseinanderzuhalten. Sie
+  steht in `git config` unter `prosonata.<id>.no` und kommt in ein bestehendes
+  Repository mit der nächsten Projektwahl; bis dahin bleibt es beim Namen
+  allein. `prosonata status` nennt sie ebenfalls.
 - **Die Kategorienauswahl ist gruppiert.** Die Gruppe steht als Überschrift über
   ihrem Block statt klein hinter jedem Namen — im Editor über
   `QuickPickItemKind.Separator`, im Terminal als Zwischenzeile in der

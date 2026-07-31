@@ -14,6 +14,8 @@ import type { TimeGrid } from './working-time.js'
 export interface RepoProject {
   id: number
   name: string
+  /** The project number ProSonata shows, e.g. "24-017". Null before it was stored. */
+  no: string | null
 }
 
 export interface RepoConfig {
@@ -41,6 +43,7 @@ const KEY = {
   active: 'prosonata.active',
   grid: 'prosonata.grid',
   category: (projectId: number) => `prosonata.${projectId}.category`,
+  number: (projectId: number) => `prosonata.${projectId}.no`,
   mode: (branchKey: string) => `prosonata.${branchKey}.mode`,
 }
 
@@ -52,7 +55,11 @@ export function readRepoConfig(cwd: string): RepoConfig {
       const separator = line.indexOf(':')
       if (separator < 0) return []
       const id = Number(line.slice(0, separator))
-      return Number.isFinite(id) ? [{ id, name: line.slice(separator + 1) }] : []
+      if (!Number.isFinite(id)) return []
+      // The number lives in its own key: the id and the name share a value, and
+      // a third part in there could not be told from a name with a colon in it.
+      const no = tryGit(cwd, 'config', '--local', '--get', KEY.number(id))
+      return [{ id, name: line.slice(separator + 1), no: no === null || no === '' ? null : no }]
     })
 
   const active = Number(tryGit(cwd, 'config', '--local', '--get', KEY.active) ?? '')
@@ -89,6 +96,8 @@ export function readRepoConfig(cwd: string): RepoConfig {
 }
 
 export function rememberProject(cwd: string, project: RepoProject): void {
+  if (project.no !== null) git(cwd, 'config', '--local', KEY.number(project.id), project.no)
+
   const existing = readRepoConfig(cwd).projects
   if (!existing.some((candidate) => candidate.id === project.id)) {
     git(cwd, 'config', '--local', '--add', KEY.project, `${project.id}:${project.name}`)

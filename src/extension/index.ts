@@ -272,7 +272,7 @@ async function chooseProject(session: Session, repo: GitRepo): Promise<void> {
   )
   if (!picked) return
 
-  rememberProject(repo.root, { id: picked.project.projectID, name: picked.project.projectName })
+  rememberProject(repo.root, { id: picked.project.projectID, name: picked.project.projectName, no: picked.project.projectNo })
 
   // Without this the hook would only appear at the next window start, and the
   // commits in between would book nothing.
