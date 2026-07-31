@@ -1,105 +1,146 @@
-:Profitlich
+Prosonata Tools für Visual Studio Code
 ===========
 
-Tools for my own work in VS Code. One for now: **time tracking**, tied to commits
-and branches, writing to [ProSonata](https://www.prosonata.de). A VS Code
-extension and a command line tool over the same core.
+Diese VS-Code-Erweiterung ermöglicht es, [ProSonata](https://www.prosonata.de)-Zeiteinträge direkt aus VS Code anzulegen, gebunden an Commits und Branches, per ProSonata-API. Statt in der SaaS-Oberfläche von ProSonata einen Timer zu starten und die Beschreibung von Hand einzutragen, startest du den Timer in VS Code, und die gemessene Zeit wird zu einem Zeiteintrag pro Branch (alternativ: pro Commit) — mit einer Beschreibung, die aus dem Commit stammt.
 
-**Not an official ProSonata product**, and not in the marketplace — build it
-yourself, see [Getting started](#getting-started). It is written as if it were
-published, though: nothing here would have to be untangled first.
+Dies ist kein offizielles ProSonata-Produkt. Es steht nicht im Marketplace, du musst es von Hand installieren.
 
-The problem it solves: timers get forgotten. A forgotten start is lost time, a
-forgotten stop is wrong time, and both end in guesswork. And what was worked on
-is described best where the work happens — in the editor, at the commit.
+## Installation
 
-**Start and pause stay manual. Everything after that happens by itself.**
+Nach Installation/Update das Fenster neu laden (Entwickler: Fenster neu laden), und die Erweiterung erscheint in jedem VS-Code-Fenster. Updates müssen manuell installiert werden.
 
-## How it works
+### Fertiges Paket
 
-A **segment** is measurement and stays on your machine. A **time entry** is what
-ProSonata sees. Many segments make one entry.
+Für Installation und Update die `.vsix` des jüngsten
+[Release](https://github.com/profitlich-ch/prosonata-vscode-tools/releases)
+laden und installieren:
 
-| Where you work | What ProSonata gets |
+```sh
+code --install-extension prosonata-vscode-tools-<version>.vsix
+```
+
+### Aus dem Quellcode
+
+Voraussetzung ist eine Node-Umgebung.
+
+#### Installation
+
+```sh
+npm install
+npm run install-local     # baut und verlinkt das Repo nach ~/.vscode/extensions
+```
+
+#### Update
+
+```sh
+git pull
+npm run build
+```
+
+## Konfiguration
+
+Öffne aus der Seitenleiste das :P Menü und klicke ‹ProSonata: Konto einrichten›. Es fragt nach der ProSonata Basis-URL und einem Benutzer-API-Key und schreibt beides mit Modus 0600 nach `~/.prosonata/config.json`.
+
+**Nutze einen persönlichen Benutzer-Key, keine App-Integration**, damit die Zeiteinträge mit deinem User verknüpft sind.
+
+## Einstellungen pro Repository
+
+Klicke **ProSonata: Projekt für dieses Repository wählen** — es verknüpft das Repository mit einem Projekt und installiert den `post-commit`-Hook.
+
+Direkt danach fragt die Erweiterung nach der **Zeitkategorie**. ProSonata verlangt sie bei jedem Zeiteintrag; solange keine gewählt ist, wird nichts geschrieben. Ändern lässt sie sich jederzeit über die Zeile *Kategorie* im Panel, und die Änderung greift auch auf die noch offenen Zeiteinträge durch.
+
+Auch das Projekt lässt sich später korrigieren. Weil ein Wechsel fast immer ein Versehen richtigstellt, wandern alle noch nicht fertigen Zeiteinträge dieses Repositories mit — auch die, die in ProSonata bereits stehen, und samt der laufenden Messung. Liegen bleibt nur, was abgeschlossen ist und dessen Abschluss ProSonata schon erreicht hat; ist ein solcher Eintrag dort sogar fakturiert, entsteht statt einer Änderung ein Folgeeintrag im neuen Projekt.
+
+Zusätzlich kannst du das Zeitraster wählen und ob Zeiteinträge an Branches oder an Commits gebunden werden. Das Zeitraster wirkt auf alle noch offenen Zeiteinträge, sobald diese das nächste Mal geschrieben werden. Der Wechsel auf «ein Eintrag pro Commit» dagegen schliesst den offenen Branch-Eintrag und fragt vorher nach seinem endgültigen Text.
+
+Alle Befehle stehen auch als [CLI Befehle](#cli-befehle) zur Verfügung.
+
+## Funktionsweise
+
+Während der Arbeit in VS Code werden Zeiten als **Segmente** lokal auf dem
+Computer gespeichert. Ein **Zeiteintrag** ist das, was in ProSonata gespeichert wird.
+Ein Zeiteintrag entsteht aus beliebig vielen Segmenten.
+
+Nach ProSonata geschrieben wird nicht erst am Schluss: Zehn Minuten nach einem
+Commit legt das Werkzeug den Zeiteintrag an und aktualisiert ihn
+danach bei jedem weiteren Schreibvorgang mit der gewachsenen Summe. Ein
+Branch-Eintrag steht also von Anfang an in ProSonata und wächst dort mit. Der
+Abschluss ist nur das letzte Update.
+
+| Wo du arbeitest | Was ProSonata bekommt |
 |---|---|
-| On a branch | **One entry per branch**, growing over its whole life |
-| On the main branch | **One entry per commit** |
+| Auf einem Branch | Ein Eintrag pro Branch, der über dessen ganze Lebensdauer wächst (alternativ: pro Commit) |
+| Auf dem Main-Branch | Ein Eintrag pro Commit |
 
-A branch is the natural bracket around a piece of work a customer pays for as a
-unit. "Booking module: 12.5 h" is the line that belongs on an invoice — not
-fifteen commit subjects. On the main branch, where maintenance happens, each
-commit is a finished small thing of its own.
+Die Konzeptidee: Ein Branch ist das Stück Arbeit, das ein Kunde als Einheit bezahlt. Commits sind eher Zwischenschritte, die der Kunde nicht zu sehen braucht. Wird hingegen auf dem Main-Branch gearbeitet, ist es Wartung und jeder Commit ist es Wert als Zeiteintrag erfasst zu werden.
 
-The invoice text comes from the commit. Either from a trailer:
+Der Text des Zeiteintrags kommt aus dem Commit, aus einem mit `Prosonata:` beginnenden Trailer:
 
-```
-fix: rounding error in the second discount tier
+```txt
+fix: Rundungsfehler in der zweiten Rabattstufe
 
-Prosonata: corrected the discount calculation in the shop
+Prosonata: Rabattberechnung im Shop korrigiert
 ```
 
-or, failing that, from the subject line.
+Auf dem Main-Branch, wo jeder Commit seinen eigenen Eintrag abschliesst, gilt
+die Betreffzeile, wenn es keinen Trailer gibt. Auf einem Branch dagegen zählt nur der Trailer; der zuletzt in einem Commit geschriebene gewinnt, normale Betreffzeilen
+bleiben aussen vor. Solange ein offener Eintrag keinen Text hat, wird er nicht
+nach ProSonata geschrieben.
 
-While an entry is open it carries a marker: `[LAUFEND:a3f9c1] Booking module`.
-It makes an unfinished entry visible in ProSonata — the API has no status field
-— and it carries the branch identity, so a second machine finds the same entry
-and adds to it instead of starting its own.
+Solange ein Eintrag offen ist, trägt er eine Markierung:
+`[LAUFEND:a3f9c1] …`. Sie macht einen unfertigen Eintrag in
+ProSonata sichtbar — die API hat kein Statusfeld — und sie trägt die Identität
+des Branches, sodass es möglich ist, auf weiteren Computern am selben Branch zu arbeiten.
 
-## Getting started
+## CLI Befehle
 
-```
-npm install && npm run build
-npm link                  # makes "prosonata" available
-cd /path/to/your/repo
-prosonata init
-```
+```sh
+prosonata init                    Konto und dieses Repository einrichten, Hook installieren
+prosonata start                   Timer dieses Branches starten oder fortsetzen
+prosonata pause                   Timer pausieren und das laufende Segment buchen
+prosonata status                  was läuft, was ist offen, was wartet
+prosonata send                    alles senden, was gerade fällig ist
 
-`init` asks for the base URL and an API key, writes them to
-`~/.prosonata/config.json` with mode 0600, lets you pick a project and a
-category, and installs the `post-commit` hook.
-
-**Use a personal user key, not an app integration.** An integration is not a
-user: its responses carry no `requestUserID`, so it is unclear whom a created
-entry belongs to, and `userID=myself` has nothing to refer to.
-
-## Commands
-
-```
-prosonata start     start or resume the timer of this branch
-prosonata pause     pause it and book the running segment
-prosonata status    what is running, what is open, what is waiting
-prosonata send      send everything that is due right now
+prosonata project                 Projekt dieses Repositories wählen
+prosonata category                Zeitkategorie dieses Projekts wählen
+prosonata grid [exakt|5|15|30]    Zeitraster setzen
+prosonata mode [branch|commit]    an Branch oder an Commits binden
+prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
+prosonata text <Text>             Text des offenen Zeiteintrags ändern
 ```
 
-In VS Code the same lives in the status bar and in the ProSonata panel in the
-side bar: project, grid, branch mode, the running timer and the open entries.
+Was ein Argument nimmt, fragt danach, wenn es weggelassen wird — mit Argument
+läuft der Befehl ohne Rückfrage durch und taugt damit auch für Skripte.
 
-## What it deliberately does not do
+## Was die Extension nicht tut
 
-- **No activity detection.** File system activity is not the same as billable
-  time. The tool warns, it never books on its own.
-- **No automatic start** on checkout, merge or opening the editor.
-- **No times in your repository.** They would sit in the customer's repository
-  and show them the effort per commit.
-- **Nothing is sent at commit time.** A write goes out once it is older than ten
-  minutes, so a rolled-back commit never reaches ProSonata at all.
+- **Keine Aktivitätserkennung.** Aktivität im Dateisystem ist nicht dasselbe wie
+  abrechenbare Zeit. Das Werkzeug warnt, es bucht nie von selbst.
+- **Kein automatischer Start** bei Checkout, Merge oder beim Öffnen des Editors.
+- **Keine Speicherung im Repository.** Sie lägen im Repository des Kunden und
+  zeigten ihm den Aufwand pro Commit. Alle Segmente liegen lokal auf dem Computer.
+- **Zum Commit-Zeitpunkt wird nichts gesendet.** Ein Schreibvorgang geht raus,
+  sobald er älter als zehn Minuten ist, damit ein zurückgenommener Commit gar
+  nicht erst bei ProSonata ankommt.
 
-## Development
+## Entwicklung
 
-```
+```sh
 npm run typecheck
 npm test
 npm run build
 ```
 
-`src/core` holds all the rules and never imports `vscode`, which is why the hook
-can use them. `src/cli` and `src/extension` are two front ends over the same
-core — a commit from the terminal behaves exactly like one from the editor.
+`src/core` enthält alle Regeln und importiert nie `vscode` — deshalb kann der
+Hook sie verwenden. `src/cli` und `src/extension` sind zwei Frontends über
+demselben Kern: Ein Commit aus dem Terminal verhält sich genau wie einer aus dem
+Editor.
 
-The full reasoning, including the alternatives that were rejected and why, is in
-[KONZEPT.md](KONZEPT.md) (German). The API behaviour it relies on was measured
-against a live account; the requests are in [bruno/](bruno/).
+Die vollständige Begründung, inklusive der verworfenen Alternativen und der
+Gründe dafür, steht in [KONZEPT.md](KONZEPT.md). Das API-Verhalten, auf das sich
+das Werkzeug stützt, wurde gegen ein Live-Konto gemessen; die Requests liegen in
+[bruno/](bruno/).
 
-## Licence
+## Lizenz
 
-MIT — see [LICENSE](LICENSE).
+MIT — siehe [LICENSE](LICENSE).

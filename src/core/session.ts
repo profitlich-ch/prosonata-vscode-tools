@@ -31,7 +31,7 @@ export interface RepoContext {
 
 export class NotConfigured extends Error {
   constructor(readonly repoPath: string) {
-    super(`this repository has no project yet — run "prosonata init" in ${repoPath}`)
+    super(`dieses Repository hat noch kein Projekt — führe "prosonata init" in ${repoPath} aus`)
     this.name = 'NotConfigured'
   }
 }

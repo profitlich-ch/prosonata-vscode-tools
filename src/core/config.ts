@@ -60,7 +60,7 @@ export const paths = {
 
 export class MissingConfig extends Error {
   constructor(public readonly file: string) {
-    super(`no configuration in ${file} — run "prosonata init"`)
+    super(`keine Konfiguration in ${file} — führe "prosonata init" aus`)
     this.name = 'MissingConfig'
   }
 }

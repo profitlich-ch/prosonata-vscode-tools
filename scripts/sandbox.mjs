@@ -62,17 +62,17 @@ writeFileSync(
   { mode: 0o755 },
 )
 
-console.log(`state directory  ${home}`)
-console.log(`repository       ${repo}`)
-console.log(`mode             ${live ? `live, project ${projectId}, category ${categoryId}` : 'offline, nothing is sent'}`)
-console.log('\nPress F5 and pick "Extension in der Spielwiese".')
+console.log(`Zustandsverzeichnis  ${home}`)
+console.log(`Repository           ${repo}`)
+console.log(`Modus                ${live ? `live, Projekt ${projectId}, Kategorie ${categoryId}` : 'offline, es wird nichts gesendet'}`)
+console.log('\nF5 drücken und „Extension in der Spielwiese" wählen.')
 
 function readLiveConfig() {
   const path = join(process.env.HOME ?? '', '.prosonata', 'config.json')
   try {
     return JSON.parse(execFileSync('cat', [path], { encoding: 'utf8' }))
   } catch {
-    console.error(`no configuration at ${path} — run "prosonata init" first, or drop --live`)
+    console.error(`keine Konfiguration in ${path} — führe zuerst "prosonata init" aus, oder lass --live weg`)
     process.exit(1)
   }
 }

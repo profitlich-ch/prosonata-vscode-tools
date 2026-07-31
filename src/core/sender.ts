@@ -25,6 +25,8 @@ export interface SendResult {
   failed: { entryId: string; error: Error }[]
   /** Texts that were too long and were therefore not sent. */
   tooLong: { entryId: string; length: number; limit: number }[]
+  /** Entries with no time category yet; `category` is mandatory in ProSonata. */
+  missingCategory: string[]
 }
 
 export interface SendDeps {
@@ -46,7 +48,7 @@ export function dueWrites(state: State, clock: Clock, delaySeconds: number): str
  */
 export async function send(state: State, deps: SendDeps, force = false): Promise<{ state: State; result: SendResult }> {
   const { clock, config, journal } = deps
-  const result: SendResult = { sent: [], failed: [], tooLong: [] }
+  const result: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [] }
 
   const due = force ? state.pending.map((write) => write.entryId) : dueWrites(state, clock, config.sendDelaySeconds)
   let next = structuredClone(state)
@@ -60,6 +62,14 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
 
     // An entry is only written once it has a text (KONZEPT.md §4).
     if (entry.state === 'open' && entry.text === '') continue
+
+    // `category` is mandatory in ProSonata. Sending a 0 would either be refused
+    // or book onto a category that does not exist, so the write waits for a
+    // choice instead — and says so, rather than failing quietly.
+    if (entry.categoryId <= 0) {
+      result.missingCategory.push(entryId)
+      continue
+    }
 
     const detail = detailFor(entry, config)
     if (detail.length > config.detailLimit) {

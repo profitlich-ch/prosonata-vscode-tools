@@ -1,8 +1,8 @@
 {
   "name": "prosonata-vscode-tools",
   "displayName": ":Profitlich",
-  "description": "Tools for connecting VS Code with Prosonata. For now: time tracking tied to commits and branches.",
-  "version": "0.2.0",
+  "description": "Verbindet VS Code mit ProSonata. Vorerst: Zeiterfassung, gebunden an Commits und Branches.",
+  "version": "0.3.0",
   "publisher": "profitlich",
   "repository": {
     "type": "git",
@@ -47,7 +47,7 @@
       "profitlich": [
         {
           "id": "prosonata.panel",
-          "name": "ProSonata time tracking",
+          "name": "ProSonata Zeiterfassung",
           "icon": "media/icon-view.svg"
         }
       ]
@@ -55,49 +55,59 @@
     "commands": [
       {
         "command": "prosonata.setup",
-        "title": "Set up account",
+        "title": "Konto einrichten",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.start",
-        "title": "Start timer",
+        "title": "Timer starten",
         "icon": "$(play)",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.pause",
-        "title": "Pause timer",
+        "title": "Timer pausieren",
         "icon": "$(debug-pause)",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.toggle",
-        "title": "Start or pause timer",
+        "title": "Timer starten oder pausieren",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.send",
-        "title": "Send pending entries now",
+        "title": "Ausstehende Einträge jetzt senden",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.closeEntry",
-        "title": "Close entry with its final text",
+        "title": "Zeiteintrag abschliessen",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.changeText",
+        "title": "Text des offenen Zeiteintrags ändern",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.chooseProject",
-        "title": "Choose project for this repository",
+        "title": "Projekt für dieses Repository wählen",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.chooseCategory",
+        "title": "Zeitkategorie für dieses Projekt wählen",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.chooseGrid",
-        "title": "Choose rounding grid",
+        "title": "Zeitraster wählen",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.toggleMode",
-        "title": "Switch between one entry per branch and per commit",
+        "title": "Zwischen einem Eintrag pro Branch und pro Commit wechseln",
         "category": "ProSonata"
       }
     ],
@@ -118,17 +128,17 @@
     "viewsWelcome": [
       {
         "view": "prosonata.panel",
-        "contents": "No account set up yet.\n\nThe base URL and a personal API key go to ~/.prosonata/config.json \u2014 the hook needs to read them too, so VS Code's secret storage is not an option.\n\n[Set up account](command:prosonata.setup)",
+        "contents": "Noch kein Konto eingerichtet.\n\nBasis-URL und persönlicher API-Key gehen nach ~/.prosonata/config.json \u2014 auch der Hook muss sie lesen können, VS Codes Secret Storage kommt deshalb nicht in Frage.\n\n[Konto einrichten](command:prosonata.setup)",
         "when": "!prosonata.hasAccount"
       },
       {
         "view": "prosonata.panel",
-        "contents": "This repository has no project yet.\n\nChoosing one also installs the post-commit hook.\n\n[Choose project](command:prosonata.chooseProject)",
+        "contents": "Dieses Repository hat noch kein Projekt.\n\nMit der Wahl wird auch der post-commit-Hook installiert.\n\n[Projekt wählen](command:prosonata.chooseProject)",
         "when": "prosonata.hasAccount && !prosonata.hasProject"
       },
       {
         "view": "prosonata.panel",
-        "contents": "Open a folder to track time for it.",
+        "contents": "Öffne einen Ordner, um dafür Zeit zu erfassen.",
         "when": "prosonata.hasAccount && !workspaceFolderCount"
       }
     ]

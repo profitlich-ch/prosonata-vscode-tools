@@ -22,7 +22,7 @@ const TEMP_MAX_AGE_MS = 5 * 60 * 1000
 
 export class VersionConflict extends Error {
   constructor() {
-    super('state.json changed while we were working on it')
+    super('state.json hat sich geändert, während wir daran gearbeitet haben')
     this.name = 'VersionConflict'
   }
 }

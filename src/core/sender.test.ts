@@ -73,6 +73,16 @@ describe('the first write', () => {
     expect(api.entries.size).toBe(0)
     expect(state.pending).toHaveLength(1)
   })
+
+  // `category` is mandatory in ProSonata; a 0 would be refused or land nowhere.
+  it('holds back an entry with no category and names the reason', async () => {
+    const { api, deps } = setup()
+    const { state, result } = await send(stateWith(entry({ categoryId: 0 })), deps, true)
+
+    expect(api.entries.size).toBe(0)
+    expect(state.pending).toHaveLength(1)
+    expect(result.missingCategory).toEqual(['e1'])
+  })
 })
 
 describe('a closed entry', () => {

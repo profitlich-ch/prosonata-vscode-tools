@@ -48,7 +48,7 @@ for (const { file, size } of targets) {
   report(file, svg, size)
 }
 
-console.log(changed === 0 ? '\nnothing to change' : `\n${changed} file(s) normalised`)
+console.log(changed === 0 ? '\nnichts zu ändern' : `\n${changed} Datei(en) normalisiert`)
 
 function report(file, svg, size) {
   const problems = []

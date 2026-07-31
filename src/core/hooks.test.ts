@@ -34,6 +34,12 @@ describe('the hook block', () => {
   it('never lets the commit fail', () => {
     expect(hookBlock(paths)).toContain('|| true')
   })
+
+  // Installed from the extension, the "Node" path is VS Code's Electron binary,
+  // which runs a script only with this variable set.
+  it('runs the interpreter as Node', () => {
+    expect(hookBlock(paths)).toContain('ELECTRON_RUN_AS_NODE=1 "/opt/node/v22/bin/node"')
+  })
 })
 
 describe('installing', () => {
@@ -94,5 +100,14 @@ describe('repair', () => {
 
   it('is due when the hook is missing altogether', () => {
     expect(hookNeedsRepair(repo(), paths)).toBe(true)
+  })
+
+  it('is due for a block from an older version, even with the right paths', () => {
+    const dir = repo()
+    const stale = hookBlock(paths).replace('ELECTRON_RUN_AS_NODE=1 ', '')
+    writeFileSync(hookPath(dir), `#!/bin/sh\n${stale}\n`, { mode: 0o755 })
+
+    expect(hookNeedsRepair(dir, paths)).toBe(true)
+    expect(installHook(dir, paths).action).toBe('updated')
   })
 })

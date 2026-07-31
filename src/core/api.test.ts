@@ -11,13 +11,13 @@ describe('an unconfigured account', () => {
   it('says what is missing instead of failing inside fetch', async () => {
     const api = new HttpApi({ baseUrl: '', apiKey: 'k' })
 
-    await expect(api.listProjects()).rejects.toThrow(/run "prosonata init"/)
+    await expect(api.listProjects()).rejects.toThrow(/"prosonata init"/)
   })
 
   it('reports a missing key the same way', async () => {
     const api = new HttpApi({ baseUrl: 'https://x/api/v1', apiKey: '' })
 
-    await expect(api.listProjects()).rejects.toThrow(/API key/)
+    await expect(api.listProjects()).rejects.toThrow(/API-Key/)
   })
 
   it('never reaches the network', async () => {

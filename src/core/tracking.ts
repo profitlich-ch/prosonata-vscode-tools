@@ -144,6 +144,24 @@ export function commit(
 }
 
 /**
+ * Changes the text of an entry that is still open (KONZEPT.md §8). A typo in a
+ * trailer would otherwise only be correctable by another commit.
+ *
+ * An entry ProSonata already knows is queued for a write; one it does not know
+ * travels with the next commit anyway, and queueing it here would create it
+ * there ahead of any measured time.
+ */
+export function setText(state: State, entryId: string, text: string, at: number): State {
+  const next = structuredClone(state)
+  const entry = findEntry(next, entryId)
+  if (!entry || entry.state === 'closed' || entry.text === text) return state
+
+  entry.text = text
+  if (entry.timeId !== null) queueWrite(next, entry.id, at, false)
+  return next
+}
+
+/**
  * Closes an entry by hand with its final text (KONZEPT.md §3). After this the
  * tool never writes to that `timeID` again.
  */
@@ -219,6 +237,77 @@ function closeEntry(state: State, entry: TimeEntry, newId: () => string, at = Da
     timer.entryId = successor.id
   }
   return state
+}
+
+/*
+ * Project and category are frozen into an entry when it is created. Both are
+ * settings of the repository, though, and both can be corrected afterwards —
+ * so a correction has to reach the entries that are still under way, or it
+ * would only apply to whatever is started next.
+ *
+ * What decides is the close, not whether ProSonata has seen the entry: an open
+ * one is written from early on and keeps growing there, so being known is no
+ * reason to leave it. Under way is therefore everything still open, plus a
+ * closed entry whose closing write is still pending. Only once that write is
+ * out is the entry finished — and possibly invoiced.
+ *
+ * Both functions work on one repository. The settings live in its `git config`,
+ * so another clone booking to the same project keeps its own.
+ */
+
+function unfinishedIn(state: State, repoPath: string): TimeEntry[] {
+  return state.entries.filter(
+    (entry) =>
+      entry.scope.repoPath === repoPath &&
+      (entry.state !== 'closed' || state.pending.some((write) => write.entryId === entry.id)),
+  )
+}
+
+/**
+ * A newly chosen time category. Without it an entry begun with no category at
+ * all would never be sent, because that write is held back (KONZEPT.md §6).
+ */
+export function applyCategory(state: State, repoPath: string, projectId: number, categoryId: number, at: number): State {
+  if (categoryId <= 0) return state
+
+  const next = structuredClone(state)
+  let changed = false
+  for (const entry of unfinishedIn(next, repoPath)) {
+    if (entry.projectId !== projectId || entry.categoryId === categoryId) continue
+    entry.categoryId = categoryId
+    changed = true
+    if (entry.timeId !== null) queueWrite(next, entry.id, at, false)
+  }
+  return changed ? next : state
+}
+
+/**
+ * A corrected project (KONZEPT.md §6). It is a correction, not a switch: time
+ * that is still running was measured for this work, not for the project that
+ * was picked by mistake, so every unfinished entry of the repository moves —
+ * not just the one of the current branch.
+ *
+ * The category moves with it where one is known, because it is remembered per
+ * project and the one of the old project may not even exist for the new
+ * customer. Without one the entry keeps what it has, and the caller asks.
+ *
+ * An entry ProSonata already knows is queued for a write, and that PUT carries
+ * `projectID` — so it moves there instead of a second one appearing. Only an
+ * already invoiced entry cannot follow: `writeEntry` then deliberately creates
+ * a successor rather than changing an invoice.
+ */
+export function applyProject(state: State, repoPath: string, projectId: number, categoryId: number, at: number): State {
+  const next = structuredClone(state)
+  let changed = false
+  for (const entry of unfinishedIn(next, repoPath)) {
+    const category = categoryId > 0 ? categoryId : entry.categoryId
+    if (entry.projectId === projectId && entry.categoryId === category) continue
+    entry.projectId = projectId
+    entry.categoryId = category
+    changed = true
+    if (entry.timeId !== null) queueWrite(next, entry.id, at, false)
+  }
+  return changed ? next : state
 }
 
 function queueWrite(state: State, entryId: string, at: number, closing: boolean): void {

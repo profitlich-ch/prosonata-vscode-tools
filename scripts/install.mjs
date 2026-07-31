@@ -31,24 +31,24 @@ if (mode === 'link') {
   if (existsSync(target) || isDanglingLink(target)) {
     const existing = lstatSync(target)
     if (!existing.isSymbolicLink()) {
-      console.error(`\n${target} exists and is not a symlink.`)
-      console.error('Remove it first, or use --vsix instead.')
+      console.error(`\n${target} existiert und ist kein Symlink.`)
+      console.error('Entferne es zuerst, oder nimm stattdessen --vsix.')
       process.exit(1)
     }
     rmSync(target)
   }
 
   symlinkSync(root, target, 'dir')
-  console.log(`\nlinked  ${target}`)
+  console.log(`\nverlinkt  ${target}`)
   console.log(`     →  ${root}`)
-  console.log('\nReload the window (Developer: Reload Window) and it is in every VS Code.')
-  console.log('To update later: git pull, npm run build, reload.')
+  console.log('\nFenster neu laden (Entwickler: Fenster neu laden), dann ist sie in jedem VS Code.')
+  console.log('Später aktualisieren: git pull, npm run build, Fenster neu laden.')
 } else {
   execFileSync('npx', ['--yes', '@vscode/vsce', 'package', '--no-dependencies'], { cwd: root, stdio: 'inherit' })
   const vsix = `${manifest.name}-${manifest.version}.vsix`
   execFileSync('code', ['--install-extension', vsix, '--force'], { cwd: root, stdio: 'inherit' })
-  console.log(`\ninstalled ${vsix}`)
-  console.log('To update later: run this again after bumping the version.')
+  console.log(`\ninstalliert ${vsix}`)
+  console.log('Später aktualisieren: nach dem Anheben der Version erneut ausführen.')
 }
 
 function isDanglingLink(path) {
@@ -76,6 +76,6 @@ function removeStaleLinks(extensions) {
       continue
     }
     rmSync(path)
-    console.log(`removed stale link  ${name}`)
+    console.log(`veralteten Link entfernt  ${name}`)
   }
 }

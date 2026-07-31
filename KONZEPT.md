@@ -917,8 +917,11 @@ Zwei Dinge gelten deshalb **unabhängig** von einer Veröffentlichung, allein we
   pro Commit abrechnet, stellt ihn um, statt das Werkzeug zu meiden.
   Die **`detail`-Grenze** muss konfigurierbar sein, weil ProSonata sie je Konto anhebt und
   die API sie nicht verrät – Default 200 wie dokumentiert, im eigenen Konto 800.
-- **Englisch** für Code, Bezeichner, Commit-Messages und UI-Strings. Deutsch nur, wo es
-  Fachbegriffe der ProSonata-Oberfläche sind.
+- **Englisch** für Code, Bezeichner und Kommentare. **Deutsch für alles Sichtbare**: Namen
+  der Befehle, Panel, Dialoge, Meldungen der CLI, README und Changelog. ProSonata ist ein
+  deutsches Produkt, seine Fachbegriffe sind es auch; eine englische Oberfläche darüber wäre
+  eine Übersetzungsschicht, die niemand braucht. Fehlertexte aus `core`, die den Benutzer
+  erreichen, zählen zur Oberfläche.
 - **MIT-Lizenz** von Anfang an, `README.md` und `CHANGELOG.md` mitführen.
 - **Fehlerbehandlung sichtbar machen.** Andere Accounts haben andere Pakete, Rechtestufen und
   Limits. HTTP 429 und 403 gehören abgefangen und verständlich gemeldet, nicht verschluckt.

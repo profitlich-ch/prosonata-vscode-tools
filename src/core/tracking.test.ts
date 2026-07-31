@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { fixedClock } from './clock.js'
-import { close, commit, currentSeconds, openEntry, pause, start } from './tracking.js'
+import { applyCategory, applyProject, close, commit, currentSeconds, openEntry, pause, setText, start } from './tracking.js'
 import { emptyState, type Scope, type State } from './types.js'
 
 const scope: Scope = { repoPath: '/work/shop', branch: 'feature/buchung' }
@@ -213,5 +213,142 @@ describe('closing by hand', () => {
 
     // A second attempt changes nothing.
     expect(close(state, entry.id, 'anders', at(10, 1), newId)).toBe(state)
+  })
+})
+
+/** What the sender leaves behind once a write has gone out: a timeId, no pending write. */
+function sent(state: State, entryId: string, timeId = 4711): State {
+  const entry = state.entries.find((candidate) => candidate.id === entryId)!
+  entry.timeId = timeId
+  state.pending = state.pending.filter((write) => write.entryId !== entryId)
+  return state
+}
+
+describe('choosing a time category later', () => {
+  it('reaches the open entry that was begun without one', () => {
+    const clock = fixedClock(NINE)
+    let state = start(emptyState(), clock, { scope, key: 'a3f9c1', projectId: 166, categoryId: 0, mode: 'branch', newId })
+    clock.advance(3600)
+    state = pause(state, clock, scope)
+
+    state = applyCategory(state, '/work/shop', 166, 70, at(10, 0))
+
+    expect(openEntry(state, scope)?.categoryId).toBe(70)
+  })
+
+  it('sends the correction for an entry ProSonata already knows', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    const entry = openEntry(state, scope)!
+    entry.timeId = 4711
+
+    state = applyCategory(state, '/work/shop', 166, 71, at(10, 0))
+
+    expect(state.pending.map((write) => write.entryId)).toEqual([entry.id])
+  })
+
+  it('leaves another project and another repository alone', () => {
+    const clock = fixedClock(NINE)
+    const state = startOn(emptyState(), clock)
+
+    expect(applyCategory(state, '/work/shop', 999, 99, at(10, 1))).toBe(state)
+    expect(applyCategory(state, '/work/anderes', 166, 99, at(10, 1))).toBe(state)
+  })
+})
+
+describe('correcting the project', () => {
+  it('moves every unfinished entry of the repository, not just the current branch', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    state = startOn(state, clock, main)
+
+    state = applyProject(state, '/work/shop', 412, 15, at(10, 0))
+
+    expect(openEntry(state, scope)?.projectId).toBe(412)
+    expect(openEntry(state, main)?.projectId).toBe(412)
+    expect(openEntry(state, scope)?.categoryId).toBe(15)
+  })
+
+  it('takes an entry ProSonata already knows along, so the PUT moves it there too', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    const entry = openEntry(state, scope)!
+    state = sent(state, entry.id)
+
+    state = applyProject(state, '/work/shop', 412, 15, at(10, 0))
+
+    expect(state.pending.map((write) => write.entryId)).toEqual([entry.id])
+  })
+
+  it('keeps the category when the new project has none yet', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+
+    state = applyProject(state, '/work/shop', 412, 0, at(10, 0))
+
+    expect(openEntry(state, scope)?.categoryId).toBe(70)
+  })
+
+  it('takes a closed entry along while its write is still pending', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    const entry = openEntry(state, scope)!
+    state = close(state, entry.id, 'fertig', at(10, 0), newId)
+
+    state = applyProject(state, '/work/shop', 412, 15, at(10, 1))
+
+    expect(state.entries.find((candidate) => candidate.id === entry.id)?.projectId).toBe(412)
+  })
+
+  it('leaves a closed entry alone once its closing write has gone out', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    const entry = openEntry(state, scope)!
+    state = close(state, entry.id, 'fertig', at(10, 0), newId)
+    state = sent(state, entry.id)
+
+    state = applyProject(state, '/work/shop', 412, 15, at(10, 1))
+
+    expect(state.entries.find((candidate) => candidate.id === entry.id)?.projectId).toBe(166)
+  })
+
+  it('leaves another repository alone', () => {
+    const clock = fixedClock(NINE)
+    const state = startOn(emptyState(), clock)
+
+    expect(applyProject(state, '/work/anderes', 412, 15, at(10, 1))).toBe(state)
+  })
+})
+
+describe('changing the text of an open entry', () => {
+  it('replaces it without closing the entry', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    const entry = openEntry(state, scope)!
+
+    state = setText(state, entry.id, 'Buchungsmodul', at(10, 0))
+
+    expect(openEntry(state, scope)?.text).toBe('Buchungsmodul')
+    expect(openEntry(state, scope)?.state).toBe('open')
+  })
+
+  it('sends the correction for an entry ProSonata already knows', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    const entry = openEntry(state, scope)!
+    state = sent(state, entry.id)
+
+    state = setText(state, entry.id, 'Rabattstufen', at(10, 0))
+
+    expect(state.pending.map((write) => write.entryId)).toEqual([entry.id])
+  })
+
+  it('leaves a closed entry alone', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    const entry = openEntry(state, scope)!
+    state = close(state, entry.id, 'fertig', at(10, 0), newId)
+
+    expect(setText(state, entry.id, 'doch nicht', at(10, 1))).toBe(state)
   })
 })

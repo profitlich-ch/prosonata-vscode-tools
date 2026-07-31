@@ -64,52 +64,62 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     const grid = context.config.grid ?? session.config.grid
 
     const rows: PanelRow[] = [
-      new PanelRow('Project', project?.name ?? `#${context.projectId}`, 'briefcase', {
+      new PanelRow('Projekt', project?.name ?? `#${context.projectId}`, 'briefcase', {
         command: 'prosonata.chooseProject',
-        title: 'Choose project',
+        title: 'Projekt wählen',
       }),
       // A ruler, not a clock: the row is about the measure things are rounded
       // to. A clock already stands for the timer two rows down.
-      new PanelRow('Grid', grid.kind === 'exact' ? 'exact' : `${grid.minutes} min`, 'symbol-ruler', {
+      new PanelRow('Zeitraster', grid.kind === 'exact' ? 'exakt' : `${grid.minutes} min`, 'symbol-ruler', {
         command: 'prosonata.chooseGrid',
-        title: 'Choose grid',
+        title: 'Zeitraster wählen',
       }),
       new PanelRow(
         'Branch',
-        `${context.scope.branch} · ${context.mode === 'branch' ? 'one entry per branch' : 'one entry per commit'}`,
+        `${context.scope.branch} · ${context.mode === 'branch' ? 'ein Eintrag pro Branch' : 'ein Eintrag pro Commit'}`,
         'git-branch',
         context.scope.branch === context.mainBranch
           ? undefined
-          : { command: 'prosonata.toggleMode', title: 'Switch mode' },
+          : { command: 'prosonata.toggleMode', title: 'Modus wechseln' },
+      ),
+      // Directly above the timer: the category belongs to the work that is about
+      // to run, and without one ProSonata refuses the entry.
+      new PanelRow(
+        'Kategorie',
+        context.categoryId > 0
+          ? context.config.categoryNames.get(context.projectId) ?? `#${context.categoryId}`
+          : 'keine — es wird nichts gesendet',
+        'tag',
+        { command: 'prosonata.chooseCategory', title: 'Kategorie wählen' },
       ),
     ]
 
     const seconds = currentSeconds(state, session.clock, context.scope)
     rows.push(
       new PanelRow(
-        timer?.startedAt ? 'Running' : 'Paused',
+        timer?.startedAt ? 'Läuft' : 'Pausiert',
         `${clock(seconds)}${entry?.text ? ` · ${entry.text}` : ''}`,
         timer?.startedAt ? 'debug-pause' : 'play',
-        { command: timer?.startedAt ? 'prosonata.pause' : 'prosonata.start', title: 'Start or pause' },
+        { command: timer?.startedAt ? 'prosonata.pause' : 'prosonata.start', title: 'Starten oder pausieren' },
       ),
     )
 
     for (const open of state.entries.filter((candidate) => candidate.state === 'open' && candidate.text !== '')) {
       rows.push(
         new PanelRow(
-          open.scope.branch === context.scope.branch ? 'Open entry' : `Open · ${open.scope.branch}`,
+          open.scope.branch === context.scope.branch ? 'Offener Eintrag' : `Offen · ${open.scope.branch}`,
           `${open.text} · ${workingTime(open.foreignSeconds + open.seconds, grid)} h`,
           'circle-outline',
-          { command: 'prosonata.closeEntry', title: 'Close entry', arguments: [open.id] },
+          { command: 'prosonata.closeEntry', title: 'Eintrag abschliessen', arguments: [open.id] },
           'openEntry',
         ),
       )
     }
 
     if (state.pending.length > 0) {
-      rows.push(new PanelRow('Waiting to be sent', String(state.pending.length), 'cloud-upload', {
+      rows.push(new PanelRow('Wartet auf Versand', String(state.pending.length), 'cloud-upload', {
         command: 'prosonata.send',
-        title: 'Send now',
+        title: 'Jetzt senden',
       }))
     }
 

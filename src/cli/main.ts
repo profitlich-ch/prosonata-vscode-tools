@@ -1,13 +1,15 @@
+import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline/promises'
 
-import { HttpApi } from '../core/api.js'
-import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig, type Config } from '../core/config.js'
+import type { Project } from '../core/api.js'
+import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook } from '../core/hooks.js'
-import { rememberCategory, rememberProject } from '../core/repo-config.js'
+import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import { NotConfigured, Session } from '../core/session.js'
-import { openEntry } from '../core/tracking.js'
-import { workingTime } from '../core/working-time.js'
+import { applyCategory, applyProject, close, openEntry, setText } from '../core/tracking.js'
+import { workingTime, type TimeGrid } from '../core/working-time.js'
+import type { SendResult } from '../core/sender.js'
 
 /**
  * The command line. Same core as the extension, so a commit from the terminal
@@ -18,18 +20,29 @@ import { workingTime } from '../core/working-time.js'
  * `ps` would break `ps aux` for anyone who installed this (KONZEPT.md §8).
  */
 
-const USAGE = `prosonata — time tracking tied to commits and branches
+const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
 
-  prosonata init          set up the account and this repository, install the hook
-  prosonata start         start or resume the timer of this branch
-  prosonata pause         pause it and book the running segment
-  prosonata status        what is running, what is open, what is waiting to be sent
-  prosonata send          send everything that is due right now
-  prosonata post-commit   called by the hook, not meant to be typed
+  prosonata init                    Konto und dieses Repository einrichten, Hook installieren
+  prosonata start                   Timer dieses Branches starten oder fortsetzen
+  prosonata pause                   Timer pausieren und das laufende Segment buchen
+  prosonata status                  was läuft, was ist offen, was wartet
+  prosonata send                    alles senden, was gerade fällig ist
+
+  prosonata project                 Projekt dieses Repositories wählen
+  prosonata category                Zeitkategorie dieses Projekts wählen
+  prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
+  prosonata mode [branch|commit]    ein Eintrag pro Branch oder pro Commit
+  prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
+  prosonata text <Text>             Text des offenen Zeiteintrags ändern
+
+  prosonata post-commit             wird vom Hook gerufen, nicht zum Tippen gedacht
+
+Was ein Argument nimmt, fragt danach, wenn es weggelassen wird.
 `
 
 export async function main(argv: string[], cwd = process.cwd()): Promise<number> {
   const command = argv[0] ?? 'status'
+  const argument = argv.slice(1).join(' ').trim()
 
   try {
     switch (command) {
@@ -43,6 +56,18 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await status(cwd)
       case 'send':
         return await flush(cwd)
+      case 'project':
+        return await chooseProject(cwd)
+      case 'category':
+        return await chooseCategory(cwd)
+      case 'grid':
+        return await chooseGrid(cwd, argument)
+      case 'mode':
+        return await chooseMode(cwd, argument)
+      case 'close':
+        return await closeEntry(cwd, argument)
+      case 'text':
+        return await changeText(cwd, argument)
       case 'post-commit':
         return await postCommit(cwd)
       case 'help':
@@ -51,7 +76,7 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         process.stdout.write(USAGE)
         return 0
       default:
-        process.stderr.write(`unknown command: ${command}\n\n${USAGE}`)
+        process.stderr.write(`unbekannter Befehl: ${command}\n\n${USAGE}`)
         return 2
     }
   } catch (error) {
@@ -65,59 +90,188 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
 }
 
 async function init(cwd: string): Promise<number> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
   try {
-    let config: Config
-    try {
-      config = readConfig()
-      process.stdout.write(`account already set up: ${config.baseUrl}\n`)
-    } catch {
-      const baseUrl = (await rl.question('Base URL (https://<subdomain>.prosonata.software/api/v1): ')).trim()
-      const apiKey = (await rl.question('Personal API key: ')).trim()
-      config = { ...DEFAULTS, baseUrl, apiKey }
-      writeConfig(config)
-      process.stdout.write(`written to ${paths.config()} with mode 0600\n`)
-    }
-
-    const repo = describeRepo(cwd)
-    if (!repo) {
-      process.stderr.write('not a git repository\n')
-      return 1
-    }
-
-    const api = new HttpApi({ baseUrl: config.baseUrl, apiKey: config.apiKey })
-    const projects = await api.listProjects()
-    if (projects.length === 0) {
-      process.stderr.write('no open projects found — check the key and its permissions\n')
-      return 1
-    }
-
-    projects.slice(0, 40).forEach((project, index) => {
-      process.stdout.write(`  ${String(index + 1).padStart(2)}  ${project.projectNo}  ${project.projectName}\n`)
-    })
-    const chosen = projects[Number((await rl.question('Project number: ')).trim()) - 1]
-    if (!chosen) {
-      process.stderr.write('nothing chosen\n')
-      return 1
-    }
-    rememberProject(repo.root, { id: chosen.projectID, name: chosen.projectName })
-
-    const categories = (await api.listCategories()).filter(
-      (category) => category.linkedCustomerID === null || category.linkedCustomerID === chosen.customerID,
-    )
-    categories.slice(0, 40).forEach((category, index) => {
-      process.stdout.write(`  ${String(index + 1).padStart(2)}  ${category.categoryName}\n`)
-    })
-    const category = categories[Number((await rl.question('Category number: ')).trim()) - 1]
-    if (category) rememberCategory(repo.root, chosen.projectID, category.category)
-
-    const hook = installHook(repo.root, { node: process.execPath, cli: cliPath() })
-    process.stdout.write(`hook ${hook.action}: ${hook.path}\n`)
-    process.stdout.write(`ready — "${chosen.projectName}" in ${repo.root}\n`)
-    return 0
-  } finally {
-    rl.close()
+    process.stdout.write(`Konto bereits eingerichtet: ${readConfig().baseUrl}\n`)
+  } catch {
+    const baseUrl = await ask('Basis-URL (https://<subdomain>.prosonata.software/api/v1): ')
+    const apiKey = await ask('Persönlicher API-Key: ')
+    writeConfig({ ...DEFAULTS, baseUrl, apiKey })
+    process.stdout.write(`nach ${paths.config()} geschrieben, Modus 0600\n`)
   }
+
+  return await chooseProject(cwd)
+}
+
+/**
+ * The project of this repository, and with it the category, the hook and — for
+ * a repository that already had a project — the correction of everything still
+ * unfinished (KONZEPT.md §6).
+ */
+async function chooseProject(cwd: string): Promise<number> {
+  const session = Session.open()
+  const repo = describeRepo(cwd)
+  if (!repo) return notARepo()
+
+  const projects = await session.api.listProjects()
+  if (projects.length === 0) {
+    process.stderr.write('keine offenen Projekte gefunden — prüfe den Key und seine Rechte\n')
+    return 1
+  }
+
+  const project = await pick(projects, (candidate) => `${candidate.projectNo}  ${candidate.projectName}`, 'Projektnummer: ')
+  if (!project) return 1
+
+  rememberProject(repo.root, { id: project.projectID, name: project.projectName })
+
+  let categoryId = readRepoConfig(repo.root).categories.get(project.projectID) ?? 0
+  if (categoryId <= 0) categoryId = await askForCategory(session, repo.root, project)
+
+  session.store.update((state) => applyProject(state, repo.root, project.projectID, categoryId, session.clock.now()))
+
+  const hook = installHook(repo.root, { node: process.execPath, cli: cliPath() })
+  process.stdout.write(`Hook ${HOOK_ACTION[hook.action]}: ${hook.path}\n`)
+  process.stdout.write(`bereit — "${project.projectName}" in ${repo.root}\n`)
+  return 0
+}
+
+/** The time category of the project this repository books to. */
+async function chooseCategory(cwd: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const project = (await session.api.listProjects()).find((candidate) => candidate.projectID === context.projectId)
+  if (!project) {
+    process.stderr.write(`Projekt ${context.projectId} steht nicht mehr in der Liste — wähle eines mit "prosonata project"\n`)
+    return 1
+  }
+
+  return (await askForCategory(session, context.repo.root, project)) > 0 ? 0 : 1
+}
+
+/**
+ * Lists the categories that apply to this project's customer and remembers the
+ * answer. Returns the chosen id, or 0 when nothing was chosen — the caller then
+ * knows that nothing will be sent until there is one.
+ */
+async function askForCategory(session: Session, repoRoot: string, project: Project): Promise<number> {
+  const categories = (await session.api.listCategories()).filter(
+    (category) => category.linkedCustomerID === null || category.linkedCustomerID === project.customerID,
+  )
+  const category = await pick(categories, (candidate) => candidate.categoryName, 'Kategorienummer: ')
+  if (!category) {
+    process.stderr.write('keine Kategorie gewählt — ProSonata verlangt eine, es wird also nichts gesendet\n')
+    return 0
+  }
+
+  rememberCategory(repoRoot, project.projectID, category.category, category.categoryName)
+  session.store.update((state) =>
+    applyCategory(state, repoRoot, project.projectID, category.category, session.clock.now()),
+  )
+  process.stdout.write(`Kategorie: ${category.categoryName}\n`)
+  return category.category
+}
+
+/** The rounding grid of this repository. */
+async function chooseGrid(cwd: string, argument: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const wanted = argument !== '' ? argument : await ask('Zeitraster — exakt, 5, 15 oder 30 Minuten: ')
+  const grid = parseGrid(wanted)
+  if (!grid) {
+    process.stderr.write(`kein Zeitraster: ${wanted} — nimm "exakt" oder eine Anzahl Minuten\n`)
+    return 2
+  }
+
+  setGrid(context.repo.root, grid)
+  process.stdout.write(`Zeitraster: ${grid.kind === 'exact' ? 'exakt' : `${grid.minutes} min`}\n`)
+  return 0
+}
+
+/**
+ * Whether this branch collects one entry or one per commit. Switching to per
+ * commit closes the open entry — otherwise it would hang there with no
+ * prospect of ever being closed (KONZEPT.md §3).
+ */
+async function chooseMode(cwd: string, argument: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  if (context.scope.branch === context.mainBranch) {
+    process.stderr.write('auf dem Main-Branch ist jeder Commit sein eigener Eintrag — nichts umzuschalten\n')
+    return 1
+  }
+
+  const wanted = argument !== '' ? argument : await ask('Modus — branch oder commit: ')
+  if (wanted !== 'branch' && wanted !== 'commit') {
+    process.stderr.write(`kein Modus: ${wanted} — nimm "branch" oder "commit"\n`)
+    return 2
+  }
+  if (wanted === context.mode) {
+    process.stdout.write(`bereits ein Eintrag pro ${wanted === 'branch' ? 'Branch' : 'Commit'}\n`)
+    return 0
+  }
+
+  if (wanted === 'commit') {
+    const entry = openEntry(session.state(), context.scope)
+    if (entry && entry.text !== '') {
+      const text = (await ask(`Endgültiger Text für den offenen Eintrag [${entry.text}]: `)) || entry.text
+      session.store.update((state) => close(state, entry.id, text, session.clock.now(), randomUUID))
+    }
+  }
+
+  setMode(context.repo.root, context.key, wanted)
+  process.stdout.write(`ein Eintrag pro ${wanted === 'branch' ? 'Branch' : 'Commit'} auf ${context.scope.branch}\n`)
+  return 0
+}
+
+/** Closes the open entry of this branch and sends it right away. */
+async function closeEntry(cwd: string, argument: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const entry = openEntry(session.state(), context.scope)
+  if (!entry) {
+    process.stderr.write(`auf ${context.scope.branch} ist nichts offen\n`)
+    return 1
+  }
+
+  const text = argument !== '' ? argument : (await ask(`Endgültiger Text${entry.text ? ` [${entry.text}]` : ''}: `)) || entry.text
+  if (text === '') {
+    process.stderr.write('ein Eintrag ohne Text wird nie gesendet — nichts getan\n')
+    return 1
+  }
+
+  session.store.update((state) => close(state, entry.id, text, session.clock.now(), randomUUID))
+  process.stdout.write(`abgeschlossen: ${text}\n`)
+  return report(await session.flush(true))
+}
+
+/** Changes the text of the open entry, without closing it. */
+async function changeText(cwd: string, argument: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const entry = openEntry(session.state(), context.scope)
+  if (!entry) {
+    process.stderr.write(`auf ${context.scope.branch} ist nichts offen\n`)
+    return 1
+  }
+
+  const text = argument !== '' ? argument : await ask(`Text${entry.text ? ` [${entry.text}]` : ''}: `)
+  if (text === '') {
+    process.stderr.write('kein Text angegeben — nichts geändert\n')
+    return 1
+  }
+
+  session.store.update((state) => setText(state, entry.id, text, session.clock.now()))
+  process.stdout.write(`Text: ${text}\n`)
+  return 0
 }
 
 function start(cwd: string): number {
@@ -126,7 +280,7 @@ function start(cwd: string): number {
   if (!context) return notARepo()
 
   session.start(context)
-  process.stdout.write(`running on ${context.scope.branch} — ${nameOfProject(context)}\n`)
+  process.stdout.write(`läuft auf ${context.scope.branch} — ${nameOfProject(context)}\n`)
   return 0
 }
 
@@ -136,7 +290,7 @@ function pause(cwd: string): number {
   if (!context) return notARepo()
 
   session.pause(context)
-  process.stdout.write(`paused — ${format(session.seconds(context))} on ${context.scope.branch}\n`)
+  process.stdout.write(`pausiert — ${format(session.seconds(context))} auf ${context.scope.branch}\n`)
   return 0
 }
 
@@ -149,13 +303,16 @@ async function status(cwd: string): Promise<number> {
   const entry = openEntry(state, context.scope)
   const timer = state.timers.find((candidate) => candidate.scope.branch === context.scope.branch)
 
-  process.stdout.write(`${nameOfProject(context)} — ${context.scope.branch} (${context.mode === 'branch' ? 'one entry per branch' : 'one entry per commit'})\n`)
-  process.stdout.write(`  ${timer?.startedAt ? 'running' : 'paused'}  ${format(session.seconds(context))}\n`)
+  process.stdout.write(`${nameOfProject(context)} — ${context.scope.branch} (${context.mode === 'branch' ? 'ein Eintrag pro Branch' : 'ein Eintrag pro Commit'})\n`)
+  process.stdout.write(`  ${timer?.startedAt ? 'läuft' : 'pausiert'}  ${format(session.seconds(context))}\n`)
   if (entry) {
-    process.stdout.write(`  open entry  ${entry.text || '(no text yet)'}  ${workingTime(entry.foreignSeconds + entry.seconds, context.config.grid ?? session.config.grid)} h\n`)
+    process.stdout.write(`  offener Eintrag  ${entry.text || '(noch kein Text)'}  ${workingTime(entry.foreignSeconds + entry.seconds, context.config.grid ?? session.config.grid)} h\n`)
+  }
+  if (context.categoryId <= 0) {
+    process.stdout.write('  keine Zeitkategorie — es wird nichts gesendet, bis eine gewählt ist\n')
   }
   if (state.pending.length > 0) {
-    process.stdout.write(`  waiting to be sent: ${state.pending.length}\n`)
+    process.stdout.write(`  wartet auf Versand: ${state.pending.length}\n`)
   }
   return 0
 }
@@ -164,14 +321,21 @@ async function flush(cwd: string): Promise<number> {
   const session = Session.open()
   if (!session.context(cwd)) return notARepo()
 
-  const result = await session.flush(true)
+  return report(await session.flush(true))
+}
+
+/** What came of a send, in the same words wherever it is triggered from. */
+function report(result: SendResult): number {
   for (const problem of result.tooLong) {
-    process.stderr.write(`text too long (${problem.length} of ${problem.limit}) — shorten it, ProSonata would cut it silently\n`)
+    process.stderr.write(`Text zu lang (${problem.length} von ${problem.limit}) — kürze ihn, ProSonata würde ihn wortlos abschneiden\n`)
+  }
+  if (result.missingCategory.length > 0) {
+    process.stderr.write('keine Zeitkategorie für dieses Projekt — wähle eine mit "prosonata category", ProSonata verlangt sie\n')
   }
   for (const failure of result.failed) {
-    process.stderr.write(`could not send: ${failure.error.message}\n`)
+    process.stderr.write(`konnte nicht gesendet werden: ${failure.error.message}\n`)
   }
-  process.stdout.write(`sent: ${result.sent.length}\n`)
+  process.stdout.write(`gesendet: ${result.sent.length}\n`)
   return result.failed.length > 0 ? 1 : 0
 }
 
@@ -193,15 +357,15 @@ async function postCommit(cwd: string): Promise<number> {
 
     if (outcome.branchSwitched) {
       process.stderr.write(
-        'prosonata: the branch had changed — the time so far went to the branch it was started on, and the timer is paused\n',
+        'prosonata: der Branch hatte gewechselt — die bisherige Zeit ging an den Branch, auf dem sie gestartet wurde, und der Timer ist pausiert\n',
       )
     }
     if (!outcome.hadTimer) {
-      process.stderr.write('prosonata: no timer was running — this commit booked nothing\n')
+      process.stderr.write('prosonata: es lief kein Timer — dieser Commit hat nichts gebucht\n')
       return 0
     }
     if (outcome.booked > 0) {
-      process.stderr.write(`prosonata: ${format(outcome.booked)} booked${outcome.closed ? ', entry closed' : ''}\n`)
+      process.stderr.write(`prosonata: ${format(outcome.booked)} gebucht${outcome.closed ? ', Eintrag abgeschlossen' : ''}\n`)
     }
     await session.flush()
     return 0
@@ -211,13 +375,54 @@ async function postCommit(cwd: string): Promise<number> {
   }
 }
 
+/** One question on the terminal. Opened and closed per question, so a command
+ *  that asks nothing never touches stdin. */
+async function ask(question: string): Promise<string> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout })
+  try {
+    return (await rl.question(question)).trim()
+  } finally {
+    rl.close()
+  }
+}
+
+/** A numbered list, the way `init` has always shown projects and categories. */
+async function pick<T>(items: T[], label: (item: T) => string, question: string): Promise<T | null> {
+  if (items.length === 0) {
+    process.stderr.write('nichts zur Auswahl\n')
+    return null
+  }
+
+  items.slice(0, 40).forEach((item, index) => {
+    process.stdout.write(`  ${String(index + 1).padStart(2)}  ${label(item)}\n`)
+  })
+
+  const chosen = items[Number(await ask(question)) - 1]
+  if (!chosen) process.stderr.write('nichts gewählt\n')
+  return chosen ?? null
+}
+
+function parseGrid(value: string): TimeGrid | null {
+  if (value === 'exact' || value === 'exakt') return { kind: 'exact' }
+  const minutes = Number(value)
+  return Number.isFinite(minutes) && minutes > 0 ? { kind: 'minutes', minutes } : null
+}
+
 function nameOfProject(context: { projectId: number; config: { projects: { id: number; name: string }[] } }): string {
-  return context.config.projects.find((project) => project.id === context.projectId)?.name ?? `project ${context.projectId}`
+  return context.config.projects.find((project) => project.id === context.projectId)?.name ?? `Projekt ${context.projectId}`
 }
 
 function notARepo(): number {
-  process.stderr.write('not a git repository\n')
+  process.stderr.write('kein Git-Repository\n')
   return 1
+}
+
+/** The core reports what it did in English; the terminal speaks German. */
+const HOOK_ACTION: Record<string, string> = {
+  created: 'angelegt',
+  appended: 'ergänzt',
+  updated: 'aktualisiert',
+  unchanged: 'unverändert',
 }
 
 /** `1:23:45`, the same shape the status bar shows. */

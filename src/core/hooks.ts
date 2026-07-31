@@ -15,13 +15,19 @@ import { tryGit } from './git.js'
  *
  * So `prosonata init` resolves both paths at install time and writes them in
  * absolutely.
+ *
+ * The Node path is `process.execPath`, and in the extension host that is not
+ * Node but VS Code's own Electron binary. Electron only runs a script when
+ * `ELECTRON_RUN_AS_NODE` is set; without it the hook dies with "Unable to find
+ * helper app" and `|| true` hides it. The block therefore sets the variable —
+ * real Node ignores it, so one line serves both front ends.
  */
 
 const BEGIN = '# >>> prosonata >>>'
 const END = '# <<< prosonata <<<'
 
 export interface HookPaths {
-  /** Absolute path of the Node binary, normally `process.execPath`. */
+  /** Absolute path of the Node binary, normally `process.execPath` — which in the extension host is Electron. */
   node: string
   /** Absolute path of the bundled CLI. */
   cli: string
@@ -33,8 +39,10 @@ export function hookBlock({ node, cli }: HookPaths): string {
     '# Installed by "prosonata init". Absolute paths on purpose: a hook started',
     '# from a GUI git client inherits an environment without nvm or Homebrew.',
     '# The first line keeps unconfigured repositories from starting Node at all.',
+    '# ELECTRON_RUN_AS_NODE: the path below is VS Code itself when the extension',
+    '# installed this hook. Real Node ignores the variable.',
     'git config --local --get prosonata.active >/dev/null 2>&1 || exit 0',
-    `${quote(node)} ${quote(cli)} post-commit || true`,
+    `ELECTRON_RUN_AS_NODE=1 ${quote(node)} ${quote(cli)} post-commit || true`,
     END,
   ].join('\n')
 }
@@ -79,17 +87,19 @@ export function isInstalled(repoRoot: string): boolean {
 }
 
 /**
- * Whether the recorded paths still exist. An absolute Node path breaks when the
- * version changes, e.g. through nvm — the extension checks this at start-up and
- * repairs the hook quietly.
+ * Whether the installed block still is the one we would write today. An absolute
+ * Node path breaks when the version changes, e.g. through nvm — the extension
+ * checks this at start-up and repairs the hook quietly.
+ *
+ * The whole block is compared, not just the two paths: a hook from an older
+ * version can carry the right paths and still be wrong, and would otherwise
+ * count as healthy forever.
  */
 export function hookNeedsRepair(repoRoot: string, expected: HookPaths): boolean {
   const path = hookPath(repoRoot)
   if (!existsSync(path)) return true
 
-  const contents = readFileSync(path, 'utf8')
-  if (!contents.includes(BEGIN)) return true
-  return !contents.includes(quote(expected.node)) || !contents.includes(quote(expected.cli))
+  return !readFileSync(path, 'utf8').includes(hookBlock(expected))
 }
 
 export function hookPath(repoRoot: string): string {

@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import * as vscode from 'vscode'
 
+import type { Project } from '../core/api.js'
 import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { describeRepo, fetchPrune, isMerged, remoteBranchGone, type GitRepo } from '../core/git.js'
 import { hookNeedsRepair, installHook } from '../core/hooks.js'
-import { readRepoConfig, rememberProject, setGrid, setMode } from '../core/repo-config.js'
+import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
-import { close, currentSeconds, openEntry } from '../core/tracking.js'
+import { applyCategory, applyProject, close, currentSeconds, openEntry, setText } from '../core/tracking.js'
 import type { State } from '../core/types.js'
 import type { TimeGrid } from '../core/working-time.js'
 import { clock, Panel } from './panel.js'
@@ -52,9 +53,11 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.toggle', withContext(toggle))
   register(context, 'prosonata.send', withContext(sendNow))
   register(context, 'prosonata.chooseProject', withRepo(chooseProject))
+  register(context, 'prosonata.chooseCategory', withRepo((s, r) => chooseCategory(s, r)))
   register(context, 'prosonata.chooseGrid', withRepo(chooseGrid))
   register(context, 'prosonata.toggleMode', withContext(toggleMode))
   register(context, 'prosonata.closeEntry', withContext(closeEntry))
+  register(context, 'prosonata.changeText', withContext(changeText))
 
   /*
    * The hook records absolute paths, which break when Node's version changes,
@@ -135,12 +138,12 @@ function withContext(action: (session: Session, context: RepoContext) => Promise
   return async () => {
     const active = currentSession()
     if (!active) {
-      void vscode.window.showWarningMessage('ProSonata: no account configured yet — run "prosonata init".')
+      void vscode.window.showWarningMessage('ProSonata: noch kein Konto eingerichtet — führe "prosonata init" aus.')
       return
     }
     const context = currentContext()
     if (!context) {
-      void vscode.window.showWarningMessage('ProSonata: this repository has no project yet — run "prosonata init".')
+      void vscode.window.showWarningMessage('ProSonata: dieses Repository hat noch kein Projekt — führe "prosonata init" aus.')
       return
     }
     try {
@@ -159,8 +162,8 @@ function withContext(action: (session: Session, context: RepoContext) => Promise
  */
 async function setUpAccount(): Promise<void> {
   const baseUrl = await vscode.window.showInputBox({
-    title: 'ProSonata: base URL',
-    prompt: 'Up to and including /api/v1',
+    title: 'ProSonata: Basis-URL',
+    prompt: 'Bis und mit /api/v1',
     placeHolder: 'https://<subdomain>.prosonata.software/api/v1',
     value: readIfPresent()?.baseUrl ?? '',
     ignoreFocusOut: true,
@@ -168,8 +171,8 @@ async function setUpAccount(): Promise<void> {
   if (baseUrl === undefined) return
 
   const apiKey = await vscode.window.showInputBox({
-    title: 'ProSonata: personal API key',
-    prompt: 'A user key, not an app integration — an integration is not a user',
+    title: 'ProSonata: persönlicher API-Key',
+    prompt: 'Ein Benutzer-Key, keine App-Integration — eine Integration ist kein Benutzer',
     password: true,
     ignoreFocusOut: true,
   })
@@ -179,7 +182,7 @@ async function setUpAccount(): Promise<void> {
   session = null
   reload()
   void vscode.window.showInformationMessage(
-    `ProSonata: written to ${paths.config()}. Now choose a project for this repository.`,
+    `ProSonata: nach ${paths.config()} geschrieben. Wähle jetzt ein Projekt für dieses Repository.`,
   )
   await vscode.commands.executeCommand('prosonata.chooseProject')
 }
@@ -200,14 +203,14 @@ function withRepo(action: (session: Session, repo: GitRepo) => Promise<void> | v
   return async () => {
     const active = currentSession()
     if (!active) {
-      void vscode.window.showWarningMessage('ProSonata: no account configured yet — set it up first.')
+      void vscode.window.showWarningMessage('ProSonata: noch kein Konto eingerichtet — richte es zuerst ein.')
       return
     }
 
     const folder = vscode.workspace.workspaceFolders?.[0]
     const repo = folder ? describeRepo(folder.uri.fsPath) : null
     if (!repo) {
-      void vscode.window.showWarningMessage('ProSonata: this folder is not a git repository.')
+      void vscode.window.showWarningMessage('ProSonata: dieser Ordner ist kein Git-Repository.')
       return
     }
 
@@ -232,9 +235,19 @@ async function sendNow(session: Session): Promise<void> {
   const result = await session.flush(true)
   for (const problem of result.tooLong) {
     void vscode.window.showWarningMessage(
-      `ProSonata: the text is ${problem.length} characters, the limit is ${problem.limit}. ` +
-        'ProSonata would cut it without saying so, so it was not sent. Shorten it.',
+      `ProSonata: der Text hat ${problem.length} Zeichen, erlaubt sind ${problem.limit}. ` +
+        'ProSonata würde ihn wortlos abschneiden, deshalb wurde nichts gesendet. Kürze ihn.',
     )
+  }
+  if (result.missingCategory.length > 0) {
+    void vscode.window
+      .showWarningMessage(
+        'ProSonata: für dieses Projekt ist keine Zeitkategorie gewählt — ProSonata verlangt eine, deshalb wurde nichts gesendet.',
+        'Kategorie wählen',
+      )
+      .then((answer) => {
+        if (answer === 'Kategorie wählen') void vscode.commands.executeCommand('prosonata.chooseCategory')
+      })
   }
   for (const failure of result.failed) {
     void vscode.window.showWarningMessage(`ProSonata: ${failure.error.message}`)
@@ -252,10 +265,10 @@ async function chooseProject(session: Session, repo: GitRepo): Promise<void> {
     ].map((project) => ({
       label: project.projectName,
       description: project.projectNo,
-      detail: `${project.customerName} · ${project.timeNeeded} of ${project.timePlanned} h`,
+      detail: `${project.customerName} · ${project.timeNeeded} von ${project.timePlanned} h`,
       project,
     })),
-    { title: 'ProSonata: project for this repository', matchOnDescription: true, matchOnDetail: true },
+    { title: 'ProSonata: Projekt für dieses Repository', matchOnDescription: true, matchOnDetail: true },
   )
   if (!picked) return
 
@@ -264,6 +277,57 @@ async function chooseProject(session: Session, repo: GitRepo): Promise<void> {
   // Without this the hook would only appear at the next window start, and the
   // commits in between would book nothing.
   installHookHere(repo.root)
+
+  // Choosing a project is a correction of a mistake: time already measured
+  // belongs to this work, not to the project picked by accident. Everything
+  // unfinished moves along, including what ProSonata already knows.
+  const remembered = readRepoConfig(repo.root).categories.get(picked.project.projectID) ?? 0
+  session.store.update((state) =>
+    applyProject(state, repo.root, picked.project.projectID, remembered, session.clock.now()),
+  )
+
+  // A project without a category books nothing either: ProSonata requires one.
+  // Asking right here keeps the editor route as complete as "prosonata init".
+  if (remembered <= 0) await chooseCategory(session, repo, picked.project)
+}
+
+/**
+ * The category belongs to the timer, not to the repository (KONZEPT.md §6): it
+ * changes within the same project, so the last choice stays and starting is one
+ * click. Remembered per project, because maintenance is booked differently from
+ * feature work.
+ */
+async function chooseCategory(session: Session, repo: GitRepo, project?: Project): Promise<void> {
+  const config = readRepoConfig(repo.root)
+  const projectId = project?.projectID ?? config.activeProjectId
+  if (projectId === null) {
+    await chooseProject(session, repo)
+    return
+  }
+
+  // The list is global; only the customer of the active project narrows it.
+  const customerId = project?.customerID ?? (await session.api.listProjects()).find((candidate) => candidate.projectID === projectId)?.customerID
+  const categories = (await session.api.listCategories()).filter(
+    (category) => category.linkedCustomerID === null || category.linkedCustomerID === customerId,
+  )
+  if (categories.length === 0) {
+    void vscode.window.showWarningMessage('ProSonata: dieses Konto hat keine aktiven Zeitkategorien.')
+    return
+  }
+
+  const current = config.categories.get(projectId)
+  const picked = await vscode.window.showQuickPick(
+    categories.map((category) => ({
+      label: category.categoryName,
+      description: category.category === current ? 'aktuell' : category.groupName ?? '',
+      category,
+    })),
+    { title: `ProSonata: Zeitkategorie für ${project?.projectName ?? config.projects.find((p) => p.id === projectId)?.name ?? `#${projectId}`}` },
+  )
+  if (!picked) return
+
+  rememberCategory(repo.root, projectId, picked.category.category, picked.category.categoryName)
+  session.store.update((state) => applyCategory(state, repo.root, projectId, picked.category.category, session.clock.now()))
 }
 
 function installHookHere(repoRoot: string): void {
@@ -271,24 +335,24 @@ function installHookHere(repoRoot: string): void {
   try {
     installHook(repoRoot, { node: process.execPath, cli })
   } catch (error) {
-    void vscode.window.showWarningMessage(`ProSonata: the post-commit hook could not be installed — ${(error as Error).message}`)
+    void vscode.window.showWarningMessage(`ProSonata: der post-commit-Hook konnte nicht installiert werden — ${(error as Error).message}`)
   }
 }
 
 async function chooseGrid(_session: Session, repo: GitRepo): Promise<void> {
   const options: { label: string; grid: TimeGrid }[] = [
-    { label: 'exact', grid: { kind: 'exact' } },
-    { label: '5 minutes', grid: { kind: 'minutes', minutes: 5 } },
-    { label: '15 minutes', grid: { kind: 'minutes', minutes: 15 } },
-    { label: '30 minutes', grid: { kind: 'minutes', minutes: 30 } },
+    { label: 'exakt', grid: { kind: 'exact' } },
+    { label: '5 Minuten', grid: { kind: 'minutes', minutes: 5 } },
+    { label: '15 Minuten', grid: { kind: 'minutes', minutes: 15 } },
+    { label: '30 Minuten', grid: { kind: 'minutes', minutes: 30 } },
   ]
-  const picked = await vscode.window.showQuickPick(options, { title: 'ProSonata: rounding grid' })
+  const picked = await vscode.window.showQuickPick(options, { title: 'ProSonata: Zeitraster' })
   if (picked) setGrid(repo.root, picked.grid)
 }
 
 async function toggleMode(session: Session, context: RepoContext): Promise<void> {
   if (context.scope.branch === context.mainBranch) {
-    void vscode.window.showInformationMessage('ProSonata: on the main branch every commit is its own entry.')
+    void vscode.window.showInformationMessage('ProSonata: auf dem Main-Branch ist jeder Commit sein eigener Eintrag.')
     return
   }
 
@@ -299,7 +363,7 @@ async function toggleMode(session: Session, context: RepoContext): Promise<void>
   // there with no prospect of ever being closed (KONZEPT.md §3).
   if (next === 'commit' && entry && entry.text !== '') {
     const text = await vscode.window.showInputBox({
-      title: 'ProSonata: final text for the open entry',
+      title: 'ProSonata: endgültiger Text für den offenen Eintrag',
       value: entry.text,
     })
     if (text === undefined) return
@@ -309,14 +373,37 @@ async function toggleMode(session: Session, context: RepoContext): Promise<void>
   setMode(context.repo.root, context.key, next)
 }
 
+/**
+ * The text of the open entry, without closing it. A typo in a trailer would
+ * otherwise only be correctable by another commit — or by closing an entry that
+ * is not finished at all.
+ */
+async function changeText(session: Session, context: RepoContext, entryId?: string): Promise<void> {
+  const state = session.state()
+  const entry = entryId ? state.entries.find((candidate) => candidate.id === entryId) : openEntry(state, context.scope)
+  if (!entry || entry.state === 'closed') {
+    void vscode.window.showInformationMessage(`ProSonata: auf ${context.scope.branch} ist nichts offen.`)
+    return
+  }
+
+  const text = await vscode.window.showInputBox({
+    title: 'ProSonata: Text des offenen Eintrags',
+    prompt: 'Der Eintrag bleibt offen; ein späterer Trailer ersetzt diesen Text weiterhin.',
+    value: entry.text,
+  })
+  if (text === undefined || text === '') return
+
+  session.store.update((current) => setText(current, entry.id, text, session.clock.now()))
+}
+
 async function closeEntry(session: Session, context: RepoContext, entryId?: string): Promise<void> {
   const state = session.state()
   const entry = entryId ? state.entries.find((candidate) => candidate.id === entryId) : openEntry(state, context.scope)
   if (!entry) return
 
   const text = await vscode.window.showInputBox({
-    title: 'ProSonata: final text for the invoice',
-    prompt: 'The marker disappears and this entry is never written to again.',
+    title: 'ProSonata: endgültiger Text für die Rechnung',
+    prompt: 'Der Marker verschwindet, und dieser Eintrag wird nie wieder geschrieben.',
     value: entry.text,
   })
   if (text === undefined) return
@@ -374,12 +461,12 @@ function watchHead(active: Session, context: RepoContext): void {
 
   void vscode.window
     .showInformationMessage(
-      `ProSonata: the branch changed. The time so far went to ${running.scope.branch}. Keep counting here?`,
-      'Continue here',
-      'Stay paused',
+      `ProSonata: der Branch hat gewechselt. Die bisherige Zeit ging an ${running.scope.branch}. Hier weiterzählen?`,
+      'Hier weiterzählen',
+      'Pausiert lassen',
     )
     .then((answer) => {
-      if (answer === 'Continue here') void vscode.commands.executeCommand('prosonata.start')
+      if (answer === 'Hier weiterzählen') void vscode.commands.executeCommand('prosonata.start')
     })
 }
 
@@ -395,12 +482,12 @@ function warnAboutLongRun(active: Session, context: RepoContext): void {
 
   void vscode.window
     .showWarningMessage(
-      `ProSonata: the timer has been running for ${clock(active.seconds(context))} without a commit. Still at it?`,
-      'Yes',
-      'Pause',
+      `ProSonata: der Timer läuft seit ${clock(active.seconds(context))} ohne Commit. Immer noch dran?`,
+      'Ja',
+      'Pausieren',
     )
     .then((answer) => {
-      if (answer === 'Pause') void vscode.commands.executeCommand('prosonata.pause')
+      if (answer === 'Pausieren') void vscode.commands.executeCommand('prosonata.pause')
     })
 }
 
@@ -425,11 +512,11 @@ async function prune(): Promise<void> {
   if (!merged && !gone) return
 
   const answer = await vscode.window.showInformationMessage(
-    `ProSonata: "${entry.text}" looks finished — ${merged ? 'the branch is merged' : 'the remote branch is gone'}. Close the entry?`,
-    'Close',
-    'Later',
+    `ProSonata: "${entry.text}" sieht fertig aus — ${merged ? 'der Branch ist gemerged' : 'der Remote-Branch ist weg'}. Eintrag abschliessen?`,
+    'Abschliessen',
+    'Später',
   )
-  if (answer === 'Close') await vscode.commands.executeCommand('prosonata.closeEntry')
+  if (answer === 'Abschliessen') await vscode.commands.executeCommand('prosonata.closeEntry')
 }
 
 function repairHookIfNeeded(context: vscode.ExtensionContext): void {
@@ -442,7 +529,7 @@ function repairHookIfNeeded(context: vscode.ExtensionContext): void {
   try {
     installHook(repo.repo.root, { node: process.execPath, cli })
   } catch {
-    void vscode.window.showWarningMessage('ProSonata: the post-commit hook could not be repaired.')
+    void vscode.window.showWarningMessage('ProSonata: der post-commit-Hook konnte nicht repariert werden.')
   }
 }
 

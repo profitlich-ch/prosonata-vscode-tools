@@ -21,6 +21,8 @@ export interface RepoConfig {
   activeProjectId: number | null
   /** Category last used per project — the list itself is global. */
   categories: Map<number, number>
+  /** Its name, so the panel can show one without asking the API. */
+  categoryNames: Map<number, string>
   grid: TimeGrid | null
   /** Entry mode per branch key; the main branch is always per commit. */
   modes: Map<string, EntryMode>
@@ -55,10 +57,17 @@ export function readRepoConfig(cwd: string): RepoConfig {
 
   const active = Number(tryGit(cwd, 'config', '--local', '--get', KEY.active) ?? '')
 
+  // "15" or "15:Gestaltung" — older versions wrote the bare id, so the name is
+  // read where it is there and never required.
   const categories = new Map<number, number>()
+  const categoryNames = new Map<number, string>()
   for (const project of projects) {
-    const value = Number(tryGit(cwd, 'config', '--local', '--get', KEY.category(project.id)) ?? '')
-    if (Number.isFinite(value) && value > 0) categories.set(project.id, value)
+    const raw = tryGit(cwd, 'config', '--local', '--get', KEY.category(project.id)) ?? ''
+    const separator = raw.indexOf(':')
+    const value = Number(separator < 0 ? raw : raw.slice(0, separator))
+    if (!Number.isFinite(value) || value <= 0) continue
+    categories.set(project.id, value)
+    if (separator >= 0 && raw.slice(separator + 1) !== '') categoryNames.set(project.id, raw.slice(separator + 1))
   }
 
   const modes = new Map<string, EntryMode>()
@@ -73,6 +82,7 @@ export function readRepoConfig(cwd: string): RepoConfig {
     projects,
     activeProjectId: Number.isFinite(active) && active > 0 ? active : null,
     categories,
+    categoryNames,
     grid: readGrid(tryGit(cwd, 'config', '--local', '--get', KEY.grid)),
     modes,
   }
@@ -86,8 +96,9 @@ export function rememberProject(cwd: string, project: RepoProject): void {
   git(cwd, 'config', '--local', KEY.active, String(project.id))
 }
 
-export function rememberCategory(cwd: string, projectId: number, categoryId: number): void {
-  git(cwd, 'config', '--local', KEY.category(projectId), String(categoryId))
+export function rememberCategory(cwd: string, projectId: number, categoryId: number, name?: string): void {
+  const value = name && !name.includes('\n') ? `${categoryId}:${name}` : String(categoryId)
+  git(cwd, 'config', '--local', KEY.category(projectId), value)
 }
 
 export function setMode(cwd: string, branchKey: string, mode: EntryMode): void {
