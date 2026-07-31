@@ -4,6 +4,27 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] — 2026-08-01
+
+### Geändert
+
+- **Der Umschalter zwischen „pro Branch" und „pro Commit" hat eine eigene
+  Panel-Zeile.** Er hing hinter dem Branchnamen, und Namen wie
+  `167-startseite-mobile-tablet-expertise-layout` schieben ihn in einer
+  schmalen Seitenleiste aus dem Bild — ausgerechnet die Einstellung, die
+  bestimmt, was auf der Rechnung landet. Die Zeile heisst „Zeiteintrag" und
+  zeigt „pro Branch" oder „pro Commit".
+- **Das README nennt, was seit 0.3.1 dazugekommen ist und überraschen würde**:
+  das Pausieren beim Schliessen des Fensters, die Frage nach einem langen
+  Segment, den Log samt gelöschten Branches und das Verhalten auf mehreren
+  Computern. Keine Feature-Liste — die veraltet und steht hier. Die CLI-Liste
+  stimmt wieder mit `prosonata help` überein.
+
+### Behoben
+
+- **Zwei Panel-Zeilen trugen dasselbe Symbol.** `clock` ist in VS Code ein
+  Alias auf `history`; das schlichte Zifferblatt heisst `clockface`.
+
 ## [0.4.0] — 2026-08-01
 
 Zwei Fehler, die im Betrieb Zeit gekostet hätten, waren nur zu finden, indem die
