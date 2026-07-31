@@ -15,27 +15,27 @@ Für Installation und Update die `.vsix` des jüngsten
 [Release](https://github.com/profitlich-ch/prosonata-vscode-tools/releases)
 laden und installieren:
 
+#### Ohne Terminal
+
+Befehlspalette → Aus VSIX installieren…
+
+#### Im Terminal
+
 ```sh
 code --install-extension prosonata-vscode-tools-<version>.vsix
 ```
 
 ### Aus dem Quellcode
 
-Voraussetzung ist eine Node-Umgebung.
-
-#### Installation
+Voraussetzung ist eine Node-Umgebung. Gebaut, gepackt und installiert wird in
+einem Schritt — am Ende steht dieselbe `.vsix` wie oben:
 
 ```sh
 npm install
-npm run install-local     # baut und verlinkt das Repo nach ~/.vscode/extensions
+npm run install-vsix
 ```
 
-#### Update
-
-```sh
-git pull
-npm run build
-```
+Fürs Update dasselbe noch einmal, nach `git pull`.
 
 ## Konfiguration
 
@@ -125,10 +125,34 @@ läuft der Befehl ohne Rückfrage durch und taugt damit auch für Skripte.
 
 ## Entwicklung
 
+### Eine Änderung ausprobieren
+
+Dafür wird nichts installiert. **F5** startet ein zweites VS-Code-Fenster, in dem
+die Erweiterung direkt aus diesem Arbeitsverzeichnis läuft. Zur Auswahl stehen
+zwei Startkonfigurationen:
+
+- **Extension im echten Konto** — mit deinem `~/.prosonata` und deinen Projekten.
+  Was du dort tust, landet in ProSonata.
+- **Extension in der Sandbox** — mit eigenem Zustandsverzeichnis und einem
+  Wegwerf-Repository unter `.sandbox`, das bereits Projekt, Kategorie und Hook
+  hat. Die Basis-URL zeigt ins Leere, gesendet wird also nichts; alle
+  Schreibvorgänge sammeln sich sichtbar in der Warteschlange.
+
+Die Sandbox muss vorher angelegt werden — der Befehl baut sie jedes Mal neu:
+
 ```sh
-npm run typecheck
-npm test
-npm run build
+npm run sandbox                   # offline
+npm run sandbox -- --live 166 70  # echtes Konto, Projekt 166, Kategorie 70
+```
+
+Die zwei Striche vor `--live` müssen sein: Ohne sie schluckt npm das Argument,
+und die Sandbox läuft offline weiter, als hätte man nichts gesagt.
+
+### Prüfen und bauen
+
+```sh
+npm run check    # Typen, Tests, Build in einem
+npm run watch    # baut bei jeder Änderung neu
 ```
 
 `src/core` enthält alle Regeln und importiert nie `vscode` — deshalb kann der

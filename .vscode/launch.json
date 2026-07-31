@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Extension in der Spielwiese",
+      "name": "Extension in der Sandbox",
       "type": "extensionHost",
       "request": "launch",
       "args": [

@@ -65,7 +65,7 @@ writeFileSync(
 console.log(`Zustandsverzeichnis  ${home}`)
 console.log(`Repository           ${repo}`)
 console.log(`Modus                ${live ? `live, Projekt ${projectId}, Kategorie ${categoryId}` : 'offline, es wird nichts gesendet'}`)
-console.log('\nF5 drücken und „Extension in der Spielwiese" wählen.')
+console.log('\nF5 drücken und „Extension in der Sandbox" wählen.')
 
 function readLiveConfig() {
   const path = join(process.env.HOME ?? '', '.prosonata', 'config.json')

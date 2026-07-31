@@ -6,6 +6,18 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## Unveröffentlicht
 
+### Behoben
+
+- **Die Installation über einen Symlink lud nichts mehr.** `npm run install-local`
+  verlinkte dieses Repository nach `~/.vscode/extensions`, damit ein Build als
+  Update genügt. VS Code lädt seine Benutzererweiterungen inzwischen aus
+  `extensions.json`, und diesen Eintrag schreibt nur `code --install-extension`
+  — ein von Hand hineingelegter Ordner wird stillschweigend übergangen. Der Weg
+  ist ersatzlos weg, `install.mjs` räumt zurückgebliebene Symlinks auf, und
+  `npm run install-vsix` ist der eine verbliebene Befehl: bauen, packen,
+  installieren. Zum Entwickeln braucht es ohnehin keine Installation, dafür gibt
+  es F5 und den Extension Development Host.
+
 ### Geändert
 
 - **Die Kategorienauswahl ist gruppiert.** Die Gruppe steht als Überschrift über
