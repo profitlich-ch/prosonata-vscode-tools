@@ -36,8 +36,10 @@ Der Timer misst. Der Commit beschreibt.
 Keine Automatik aus Editor-Aktivität, Branch-Wechseln oder Dateiänderungen. Das Werkzeug
 **warnt** bei erkennbarer Fehlbedienung (Abschnitt 3), aber es bucht nie von selbst.
 
-**Der Code wird für eine Veröffentlichung geschrieben.**
-Das Repo ist öffentlich, eine Marketplace-Extension ist das Ziel. Siehe Abschnitt 10.
+**Der Code wird geschrieben, als würde er veröffentlicht.**
+Das Repo ist öffentlich. Eine Marketplace-Extension ist **nicht** beschlossen, aber möglich –
+und die Anforderungen aus Abschnitt 10 kosten während der Entwicklung fast nichts, während
+sie nachträglich einzubauen ein Umbau wäre.
 
 ---
 
@@ -386,14 +388,23 @@ eigener Offerte).
 Ablage in `git config --local`, mehrwertig plus aktiver Zeiger:
 
 ```
-prosonata.project      = 189:Website Wartung
-prosonata.project      = 412:Feature Buchungsmodul
-prosonata.active       = 412
-prosonata.category.189 = 15
-prosonata.category.412 = 7
-prosonata.raster       = exakt
-prosonata.mode.a3f9c1  = commit
+[prosonata]
+    project = 189:Website Wartung
+    project = 412:Feature Buchungsmodul
+    active  = 412
+    grid    = exact
+[prosonata "189"]
+    category = 15
+[prosonata "412"]
+    category = 7
+[prosonata "a3f9c1"]
+    mode = commit
 ```
+
+**Die ID steht in der Untersektion, nicht im Schlüssel** – also `prosonata.412.category`
+und nicht `prosonata.category.412`. Git verlangt, dass der letzte Teil eines Schlüssels mit
+einem Buchstaben beginnt; eine Projekt-ID beginnt nie so, und eine Branch-Kennung nur
+zufällig. `git config prosonata.category.412 7` scheitert mit „invalid key".
 
 **Die Projektwahl gehört ins Panel, die Kategorienwahl in den Timer.**
 
@@ -884,10 +895,18 @@ läuft.
 
 ---
 
-## 10. Für die Veröffentlichung
+## 10. Veröffentlichbar bleiben
 
-Das Repo ist öffentlich, eine Marketplace-Extension ist das Ziel. Daraus folgen laufende
-Anforderungen, keine spätere Aufräumaktion:
+Das Repo ist öffentlich. Eine Marketplace-Extension ist **nicht beschlossen** – aber sie soll
+möglich bleiben, ohne dass vorher etwas entwirrt werden muss.
+
+Der Unterschied ist gering und lohnt sich: Diese Anforderungen laufend einzuhalten kostet
+während der Entwicklung fast nichts. Sie nachträglich einzuziehen wäre ein Umbau, und zwar
+genau an den Stellen, die man am wenigsten anfassen will – Konfiguration, Fehlerbehandlung,
+Sprache der Oberfläche.
+
+Zwei Dinge gelten deshalb **unabhängig** von einer Veröffentlichung, allein weil das Repo
+öffentlich ist: keine Kontodaten darin, und eine Lizenz. Der Rest ist Vorsorge:
 
 - **Keine Kontodaten im Repo.** Subdomain, API-Key, Projekt-IDs und Kategorie-IDs stammen
   ausschliesslich aus Konfiguration. Keine Fixtures mit Kundennamen.
@@ -907,7 +926,12 @@ Anforderungen, keine spätere Aufräumaktion:
   unabhängig von der Extension nutzbar.
 
 ProSonata bietet in der API-Dokumentation an, Anbindungen auf der Website zu listen und in den
-News zu erwähnen.
+News zu erwähnen. Das setzt eine Veröffentlichung voraus und ist deshalb offen.
+
+**Was fehlt, falls doch veröffentlicht wird:** ein Publisher bei Azure DevOps – der Name in
+`package.json` ist bis dahin ein Platzhalter und muss dem registrierten entsprechen. Und ein
+Hinweis, dass dies **kein offizielles ProSonata-Produkt** ist; das Repo trägt aus demselben
+Grund weder deren Namen noch deren Logo.
 
 ---
 

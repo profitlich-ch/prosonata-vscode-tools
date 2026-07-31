@@ -5,6 +5,7 @@ bruno/.env
 
 node_modules/
 dist/
+.sandbox/
 out/
 *.vsix
 

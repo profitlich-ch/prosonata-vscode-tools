@@ -1,0 +1,138 @@
+{
+  "name": "profitlich-vscode-tools",
+  "displayName": ":Profitlich",
+  "description": "Tools for my own work in VS Code. For now: time tracking tied to commits and branches, writing to ProSonata.",
+  "version": "0.1.0",
+  "publisher": "profitlich",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/profitlich-ch/prosonata-vscode-timer.git"
+  },
+  "license": "MIT",
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "time tracking",
+    "prosonata",
+    "git",
+    "invoicing"
+  ],
+  "engines": {
+    "node": ">=20",
+    "vscode": "^1.75.0"
+  },
+  "type": "commonjs",
+  "main": "./dist/extension.cjs",
+  "bin": {
+    "prosonata": "./dist/cli.cjs"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "profitlich",
+          "title": ":Profitlich",
+          "icon": "media/icon-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "profitlich": [
+        {
+          "id": "prosonata.panel",
+          "name": "ProSonata time tracking",
+          "icon": "media/icon-view.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "prosonata.setup",
+        "title": "Set up account",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.start",
+        "title": "Start timer",
+        "icon": "$(play)",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.pause",
+        "title": "Pause timer",
+        "icon": "$(debug-pause)",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.toggle",
+        "title": "Start or pause timer",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.send",
+        "title": "Send pending entries now",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.closeEntry",
+        "title": "Close entry with its final text",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.chooseProject",
+        "title": "Choose project for this repository",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.chooseGrid",
+        "title": "Choose rounding grid",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.toggleMode",
+        "title": "Switch between one entry per branch and per commit",
+        "category": "ProSonata"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "prosonata.start",
+          "when": "view == prosonata.panel",
+          "group": "navigation"
+        },
+        {
+          "command": "prosonata.pause",
+          "when": "view == prosonata.panel",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "icons": "node scripts/icons.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "npm run typecheck && npm run test && npm run build",
+    "sandbox": "node scripts/sandbox.mjs",
+    "package": "npm run build && npx --yes @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "@types/vscode": "^1.75.0",
+    "esbuild": "^0.28.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "icon": "media/icon.png"
+}

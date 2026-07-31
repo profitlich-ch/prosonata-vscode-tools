@@ -1,0 +1,24 @@
+# Was nicht ins .vsix gehört. Ausgeliefert wird nur das Gebündelte aus dist/,
+# die Icons und die drei Dokumente.
+
+src/**
+scripts/**
+bruno/**
+docs/**
+.sandbox/**
+node_modules/**
+
+.vscode/**
+.github/**
+.gitignore
+.vscodeignore
+
+tsconfig.json
+package-lock.json
+KONZEPT.md
+
+**/*.ts
+**/*.map
+media/*.ai
+**/.DS_Store
+.claude/**
