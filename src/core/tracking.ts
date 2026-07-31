@@ -65,7 +65,14 @@ export function start(state: State, clock: Clock, options: StartOptions): State 
   return next
 }
 
-/** Pauses a running timer and books the running segment to its entry. */
+/**
+ * Pauses a running timer and books the running segment to its entry.
+ *
+ * An entry ProSonata already knows is queued for a write: while measuring, its
+ * `workingTimeStart` says "running here", and pausing has to take that back.
+ * The write goes out with the usual delay — or right away when VS Code closes,
+ * which flushes.
+ */
 export function pause(state: State, clock: Clock, scope: Scope): State {
   const next = structuredClone(state)
   const timer = findTimerIn(next, scope)
@@ -74,6 +81,7 @@ export function pause(state: State, clock: Clock, scope: Scope): State {
 
   bookSegment(next, timer.entryId, startedAt, clock.now())
   timer.startedAt = null
+  if (findEntry(next, timer.entryId)?.timeId !== null) queueWrite(next, timer.entryId, clock.now(), false)
   return next
 }
 
@@ -143,6 +151,77 @@ export function commit(
   return { state: next, booked, closed: null, hadTimer }
 }
 
+/*
+ * Closed on another machine (KONZEPT.md §3).
+ *
+ * The entry belongs to whoever closed it: its final text is set, the marker is
+ * gone, and corrections made in ProSonata must survive. Writing into it again
+ * would undo all three. But the time measured here since the last write is
+ * real, and it has to go somewhere.
+ *
+ * The tool does not decide that. It parks the entry — nothing is written, the
+ * timer keeps running into it, so the answer covers everything that accrues in
+ * the meantime — and asks where somebody can answer: not in the `post-commit`
+ * hook, where this is usually noticed, but in the editor or on the terminal.
+ */
+
+/** What ProSonata does not know about this entry yet. */
+export function unwrittenSeconds(entry: TimeEntry): number {
+  return Math.max(0, entry.foreignSeconds + entry.seconds - (entry.remoteFinalSeconds ?? 0))
+}
+
+/** Stops every write to an entry that was closed elsewhere, and asks nothing. */
+export function parkClosedElsewhere(state: State, entryId: string, remoteSeconds: number): State {
+  const next = structuredClone(state)
+  const entry = findEntry(next, entryId)
+  if (!entry || entry.state === 'closed' || entry.awaitingDecision) return state
+
+  entry.awaitingDecision = true
+  entry.remoteFinalSeconds = remoteSeconds
+  next.pending = next.pending.filter((write) => write.entryId !== entryId)
+  return next
+}
+
+/** Every entry waiting for that answer, so a front end can ask. */
+export function awaitingDecision(state: State, scope?: Scope): TimeEntry[] {
+  return state.entries.filter(
+    (entry) =>
+      entry.awaitingDecision === true &&
+      (scope === undefined || (entry.scope.repoPath === scope.repoPath && entry.scope.branch === scope.branch)),
+  )
+}
+
+/**
+ * The answer "begin a new entry": what ProSonata never saw stays here and
+ * becomes an entry of its own with the next write. The old `timeID` is let go.
+ */
+export function resumeAsNew(state: State, entryId: string): State {
+  return detach(state, entryId, (entry) => unwrittenSeconds(entry))
+}
+
+/**
+ * The answer "add it to the closed entry", after that write has gone out. Since
+ * everything measured has now reached ProSonata, this entry starts at zero —
+ * and at the next write it becomes a new one, because the old is finished.
+ */
+export function resumeAfterAdding(state: State, entryId: string): State {
+  return detach(state, entryId, () => 0)
+}
+
+function detach(state: State, entryId: string, secondsOf: (entry: TimeEntry) => number): State {
+  const next = structuredClone(state)
+  const entry = findEntry(next, entryId)
+  if (!entry?.awaitingDecision) return state
+
+  entry.seconds = secondsOf(entry)
+  entry.foreignSeconds = 0
+  entry.timeId = null
+  entry.lastWritten = null
+  delete entry.awaitingDecision
+  delete entry.remoteFinalSeconds
+  return next
+}
+
 /**
  * Changes the text of an entry that is still open (KONZEPT.md §8). A typo in a
  * trailer would otherwise only be correctable by another commit.
@@ -192,6 +271,39 @@ export function currentSeconds(state: State, clock: Clock, scope: Scope): number
   const timer = findTimer(state, scope)
   const running = isRunning(timer) ? elapsed(timer.startedAt, clock.now()) : 0
   return (openEntry(state, scope)?.seconds ?? 0) + running
+}
+
+/**
+ * Seconds the current segment has been running, zero while paused.
+ *
+ * The measure for "has this been forgotten": the entry's total says nothing
+ * about it — a branch can hold twenty hours and still have started a minute
+ * ago.
+ */
+export function runningSeconds(state: State, clock: Clock, scope: Scope): number {
+  const timer = findTimer(state, scope)
+  return isRunning(timer) ? elapsed(timer.startedAt, clock.now()) : 0
+}
+
+/**
+ * Keeps part of the running segment and stops the timer (KONZEPT.md §3).
+ *
+ * A timer that ran overnight measured wall time, not work. The tool cannot know
+ * how much of it counts — only the person who was there can — so this takes the
+ * answer instead of guessing: `seconds` are booked, the rest is dropped, and
+ * the timer stands still afterwards.
+ */
+export function keepFromRunning(state: State, clock: Clock, scope: Scope, seconds: number): State {
+  const next = structuredClone(state)
+  const timer = findTimerIn(next, scope)
+  if (!timer || timer.startedAt === null) return state
+
+  const now = clock.now()
+  const kept = Math.max(0, Math.min(seconds, elapsed(timer.startedAt, now)))
+  if (kept > 0) bookSegment(next, timer.entryId, now - kept * 1000, now)
+  timer.startedAt = null
+  if (findEntry(next, timer.entryId)?.timeId !== null) queueWrite(next, timer.entryId, now, false)
+  return next
 }
 
 /** Narrows to a timer whose segment is running, so `startedAt` is a number. */

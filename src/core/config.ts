@@ -33,8 +33,10 @@ export interface Config {
   grid: TimeGrid
   /** Seconds a write waits before it goes out (KONZEPT.md §4). */
   sendDelaySeconds: number
-  /** A timer running this long without a commit earns a warning. */
+  /** A segment running this long without interruption earns a question. */
   longRunWarningSeconds: number
+  /** Stop the timer when the last VS Code window closes. Off means it keeps running. */
+  pauseOnWindowClose: boolean
 }
 
 export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
@@ -44,6 +46,7 @@ export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
   grid: { kind: 'exact' },
   sendDelaySeconds: 600,
   longRunWarningSeconds: 6 * 3600,
+  pauseOnWindowClose: true,
 }
 
 export function stateDir(): string {
@@ -55,6 +58,7 @@ export const paths = {
   config: () => join(stateDir(), 'config.json'),
   state: () => join(stateDir(), 'state.json'),
   journal: () => join(stateDir(), 'log.jsonl'),
+  segments: () => join(stateDir(), 'segments.jsonl'),
   cache: () => join(stateDir(), 'cache.json'),
 }
 

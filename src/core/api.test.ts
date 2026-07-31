@@ -82,3 +82,31 @@ describe('the order of the categories', () => {
     expect(given.map((entry) => entry.category)).toEqual([1, 2])
   })
 })
+
+/*
+ * Measured against the account: a search that finds nothing answers 204 with an
+ * empty body. `JSON.parse('')` would make the everyday case "this branch has no
+ * entry yet" look like a broken API.
+ */
+describe('an empty answer', () => {
+  // 204 must not carry a body at all — the Response constructor insists on it.
+  const noContent = async () => new Response(null, { status: 204 })
+
+  it('is an empty result, not a fault', async () => {
+    const api = new HttpApi({ baseUrl: 'https://x/api/v1', apiKey: 'k', fetch: noContent })
+
+    await expect(api.findByKey(166, 'a3f9c1', 'LAUFEND')).resolves.toEqual([])
+    await expect(api.listProjects()).resolves.toEqual([])
+    await expect(api.listCategories()).resolves.toEqual([])
+  })
+
+  it('stays a fault when the status says so', async () => {
+    const api = new HttpApi({
+      baseUrl: 'https://x/api/v1',
+      apiKey: 'k',
+      fetch: async () => new Response('', { status: 500 }),
+    })
+
+    await expect(api.listProjects()).rejects.toThrow(/500/)
+  })
+})

@@ -4,6 +4,106 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] — 2026-08-01
+
+Zwei Fehler, die im Betrieb Zeit gekostet hätten, waren nur zu finden, indem die
+API gemessen statt gelesen wurde. Dazu bekommt der vergessene Timer — das
+eigentliche Problem, für das es dieses Werkzeug gibt — endlich mehr als eine
+Warnung: eine Frage, eine Pause beim Zuklappen, und ein Protokoll, das zeigt,
+wo die Stunden hingegangen sind.
+
+### Hinzugefügt
+
+- **Ein Protokoll aller gemessenen Segmente**, `~/.prosonata/segments.jsonl`,
+  mit Beginn, Ende, Dauer, Branch und dem, was das Segment beendet hat. Es ist
+  ein Archiv, kein Puffer: Es wird nicht gekürzt. Damit lässt sich zum ersten
+  Mal beantworten, wie viel an welchem **Tag** gearbeitet wurde — ein
+  Zeiteintrag trägt nur eine Summe und das Datum seines letzten Schreibvorgangs.
+  Eine gekürzte Messung steht mit beidem drin: was behalten wurde und wie lange
+  wirklich gelaufen war.
+- **Der Knopf „Log" im Panel** zeigt es als Dokument, mit einer Auswahl der
+  Branches davor — und die Liste stammt aus dem Protokoll, nicht aus Git:
+  **gelöschte Branches behalten ihre Stunden**. Im Terminal dasselbe mit
+  `prosonata log [Branch|alle|?]`.
+- **Ein laufender Timer ist für andere Rechner sichtbar.** ProSonata hat kein
+  Statusfeld, nimmt aber `workingTimeStart` an und zeigt es nur an — die blosse
+  Anwesenheit des Werts genügt als Zustand. Er reist mit einem ohnehin fälligen
+  Schreibvorgang mit und verschwindet beim Pausieren wieder. Ein zweiter Rechner
+  meldet dann beim Start: „Auf einem anderen Rechner läuft seit 09:12 ein Timer
+  auf diesem Branch." Nur eine Warnung — anhalten lässt sich ein Timer auf einem
+  schlafenden Rechner nicht, und was diese Stunden waren, weiss nur, wer dabei
+  war.
+- **Der vergessene Timer wird gefragt, nicht geraten.** Läuft ein Segment länger
+  als die Schwelle, fragt die Erweiterung „Wie viel davon zählt?" — alles
+  behalten, eine eigene Dauer, verwerfen — statt „noch dran?" zu warnen. Nach
+  „alles behalten" schweigt sie eine Stunde. Im Terminal bucht
+  `prosonata pause [h:mm|Minuten]` dasselbe.
+- **Die Statusleiste zeigt das laufende Segment** statt der Eintragssumme:
+  `14:22:07` fällt auf, `37:15:44` auf einem lang laufenden Branch nicht. Branch,
+  Gesamtsumme und Rückstand stehen im Tooltip.
+- **Beim Schliessen des Fensters wird pausiert**, abschaltbar über
+  `pauseOnWindowClose` in `~/.prosonata/config.json`. Anhalten ist die
+  vorsichtige Richtung; ein Timer, der das Schliessen überlebt, verbucht eine
+  Nacht. Starten bleibt eine Entscheidung von Hand.
+
+### Geändert
+
+- **Der Log sitzt in der Titelleiste der Ansicht**, wo VS Code unterbringt, was
+  auf die Ansicht wirkt statt auf eine Zeile. Start und Pause sind von dort
+  verschwunden: Sie wirken auf den Timer, und dafür gibt es die Timer-Zeile
+  darunter, die Statusleiste und die Befehlspalette.
+
+### Behoben
+
+- **Der Tooltip der Statusleiste war noch englisch** — ein Rest der
+  Sprachumstellung von 0.3.0.
+- **Die Warnung vor einem langen Timer mass das Falsche.** Verglichen wurde die
+  Summe des ganzen Eintrags mit der Schwelle — bei einem Branch-Eintrag mit
+  zwanzig Stunden also ab der ersten Sekunde nach jedem Start, alle dreissig
+  Sekunden. Gemessen wird jetzt das laufende Segment.
+- **Ein anderswo abgeschlossener Eintrag wurde wieder aufgerissen.** Schloss
+  Rechner A den Branch-Eintrag ab, schrieb Rechner B beim nächsten fälligen
+  Schreibvorgang munter weiter hinein: Der Marker landete wieder im Text, der
+  endgültige Rechnungstext war überschrieben, der Abschluss faktisch rückgängig.
+  Der Abgleich wiederum bemerkte den Abschluss zwar, liess die hier gemessene
+  Zeit aber in einem abgeschlossenen Eintrag liegen, wo sie nie gesendet wurde.
+  Jetzt wird der Eintrag **geparkt** — nichts wird geschrieben, der Timer läuft
+  weiter hinein — und gefragt, wo jemand antworten kann: im Editor mit zwei
+  Knöpfen, im Terminal mit `prosonata resume [add|neu]`. „Hinzufügen" schickt
+  ein `PUT`, das nur die Summe trägt, damit der endgültige Text unberührt
+  bleibt; „neu" fasst die alte `timeID` gar nicht an.
+- **Ein Subtree-Import konnte alle Branch-Kennungen ändern.** Der Root-Commit
+  wurde als erste Zeile von `git rev-list --max-parents=0 HEAD` genommen — bei
+  mehreren Wurzeln also die jüngste. Holt man eine fremde Historie herein, etwa
+  einen Subtree, gewinnt deren Wurzel, und jeder Branch des Repositories bekommt
+  am selben Tag eine neue Kennung: Offene Zeiteinträge in ProSonata wären nicht
+  mehr auffindbar, jeder Rechner legte einen zweiten an. Gesucht wird jetzt
+  entlang der First-Parent-Linie, wo nur die eigene Wurzel liegt. In einem der
+  hier geprüften Repositories war der Fall bereits eingetreten.
+- **Der Abgleich mit ProSonata lief nie.** `Session.sync()` war gebaut und
+  getestet, aber von keinem der beiden Frontends aufgerufen — die Übernahme
+  eines Eintrags vom anderen Rechner und das Erkennen eines anderswo
+  abgeschlossenen Eintrags fanden schlicht nicht statt. Jetzt fragt das Werkzeug
+  beim **Öffnen eines Fensters** und beim **Start des Timers** nach, letzteres
+  nur, wenn es lokal keinen offenen Eintrag für diesen Branch gibt. Scheitert
+  die Abfrage, startet der Timer trotzdem und der Grund landet im Journal:
+  Messen geht ohne Netz, nur Senden nicht.
+- **Eine leere Antwort galt als Fehler.** Findet eine Suche nichts, antwortet
+  ProSonata mit `204 No Content` und leerem Körper — am Konto gemessen, nicht
+  dokumentiert. `JSON.parse('')` machte daraus „ProSonata hat mit etwas anderem
+  als JSON geantwortet": Der Alltagsfall „dieser Branch hat noch keinen Eintrag"
+  sah aus wie eine kaputte Schnittstelle. Ein leerer Körper ist jetzt ein leeres
+  Ergebnis; bleibt der Status ein Fehlerstatus, bleibt es ein Fehler.
+- **Zwei Personen am selben Branch buchten in denselben Zeiteintrag.** Die
+  Branch-Kennung ist ein Hash aus Root-Commit und Branchname und damit in jedem
+  Klon gleich — auch im Klon einer anderen Person. Die Suche nach dem offenen
+  Eintrag filterte aber nur nach Projekt und Marker, nicht nach Benutzer: Wer
+  als Zweiter dazukam, übernahm den fremden Eintrag und schrieb hinein, sodass
+  seine Stunden in der Zeiterfassung des anderen landeten — oder gar nicht, wenn
+  die Rechtestufe das Schreiben auf fremde Einträge verweigert. Die Abfrage
+  filtert jetzt auf `userID=myself`; jede Person führt ihren eigenen Eintrag pro
+  Branch, so wie ProSonata Zeiten ohnehin Benutzern zuordnet.
+
 ## [0.3.1] — 2026-07-31
 
 ### Behoben

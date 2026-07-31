@@ -114,8 +114,20 @@ weil auf ihm mehrere unabhängige Kleinigkeiten liegen, die der Kunde einzeln se
   welchen Tag der Client für heute hält – und das ist der, an dem der Benutzer sitzt.
   Der Randfall bleibt bewusst: Wer über Mitternacht hinaus arbeitet und danach schreibt,
   bekommt den neuen Tag. Das passt zur Datumssemantik.
-- `workingTimeStart` und `workingTimeEnd` bleiben **immer leer**. Bei unterbrochener Arbeit
-  wären sie unehrlich; die Dauer genügt.
+- `workingTimeEnd` bleibt **immer leer**. Bei unterbrochener Arbeit wäre es unehrlich; die
+  Dauer genügt.
+- `workingTimeStart` trägt, **solange gemessen wird**, den Beginn des laufenden Segments –
+  sonst `null`. Nicht als Zeitangabe für die Rechnung, sondern als Zustand: Die blosse
+  **Anwesenheit** des Werts heisst „hier läuft ein Timer". Ein Statusfeld hat die API nicht,
+  dieses Feld nimmt sie an und zeigt es nur an. Ein zweiter Rechner erkennt daran, dass gerade
+  jemand an diesem Branch arbeitet, und **warnt** – anhalten kann er nichts, ein schlafender
+  Rechner liest nichts, und was diese Stunden waren, weiss nur, wer dabei war.
+- Der Vermerk reist mit einem **ohnehin fälligen** Schreibvorgang, nie mit einem eigenen
+  Aufruf. Er ist damit bis zu zehn Minuten alt; für eine Warnung genügt das. Das Pausieren
+  merkt dafür einen Schreibvorgang vor, damit der Vermerk auch wieder verschwindet – beim
+  Schliessen von VS Code sofort, weil dort ohnehin gesendet wird.
+- **Am Konto gemessen:** Die Kurzform `09:12` wird angenommen und als `09:12:00` gespeichert,
+  `null` löscht wirklich – ein leerer String dagegen schreibt `01:00:00` hinein.
 
 ### Der Text
 
@@ -170,6 +182,32 @@ nächsten Zeiteintrag.
 **Geschnitten wird am Commit-Zeitpunkt.** Beispiel: 9:00 Start, 10:00 Pause, 10:30 Start,
 11:15 Commit → 1,75 h fliessen in den Zeiteintrag, danach läuft das nächste Segment ab 11:15.
 
+### Das Segmentprotokoll
+
+`segments.jsonl` hält **jedes gemessene Segment** fest: Beginn, Ende, Dauer, Repository,
+Branch, Projekt und was das Segment beendet hat – Pause, Commit oder eine Kürzung von Hand.
+Anders als `log.jsonl`, das ein Puffer ist und gekürzt wird, ist es ein **Archiv**.
+
+Es beantwortet zwei Fragen, die sonst niemand beantworten kann:
+
+- **Wie viel wurde an welchem Tag gearbeitet?** Ein Zeiteintrag trägt eine Summe und ein
+  Datum – das seines letzten Schreibvorgangs. Ein Branch über drei Wochen sagt über den
+  Dienstag in der Mitte nichts.
+- **Was war auf einem Branch, den es nicht mehr gibt?** Die Branch-Liste der Ansicht stammt
+  aus dem Protokoll, nicht aus Git. Gelöschte Branches behalten damit ihre Stunden.
+
+Besonders festgehalten wird die **Kürzung**: mit der behaltenen Spanne *und* der tatsächlich
+gelaufenen Dauer. Es ist die einzige Stelle, an der gemessene Zeit absichtlich verschwindet –
+sie darf nicht zusätzlich unbemerkt verschwinden.
+
+Gezeigt wird das Protokoll als **schreibgeschütztes Dokument** im Editor, mit einer QuickPick
+für den Branch davor; im Terminal gibt `prosonata log` dasselbe aus. Kein Webview
+(Abschnitt 8), und die Darstellung liegt in `core`, damit beide Frontends dieselben Summen und
+dieselben Worte zeigen.
+
+Was es nicht weiss: den anderen Rechner. Segmente werden dort aufgezeichnet, wo sie anfallen –
+ProSonata hält die Summe beider, dieses Protokoll die Einzelheiten eines einzigen.
+
 ### Offene Zeiteinträge: `[LAUFEND:kennung]`
 
 Ein Branch-Eintrag ist wochenlang offen. Solange steht am Anfang seines Textes ein Marker:
@@ -189,6 +227,12 @@ Er leistet zweierlei:
 
 Die Kennung ist ein kurzer Hash aus **Root-Commit-SHA des Repos** und **Branchname**. Beides
 ist auf jedem Klon identisch, die Kennung lässt sich also überall ohne Absprache berechnen.
+Gesucht wird der Root-Commit **entlang der First-Parent-Linie**: Eine mit
+`--allow-unrelated-histories` hereingeholte Historie – ein Subtree, eine zusammengelegte
+Fremdhistorie – bringt eine eigene Wurzel mit, und die ist oft die jüngere. Ohne diese
+Einschränkung stünde sie in `rev-list` zuoberst und alle Branches des Repositories bekämen am
+Tag des Imports stillschweigend neue Kennungen; offene Zeiteinträge wären nicht mehr
+auffindbar.
 Der Branchname selbst erscheint dadurch nicht in ProSonata (Abschnitt 5). Das Wort `LAUFEND`
 ist konfigurierbar.
 
@@ -212,23 +256,50 @@ eigener Zeiteintrag – ein Branch, zwei Rechnungszeilen, beide offen. Zwei Schr
 das:
 
 1. **Finden.** Trifft ein Rechner auf einen Branch, zu dem er lokal keinen Eintrag hat, sucht
-   er ihn per `GET /projecttimes?projectID=…&isInvoiced=0&detail=LAUFEND:kennung` – ein
-   gezielter Aufruf, kein Durchsuchen einer Liste. Findet er ihn, übernimmt er die `timeID`
-   ohne Rückfrage. Findet er ihn nicht, legt er einen neuen Zeiteintrag an.
+   er ihn per `GET /projecttimes?projectID=…&isInvoiced=0&userID=myself&detail=LAUFEND:kennung`
+   – ein gezielter Aufruf, kein Durchsuchen einer Liste. Findet er ihn, übernimmt er die
+   `timeID` ohne Rückfrage. Findet er ihn nicht, legt er einen neuen Zeiteintrag an.
    Dass der `detail`-Filter als Teilstring sucht, ist am Konto belegt (Abschnitt 9).
+   **`userID=myself` wiegt so schwer wie der Marker.** Die Kennung ist ein Hash aus
+   Root-Commit und Branchname, also in jedem Klon gleich – auch im Klon einer Kollegin.
+   Ohne den Filter fänden zwei Personen am selben Branch den Eintrag der jeweils anderen und
+   schrieben hinein: Die Stunden der einen erschienen in der Zeiterfassung der anderen, denn
+   ein Zeiteintrag gehört dem, der ihn angelegt hat. Mit dem Filter führt **jede Person ihren
+   eigenen Eintrag pro Branch** – was dem Datenmodell von ProSonata entspricht und einer
+   Rechnung, die „Buchungsmodul: A 8 h, B 4 h" ausweist.
 2. **Summieren.** Die absolute Summe ist rechnergebunden und darf nicht mehr unbesehen
    geschrieben werden – der Bürorechner würde sonst am nächsten Tag die zu Hause gearbeiteten
    Stunden überschreiben. Jeder Rechner merkt sich deshalb den **fremden Anteil** und schreibt
    `fremd + eigen`. Gelesen wird im GET, der wegen `isInvoiced` ohnehin vor jedem PUT fällig
    ist. Der geschriebene Wert hängt nicht vom gelesenen ab und bleibt damit idempotent.
 
-Vorausgesetzt ist, dass immer nur **ein Rechner zur Zeit** am selben Branch arbeitet – Büro
-tagsüber, zu Hause abends. Gleichzeitiges Buchen auf denselben Branch ist nicht abgedeckt
-(Abschnitt 12).
+Vorausgesetzt ist, dass immer nur **ein Rechner derselben Person zur Zeit** am selben Branch
+arbeitet – Büro tagsüber, zu Hause abends. Zwei Personen stören einander nicht, sie haben je
+einen eigenen Eintrag; zwei Rechner **einer** Person, die gleichzeitig buchen, sind nicht
+abgedeckt (Abschnitt 12).
 
 Der Abschluss trägt über Rechnergrenzen mit: Schliesst du im Büro ab, verschwindet der Marker.
-Der Heimrechner sieht das beim nächsten GET, merkt den Eintrag als abgeschlossen vor und
-beginnt für weitere Zeit einen neuen.
+Der Heimrechner sieht das beim nächsten GET – entweder im Abgleich oder vor dem nächsten
+Schreibvorgang, denn dort wird ohnehin gelesen.
+
+**Was dann mit der Zeit geschieht, die hier noch nicht geschrieben ist, entscheidet der
+Benutzer.** Der abgeschlossene Zeiteintrag gehört dem, der ihn abgeschlossen hat: Der
+endgültige Text steht, der Marker ist weg, Korrekturen in ProSonata sollen bleiben. Ein
+weiterer Schreibzugriff würde alle drei zunichtemachen. Die hier gemessene Zeit ist aber echt
+und muss irgendwohin. Deshalb wird der Eintrag **geparkt** – nichts wird geschrieben, der
+Timer läuft weiter hinein, die Antwort deckt am Ende alles Angefallene ab – und gefragt wird
+dort, wo jemand antworten kann: im Editor oder mit `prosonata resume`. Nicht im
+`post-commit`-Hook, wo der Fall meist auffällt und niemand zuhört.
+
+Zwei Antworten:
+
+- **Hinzufügen** – ein letztes `PUT` auf die alte `timeID`, das **nur** `workingTime` trägt.
+  Ohne `detail` bleibt der endgültige Text unberührt und der Marker kommt nicht zurück.
+- **Neuer Eintrag** – auf die alte `timeID` wird nichts geschrieben; die Restzeit wird beim
+  nächsten Schreibvorgang ein eigener Zeiteintrag.
+
+Danach ist der lokale Eintrag in beiden Fällen von der alten `timeID` gelöst: Was ab jetzt
+anfällt, gehört zu einem neuen Zeiteintrag, denn der alte ist fertig.
 
 ### Abschluss eines Branch-Eintrags
 
@@ -275,6 +346,17 @@ dazugekommen ist, und beginnt selbst wieder mit fremdem Anteil null.
 
 Rein informierend. Gebucht wird nie automatisch.
 
+- **Segment läuft ungewöhnlich lange** – Pause vergessen? Gemessen wird das **laufende
+  Segment**, nicht die Summe des Eintrags: Ein Branch-Eintrag kann zwanzig Stunden halten und
+  vor einer Minute gestartet sein. Gefragt wird nicht „noch dran?", sondern **wie viel davon
+  zählt** – ein über Nacht laufender Timer hat Wanduhrzeit gemessen, und was davon Arbeit war,
+  weiss nur, wer dabei war. Antworten: alles behalten, eine eigene Dauer, verwerfen. Nach
+  „alles behalten" schweigt die Frage eine Stunde, sonst wäre sie nach zwei Tagen unsichtbar.
+  Im Terminal dasselbe über `prosonata pause [h:mm]`.
+- **Beim Schliessen des letzten VS-Code-Fensters wird pausiert** (abschaltbar über
+  `pauseOnWindowClose`). Anhalten ist die vorsichtige Richtung; ein Timer, der das Schliessen
+  des Editors überlebt, ist der klassische Weg, eine Nacht zu verbuchen. Starten bleibt
+  dagegen eine Entscheidung, die niemand für dich trifft.
 - **Timer läuft ungewöhnlich lange ohne Commit** – Pause vergessen? Verhindert, dass das
   Mittagessen auf der Kundenrechnung landet.
 - **Commit ohne laufenden Timer** – Start vergessen? Mit Angebot, die Zeit seit dem letzten
@@ -445,6 +527,7 @@ Repos verstreuen und wäre beim Neu-Klonen weg.
   log.jsonl        abgeschlossene Segmente,
                    SHA-Annotationen           (append-only, gekürzt statt archiviert)
   cache.json       Projekte, Kategorien
+  segments.jsonl   jedes gemessene Segment, dauerhaft
 ```
 
 ### Nebenläufigkeit: atomar genügt nicht
@@ -996,10 +1079,12 @@ Nicht erneut vorschlagen:
    trägt – etwa weil Branches nach dem Merge nicht gelöscht werden.
 4. **Schwellwerte der Warnungen** (Abschnitt 3) und des Signals „Zeiteintrag ruht" – aus der
    Praxis festzulegen, nicht vorab zu erfinden.
-5. **Gleichzeitiges Buchen von zwei Rechnern auf denselben Branch** ist nicht abgedeckt. Die
-   Regel „fremd + eigen" setzt voraus, dass immer nur einer schreibt. Laufen zwei Timer
-   parallel, überholen sich die Schreibzugriffe und der Wert ist zeitweise zu niedrig. Bekannte
-   Grenze, kein Fehler – erst lösen, wenn der Fall eintritt.
+5. **Gleichzeitiges Buchen von zwei Rechnern derselben Person auf denselben Branch** ist nicht
+   abgedeckt. Die Regel „fremd + eigen" setzt voraus, dass immer nur einer schreibt. Laufen
+   zwei Timer parallel, überholen sich die Schreibzugriffe und der Wert ist zeitweise zu
+   niedrig. Bekannte Grenze, kein Fehler – erst lösen, wenn der Fall eintritt. Zwei
+   **Personen** am selben Branch sind dagegen abgedeckt: Die Suche filtert auf
+   `userID=myself`, jede führt ihren eigenen Zeiteintrag (Abschnitt 3).
 
 ---
 

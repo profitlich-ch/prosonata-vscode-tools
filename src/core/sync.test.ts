@@ -95,6 +95,27 @@ describe('a machine that has never seen this branch', () => {
 
     expect((await sync(emptyState(), api, config, options)).adopted).toBe(false)
   })
+
+  /*
+   * Two people on one branch. The key is a hash of the root commit and the
+   * branch name, so their clones compute the very same one — only the user
+   * tells the entries apart, and `userID=myself` does that in the query.
+   */
+  it('leaves the entry of a colleague alone and starts its own', async () => {
+    const api = new FakeApi()
+    const theirs = await send(pendingFor(entryOf({ seconds: 3 * 3600, text: 'Buchungsmodul' })), deps(api), true)
+    api.belongsToSomebodyElse(theirs.state.entries[0]!.timeId!)
+
+    const outcome = await sync(emptyState(), api, config, options)
+    expect(outcome.adopted).toBe(false)
+
+    // And the own time becomes an entry of its own, next to theirs.
+    const mine = entryOf({ id: 'local-2', seconds: 3600 })
+    const sent = await send(pendingFor(mine), deps(api), true)
+
+    expect(sent.state.entries[0]?.timeId).not.toBe(theirs.state.entries[0]?.timeId)
+    expect(api.entries.size).toBe(2)
+  })
 })
 
 describe('recovery after a lost state', () => {
@@ -125,6 +146,12 @@ describe('an entry closed on another machine', () => {
     const outcome = await sync({ ...open.state, entries: [mine] }, api, config, options)
 
     expect(outcome.closedElsewhere).toBe(true)
-    expect(outcome.state.entries[0]?.state).toBe('closed')
+
+    // Parked, not closed: the time measured here still has to go somewhere, and
+    // where is the user's decision (KONZEPT.md §3).
+    const parked = outcome.state.entries[0]!
+    expect(parked.awaitingDecision).toBe(true)
+    expect(parked.remoteFinalSeconds).toBe(3600)
+    expect(outcome.state.pending).toHaveLength(0)
   })
 })

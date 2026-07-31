@@ -7,8 +7,20 @@ import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core
 import { describeRepo, fetchPrune, isMerged, remoteBranchGone, type GitRepo } from '../core/git.js'
 import { hookNeedsRepair, installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
+import { describeBranch, renderReport } from '../core/report.js'
+import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
-import { applyCategory, applyProject, close, currentSeconds, openEntry, setText } from '../core/tracking.js'
+import {
+  applyCategory,
+  applyProject,
+  awaitingDecision,
+  close,
+  currentSeconds,
+  openEntry,
+  runningSeconds,
+  setText,
+  unwrittenSeconds,
+} from '../core/tracking.js'
 import type { State } from '../core/types.js'
 import type { TimeGrid } from '../core/working-time.js'
 import { clock, Panel } from './panel.js'
@@ -25,6 +37,9 @@ import { clock, Panel } from './panel.js'
  * `startedAt`, as KONZEPT.md §8 prescribes. The work — watching HEAD, sending,
  * warning — stays on the slower beat, where it belongs.
  */
+/** After "keep it all", the question stays away this long. */
+const SNOOZE_MS = 60 * 60 * 1000
+
 const DRAW_MS = 1_000
 const WORK_MS = 30_000
 const PRUNE_MS = 60 * 60 * 1000
@@ -37,6 +52,8 @@ let lastHead: string | null = null
 let cached: State | null = null
 /** Kept for paths into the installed extension, e.g. the bundled CLI. */
 let extensionUri: vscode.Uri | null = null
+/** Per branch key: until when the long-run question has been answered with "later". */
+const snoozedUntil = new Map<string, number>()
 
 export function activate(context: vscode.ExtensionContext): void {
   extensionUri = context.extensionUri
@@ -48,7 +65,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(vscode.window.registerTreeDataProvider('prosonata.panel', panel))
 
   register(context, 'prosonata.setup', () => setUpAccount())
-  register(context, 'prosonata.start', withContext((s, c) => void s.start(c)))
+  register(context, 'prosonata.start', withContext(async (s, c) => void (await s.start(c))))
   register(context, 'prosonata.pause', withContext((s, c) => void s.pause(c)))
   register(context, 'prosonata.toggle', withContext(toggle))
   register(context, 'prosonata.send', withContext(sendNow))
@@ -58,6 +75,8 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.toggleMode', withContext(toggleMode))
   register(context, 'prosonata.closeEntry', withContext(closeEntry))
   register(context, 'prosonata.changeText', withContext(changeText))
+  register(context, 'prosonata.resolveClosedElsewhere', withContext(askAboutClosedElsewhere))
+  register(context, 'prosonata.log', withRepo(showLog))
 
   /*
    * The hook records absolute paths, which break when Node's version changes,
@@ -92,11 +111,67 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(() => reload()))
   reload()
+
+  /*
+   * Once per window: does ProSonata already hold an open entry for this branch —
+   * from the other machine, or from a state file that was lost? Without it the
+   * panel would show a fresh timer next to an entry that has been growing for
+   * days (KONZEPT.md §3). One call per window, not per beat.
+   */
+  void syncOnOpen()
+}
+
+async function syncOnOpen(): Promise<void> {
+  const active = currentSession()
+  const context = currentContext()
+  if (!active || !context) return
+
+  await active.syncQuietly(context)
+  reload()
+  warnAboutRunningElsewhere(active)
+  await askAboutClosedElsewhere(active, context)
+  await askAboutLongRun(active, context)
+}
+
+/**
+ * Somebody closed the entry on another machine while time was running here.
+ * Where that time goes is not ours to decide (KONZEPT.md §3) — and the place it
+ * is noticed, the sender, may well be the `post-commit` hook, where nobody can
+ * answer. So the entry waits, and the question is asked here.
+ */
+async function askAboutClosedElsewhere(session: Session, context: RepoContext): Promise<void> {
+  for (const entry of awaitingDecision(session.state(), context.scope)) {
+    const rest = clock(unwrittenSeconds(entry))
+    const answer = await vscode.window.showInformationMessage(
+      `ProSonata: „${entry.text || context.scope.branch}" wurde auf einem anderen Rechner abgeschlossen. Hier sind noch ${rest} angefallen.`,
+      { modal: false },
+      'Zum bestehenden Eintrag',
+      'Neuer Eintrag',
+    )
+    if (answer === undefined) continue
+
+    try {
+      await session.resolveClosedElsewhere(entry.id, answer === 'Zum bestehenden Eintrag' ? 'add' : 'fresh')
+    } catch (error) {
+      void vscode.window.showWarningMessage(`ProSonata: ${(error as Error).message}`)
+    }
+    reload()
+  }
 }
 
 export function deactivate(): void {
+  /*
+   * Stopping is the careful direction. A timer that survives the closing of the
+   * editor is the classic way to book a night — while starting stays a decision
+   * nobody takes for you (KONZEPT.md §5). `pause` writes the state file itself,
+   * so the segment is booked before this process is gone.
+   */
+  const active = currentSession()
+  const context = currentContext()
+  if (active?.config.pauseOnWindowClose && context) active.pause(context)
+
   // Closing VS Code is one of the send triggers (KONZEPT.md §4).
-  void session?.flush(true)
+  void active?.flush(true)
 }
 
 /**
@@ -143,7 +218,7 @@ function withContext(action: (session: Session, context: RepoContext) => Promise
     }
     const context = currentContext()
     if (!context) {
-      void vscode.window.showWarningMessage('ProSonata: dieses Repository hat noch kein Projekt — führe "prosonata init" aus.')
+      void vscode.window.showWarningMessage('ProSonata: diesem Repository ist noch kein Projekt zugeordnet — führe "prosonata init" aus.')
       return
     }
     try {
@@ -223,15 +298,15 @@ function withRepo(action: (session: Session, repo: GitRepo) => Promise<void> | v
   }
 }
 
-function toggle(session: Session, context: RepoContext): void {
+async function toggle(session: Session, context: RepoContext): Promise<void> {
   const running = session.state().timers.find(
     (timer) => timer.scope.repoPath === context.scope.repoPath && timer.scope.branch === context.scope.branch && timer.startedAt !== null,
   )
   if (running) session.pause(context)
-  else session.start(context)
+  else await session.start(context)
 }
 
-async function sendNow(session: Session): Promise<void> {
+async function sendNow(session: Session, context: RepoContext): Promise<void> {
   const result = await session.flush(true)
   for (const problem of result.tooLong) {
     void vscode.window.showWarningMessage(
@@ -239,6 +314,7 @@ async function sendNow(session: Session): Promise<void> {
         'ProSonata würde ihn wortlos abschneiden, deshalb wurde nichts gesendet. Kürze ihn.',
     )
   }
+  await askAboutClosedElsewhere(session, context)
   if (result.missingCategory.length > 0) {
     void vscode.window
       .showWarningMessage(
@@ -356,6 +432,42 @@ function groupedItems(categories: Category[], current: number | undefined): (vsc
   return items
 }
 
+/**
+ * The segment log (KONZEPT.md §7). The branches come from the log, not from git,
+ * so a branch that was deleted long ago still has its hours here.
+ *
+ * Shown as a read-only document, not a webview: native, no UI code of our own,
+ * and it can be searched, copied and printed like any other text.
+ */
+async function showLog(session: Session, repo: GitRepo): Promise<void> {
+  const segments = session.segments.read().filter((segment) => segment.repoPath === repo.root)
+  if (segments.length === 0) {
+    void vscode.window.showInformationMessage('ProSonata: für dieses Repository ist noch kein Segment aufgezeichnet.')
+    return
+  }
+
+  const branches = branchesIn(segments, repo.root)
+  const picked = await vscode.window.showQuickPick(
+    [
+      { label: 'Alle Branches', description: describeBranch({ branch: '', repoPath: repo.root, seconds: segments.reduce((sum, s) => sum + s.seconds, 0), last: branches[0]!.last }), branch: null as string | null },
+      ...branches.map((summary) => ({
+        label: summary.branch,
+        description: describeBranch(summary),
+        branch: summary.branch as string | null,
+      })),
+    ],
+    { title: 'ProSonata: Log — Branch wählen' },
+  )
+  if (!picked) return
+
+  const grid = readRepoConfig(repo.root).grid ?? session.config.grid
+  const document = await vscode.workspace.openTextDocument({
+    content: renderReport(segments, { branch: picked.branch, grid }),
+    language: 'markdown',
+  })
+  await vscode.window.showTextDocument(document, { preview: true })
+}
+
 function installHookHere(repoRoot: string): void {
   const cli = vscode.Uri.joinPath(extensionUri!, 'dist', 'cli.cjs').fsPath
   try {
@@ -454,7 +566,7 @@ async function work(): Promise<void> {
     // pending and the panel shows the backlog.
   }
 
-  warnAboutLongRun(active, context)
+  await askAboutLongRun(active, context)
   reload()
 }
 
@@ -496,25 +608,74 @@ function watchHead(active: Session, context: RepoContext): void {
     })
 }
 
-function warnAboutLongRun(active: Session, context: RepoContext): void {
-  const limit = active.config.longRunWarningSeconds
-  if (active.seconds(context) < limit) return
+/**
+ * Somebody is measuring on this branch on another machine — the last write left
+ * a `workingTimeStart` in ProSonata and we are not the ones running. Only a
+ * warning: stopping a timer on a machine that is asleep is not possible, and
+ * what those hours were can only be answered by whoever sat there.
+ */
+function warnAboutRunningElsewhere(active: Session): void {
+  const since = active.runningElsewhereSince
+  if (since === null) return
 
-  const state = active.state()
-  const running = state.timers.find(
-    (timer) => timer.startedAt !== null && timer.scope.branch === context.scope.branch,
+  void vscode.window.showWarningMessage(
+    `ProSonata: auf einem anderen Rechner läuft seit ${since.slice(0, 5)} ein Timer auf diesem Branch.`,
   )
-  if (!running) return
+}
 
-  void vscode.window
-    .showWarningMessage(
-      `ProSonata: der Timer läuft seit ${clock(active.seconds(context))} ohne Commit. Immer noch dran?`,
-      'Ja',
-      'Pausieren',
-    )
-    .then((answer) => {
-      if (answer === 'Pausieren') void vscode.commands.executeCommand('prosonata.pause')
-    })
+/**
+ * A segment that has been running for hours (KONZEPT.md §3).
+ *
+ * The old warning compared the whole entry against the limit — a branch that
+ * holds twenty hours would have warned a second after every start, every thirty
+ * seconds, until nobody read it any more. What says something is the **running
+ * segment**: it began at the last start or the last commit.
+ *
+ * And the question is not "still at it?" but how much of it counts. A timer
+ * that ran overnight measured wall time; only the person who was there knows
+ * what of it was work, so the tool asks instead of guessing.
+ */
+async function askAboutLongRun(active: Session, context: RepoContext): Promise<void> {
+  const running = runningSeconds(active.state(), active.clock, context.scope)
+  if (running < active.config.longRunWarningSeconds) return
+  if ((snoozedUntil.get(context.key) ?? 0) > active.clock.now()) return
+
+  const answer = await vscode.window.showWarningMessage(
+    `ProSonata: der Timer läuft seit ${clock(running)} ohne Unterbruch. Wie viel davon zählt?`,
+    'Alles behalten',
+    'Anders angeben',
+    'Verwerfen',
+  )
+
+  // No answer counts as "later": asking again in thirty seconds would nag.
+  if (answer === undefined || answer === 'Alles behalten') {
+    snoozedUntil.set(context.key, active.clock.now() + SNOOZE_MS)
+    return
+  }
+
+  const kept = answer === 'Verwerfen' ? 0 : await askForDuration(running)
+  if (kept === null) return
+
+  active.keepFromRunning(context, kept)
+  reload()
+}
+
+/** `1:30` or `90` — hours and minutes, or plain minutes. Null when cancelled. */
+async function askForDuration(running: number): Promise<number | null> {
+  const given = await vscode.window.showInputBox({
+    title: 'ProSonata: wie viel davon zählt?',
+    prompt: 'Stunden:Minuten, oder eine Zahl als Minuten',
+    value: clock(running).slice(0, -3),
+  })
+  if (given === undefined) return null
+
+  const [hours, minutes] = given.split(':')
+  const seconds = minutes === undefined ? Number(hours) * 60 : Number(hours) * 3600 + Number(minutes) * 60
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    void vscode.window.showWarningMessage(`ProSonata: „${given}" ist keine Dauer — nichts geändert.`)
+    return null
+  }
+  return seconds
 }
 
 /**
@@ -607,10 +768,24 @@ function draw(): void {
     return
   }
 
+  /*
+   * The running segment, not the entry's total. A timer shows how long it has
+   * been running — that is the number that makes a forgotten one visible.
+   * `14:22:07` catches the eye; `37:15:44` on a long-lived branch does not.
+   * What the branch has collected altogether belongs in the panel and on the
+   * invoice, and into the tooltip here.
+   */
   const icon = here?.startedAt ? '$(debug-pause)' : '$(play)'
   const others = running.length > 1 ? ` +${running.length - 1}` : ''
-  statusBar.text = `${icon} ${clock(currentSeconds(state, active.clock, context.scope))}${others}`
-  statusBar.tooltip = `${context.scope.branch} · ${state.pending.length} waiting to be sent`
+  const segment = runningSeconds(state, active.clock, context.scope)
+  const total = currentSeconds(state, active.clock, context.scope)
+
+  statusBar.text = `${icon} ${clock(segment)}${others}`
+  statusBar.tooltip = [
+    context.scope.branch,
+    `Branch insgesamt ${clock(total)}`,
+    state.pending.length > 0 ? `${state.pending.length} warten auf Versand` : 'nichts wartet auf Versand',
+  ].join(' · ')
   statusBar.show()
 
   // Only while something actually ticks, so the tree is not redrawn for nothing.

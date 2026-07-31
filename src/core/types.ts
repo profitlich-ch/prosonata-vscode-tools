@@ -43,6 +43,14 @@ export interface TimeEntry {
   /** ProSonata's `timeID`, null before the first POST. */
   timeId: number | null
   state: EntryState
+  /**
+   * Someone closed this entry on another machine while time was still running
+   * here. Nothing is written until the question is answered — add the rest to
+   * the closed entry, or begin a new one (KONZEPT.md §3).
+   */
+  awaitingDecision?: boolean
+  /** What ProSonata holds for it, read at the moment the close was noticed. */
+  remoteFinalSeconds?: number
 }
 
 /**

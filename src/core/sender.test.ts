@@ -221,3 +221,90 @@ describe('an entry deleted in ProSonata', () => {
     expect(api.entries.size).toBe(1)
   })
 })
+
+/*
+ * Closed on another machine: the marker is gone from `detail` while we still
+ * hold the entry open. Writing would put the marker back and overwrite the
+ * final text — the entry belongs to whoever closed it (KONZEPT.md §3).
+ */
+describe('an entry closed on another machine', () => {
+  it('is parked instead of written', async () => {
+    const { api, deps } = setup()
+    const first = await send(stateWith(entry({ seconds: 3600 })), deps, true)
+    const timeId = first.state.entries[0]!.timeId!
+
+    // Somebody closes it over there: marker gone, final text set.
+    api.entries.get(timeId)!.detail = 'Buchungsmodul, fertig'
+    api.calls.length = 0
+
+    const local = { ...first.state.entries[0]!, seconds: 3600 + 900 }
+    const { state, result } = await send(
+      { ...first.state, entries: [local], pending: [{ entryId: local.id, since: NINE, closing: false }] },
+      deps,
+      true,
+    )
+
+    expect(result.awaitingDecision).toEqual([local.id])
+    expect(result.sent).toEqual([])
+    expect(api.calls.some((call) => call.startsWith('updateEntry'))).toBe(false)
+    expect(api.entries.get(timeId)?.detail).toBe('Buchungsmodul, fertig')
+
+    const parked = state.entries[0]!
+    expect(parked.awaitingDecision).toBe(true)
+    expect(parked.remoteFinalSeconds).toBe(3600)
+    expect(state.pending).toHaveLength(0)
+  })
+
+  it('stays parked when a commit queues it again', async () => {
+    const { api, deps } = setup()
+    const parked = entry({ seconds: 900, timeId: 4711, awaitingDecision: true, remoteFinalSeconds: 3600 })
+
+    const { state, result } = await send(stateWith(parked), deps, true)
+
+    expect(result.awaitingDecision).toEqual([parked.id])
+    expect(api.calls).toEqual([])
+    expect(state.pending).toHaveLength(0)
+  })
+})
+
+/*
+ * "A timer is running here" needs no field of its own: the presence of
+ * `workingTimeStart` says it, and null takes it back. Measured against the
+ * account — an empty string would write 01:00:00 instead of clearing.
+ */
+describe('the running mark', () => {
+  const timerOn = (entryId: string, startedAt: number | null) => ({
+    id: 't1',
+    origin: 'local' as const,
+    remoteTimerId: null,
+    scope: { repoPath: '/work/shop', branch: 'feature/buchung' },
+    startedAt,
+    entryId,
+  })
+
+  it('rides along with a write while the timer runs', async () => {
+    const { api, deps } = setup()
+    const nineTwelve = new Date(2026, 6, 30, 9, 12, 0).getTime()
+    const state = { ...stateWith(entry()), timers: [timerOn('e1', nineTwelve)] }
+
+    const { state: after } = await send(state, deps, true)
+
+    expect(api.entries.get(after.entries[0]!.timeId!)?.workingTimeStart).toBe('09:12:00')
+  })
+
+  it('is taken back by the next write once the timer stands still', async () => {
+    const { api, deps } = setup()
+    const nineTwelve = new Date(2026, 6, 30, 9, 12, 0).getTime()
+    const first = await send({ ...stateWith(entry()), timers: [timerOn('e1', nineTwelve)] }, deps, true)
+    const timeId = first.state.entries[0]!.timeId!
+
+    const paused = {
+      ...first.state,
+      timers: [timerOn('e1', null)],
+      pending: [{ entryId: 'e1', since: NINE, closing: false }],
+    }
+    await send(paused, deps, true)
+
+    expect(api.entries.get(timeId)?.workingTimeStart).toBeNull()
+  })
+})

@@ -2,7 +2,7 @@
   "name": "prosonata-vscode-tools",
   "displayName": ":Profitlich",
   "description": "Verbindet VS Code mit ProSonata. Vorerst: Zeiterfassung, gebunden an Commits und Branches.",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "publisher": "profitlich",
   "repository": {
     "type": "git",
@@ -91,6 +91,17 @@
         "category": "ProSonata"
       },
       {
+        "command": "prosonata.resolveClosedElsewhere",
+        "title": "Anderswo abgeschlossenen Eintrag entscheiden",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.log",
+        "title": "Log der gemessenen Segmente",
+        "icon": "$(history)",
+        "category": "ProSonata"
+      },
+      {
         "command": "prosonata.chooseProject",
         "title": "Projekt für dieses Repository wählen",
         "category": "ProSonata"
@@ -114,12 +125,7 @@
     "menus": {
       "view/title": [
         {
-          "command": "prosonata.start",
-          "when": "view == prosonata.panel",
-          "group": "navigation"
-        },
-        {
-          "command": "prosonata.pause",
+          "command": "prosonata.log",
           "when": "view == prosonata.panel",
           "group": "navigation"
         }

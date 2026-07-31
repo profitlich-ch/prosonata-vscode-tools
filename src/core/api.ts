@@ -60,6 +60,12 @@ export interface RemoteEntry {
   hours: number
   isInvoiced: boolean
   notInvoiceable: boolean
+  /**
+   * `HH:MM:SS` while a timer is running for this entry, null otherwise. Its mere
+   * presence is the signal: ProSonata has no status field, but it takes this one
+   * and only shows it (KONZEPT.md §2).
+   */
+  workingTimeStart: string | null
 }
 
 export interface EntryDraft {
@@ -69,6 +75,12 @@ export interface EntryDraft {
   detail: string
   /** Decimal hours with a dot, as `workingTime()` produces it. */
   workingTime: string
+  /**
+   * `HH:MM` while measuring, null to clear it. Measured against the account:
+   * the short form is accepted and stored as `HH:MM:SS`, null really clears —
+   * but an empty string does not, it writes `01:00:00`.
+   */
+  workingTimeStart?: string | null
 }
 
 /** How much of the rate limit is left, from every response (KONZEPT.md §9). */
@@ -131,7 +143,7 @@ export class HttpApi implements Api {
       'GET',
       '/projects?projectStatus=0&activeStatus=1&perPage=500&orderBy=projectName',
     )
-    return rows.filter((row) => Number(row['isProjectTemplate'] ?? 0) !== 1).map(toProject)
+    return (rows ?? []).filter((row) => Number(row['isProjectTemplate'] ?? 0) !== 1).map(toProject)
   }
 
   async listCategories(): Promise<Category[]> {
@@ -139,7 +151,7 @@ export class HttpApi implements Api {
       'GET',
       '/projecttimecategories?active=1&perPage=500&orderBy=categoryOrder',
     )
-    return rows.map(toCategory)
+    return (rows ?? []).map(toCategory)
   }
 
   async getEntry(timeId: number): Promise<RemoteEntry | null> {
@@ -151,13 +163,22 @@ export class HttpApi implements Api {
     }
   }
 
+  /**
+   * The open entry of a branch — the caller's own one.
+   *
+   * `userID=myself` matters as much as the marker: the branch key is a hash of
+   * the repository's root commit and the branch name, so every clone computes
+   * the same one, including the clone of a colleague. Without the filter, two
+   * people on one branch would find each other's entry and write into it — the
+   * hours of one landing in the time sheet of the other (KONZEPT.md §3).
+   */
   async findByKey(projectId: number, key: string, markerWord: string): Promise<RemoteEntry[]> {
     const term = encodeURIComponent(searchTerm(key, markerWord))
     const rows = await this.request<Record<string, unknown>[]>(
       'GET',
-      `/projecttimes?projectID=${projectId}&isInvoiced=0&detail=${term}&perPage=100`,
+      `/projecttimes?projectID=${projectId}&isInvoiced=0&userID=myself&detail=${term}&perPage=100`,
     )
-    return rows.map(toEntry)
+    return (rows ?? []).map(toEntry)
   }
 
   async createEntry(draft: EntryDraft): Promise<RemoteEntry> {
@@ -207,6 +228,18 @@ export class HttpApi implements Api {
     }
 
     const text = await response.text()
+
+    /*
+     * A search that finds nothing answers `204 No Content` with an empty body —
+     * measured against the account, not documented. `JSON.parse('')` would turn
+     * that into "answered with something other than JSON", so the everyday case
+     * "this branch has no entry yet" would look like a broken API.
+     */
+    if (text.trim() === '') {
+      if (!response.ok) throw new ApiError(response.status, `HTTP ${response.status}`)
+      return undefined as T
+    }
+
     let envelope: { meta?: Record<string, unknown>; data?: unknown } = {}
     try {
       envelope = JSON.parse(text) as typeof envelope
@@ -273,6 +306,7 @@ function toEntry(row: Record<string, unknown>): RemoteEntry {
     detail: String(row['detail'] ?? ''),
     hours: parseWorkingTime(row['workingTime']),
     isInvoiced: Number(row['isInvoiced'] ?? 0) === 1,
+    workingTimeStart: typeof row['workingTimeStart'] === 'string' ? row['workingTimeStart'] : null,
     notInvoiceable: Number(row['notInvoiceable'] ?? 0) === 1,
   }
 }

@@ -50,9 +50,18 @@ export function describeRepo(cwd: string): GitRepo | null {
 /**
  * The repository's first commit. Together with the branch name it forms the key
  * that lets another machine recognise the same branch (KONZEPT.md §3).
+ *
+ * Along the first-parent line only. A history merged in with
+ * `--allow-unrelated-histories` — a vendored library, two repositories joined —
+ * arrives as a second parent and carries a root of its own. Without the
+ * restriction that foreign root could put itself at the top of the list years
+ * later, and every branch of the repository would silently get a new key: open
+ * entries in ProSonata would no longer be found, and every machine would start
+ * a second one. Sorting keeps the choice deterministic even then.
  */
 export function rootCommit(cwd: string): string | null {
-  return tryGit(cwd, 'rev-list', '--max-parents=0', 'HEAD')?.split('\n')[0] ?? null
+  const roots = tryGit(cwd, 'rev-list', '--max-parents=0', '--first-parent', 'HEAD')
+  return roots?.split('\n').filter((line) => line !== '').sort()[0] ?? null
 }
 
 export function currentBranch(cwd: string): string | null {

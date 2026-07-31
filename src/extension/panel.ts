@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-import { currentSeconds, openEntry } from '../core/tracking.js'
+import { awaitingDecision, currentSeconds, openEntry, unwrittenSeconds } from '../core/tracking.js'
 import type { RepoProject } from '../core/repo-config.js'
 import type { RepoContext, Session } from '../core/session.js'
 import type { State } from '../core/types.js'
@@ -13,6 +13,10 @@ import { workingTime } from '../core/working-time.js'
  * It shows what changes rarely — project, grid, branch mode — and what one
  * wants to see while working: the running timer and the open entries with their
  * age. Clicking a row opens the matching QuickPick.
+ *
+ * The rows are this branch as it stands right now. Looking back over every
+ * branch ever measured is another kind of thing and sits in the view's title
+ * bar, where VS Code puts what acts on the view rather than on a row.
  */
 
 export class PanelRow extends vscode.TreeItem {
@@ -115,6 +119,17 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
           'circle-outline',
           { command: 'prosonata.closeEntry', title: 'Eintrag abschliessen', arguments: [open.id] },
           'openEntry',
+        ),
+      )
+    }
+
+    for (const parked of awaitingDecision(state, context.scope)) {
+      rows.push(
+        new PanelRow(
+          'Anderswo abgeschlossen',
+          `${clock(unwrittenSeconds(parked))} offen — entscheiden`,
+          'question',
+          { command: 'prosonata.resolveClosedElsewhere', title: 'Entscheiden' },
         ),
       )
     }

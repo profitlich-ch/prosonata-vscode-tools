@@ -1,7 +1,23 @@
 import { describe, expect, it } from 'vitest'
 
 import { fixedClock } from './clock.js'
-import { applyCategory, applyProject, close, commit, currentSeconds, openEntry, pause, setText, start } from './tracking.js'
+import {
+  applyCategory,
+  applyProject,
+  close,
+  commit,
+  currentSeconds,
+  keepFromRunning,
+  openEntry,
+  runningSeconds,
+  parkClosedElsewhere,
+  pause,
+  resumeAfterAdding,
+  resumeAsNew,
+  setText,
+  start,
+  unwrittenSeconds,
+} from './tracking.js'
 import { emptyState, type Scope, type State } from './types.js'
 
 const scope: Scope = { repoPath: '/work/shop', branch: 'feature/buchung' }
@@ -350,5 +366,135 @@ describe('changing the text of an open entry', () => {
     state = close(state, entry.id, 'fertig', at(10, 0), newId)
 
     expect(setText(state, entry.id, 'doch nicht', at(10, 1))).toBe(state)
+  })
+})
+
+describe('answering "closed on another machine"', () => {
+  const parked = () => ({
+    ...emptyState(),
+    entries: [
+      {
+        id: 'e1',
+        key: 'a3f9c1',
+        scope,
+        projectId: 166,
+        categoryId: 70,
+        text: 'Buchungsmodul',
+        seconds: 2 * 3600,
+        foreignSeconds: 3600,
+        lastWritten: 3600,
+        timeId: 4711,
+        state: 'open' as const,
+        awaitingDecision: true,
+        remoteFinalSeconds: 2 * 3600,
+      },
+    ],
+  })
+
+  it('counts as unwritten only what ProSonata does not hold', () => {
+    // Locally 3 h, over there 2 h — one hour never made it.
+    expect(unwrittenSeconds(parked().entries[0]!)).toBe(3600)
+  })
+
+  it('"new" keeps that hour and lets go of the old entry', () => {
+    const state = resumeAsNew(parked(), 'e1')
+    const entry = state.entries[0]!
+
+    expect(entry.seconds).toBe(3600)
+    expect(entry.foreignSeconds).toBe(0)
+    expect(entry.timeId).toBeNull()
+    expect(entry.lastWritten).toBeNull()
+    expect(entry.awaitingDecision).toBeUndefined()
+  })
+
+  it('"add" starts at zero, because everything has just gone out', () => {
+    const state = resumeAfterAdding(parked(), 'e1')
+    const entry = state.entries[0]!
+
+    expect(entry.seconds).toBe(0)
+    expect(entry.timeId).toBeNull()
+    expect(entry.awaitingDecision).toBeUndefined()
+  })
+
+  it('parks only once and drops the pending write', () => {
+    const entries = parked().entries.map(({ awaitingDecision, remoteFinalSeconds, ...rest }) => rest)
+    const state = { ...emptyState(), entries, pending: [{ entryId: 'e1', since: at(9), closing: false }] }
+    const first = parkClosedElsewhere(state, 'e1', 7200)
+
+    expect(first.entries[0]?.awaitingDecision).toBe(true)
+    expect(first.pending).toHaveLength(0)
+    expect(parkClosedElsewhere(first, 'e1', 7200)).toBe(first)
+  })
+})
+
+describe('a segment that ran too long', () => {
+  it('is measured on its own, not on the entry it feeds', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(3600)
+    state = pause(state, clock, scope)
+
+    // The entry holds an hour, but nothing is running.
+    expect(currentSeconds(state, clock, scope)).toBe(3600)
+    expect(runningSeconds(state, clock, scope)).toBe(0)
+
+    state = startOn(state, clock)
+    clock.advance(60)
+    expect(runningSeconds(state, clock, scope)).toBe(60)
+  })
+
+  it('books only what was kept and stops the timer', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(14 * 3600) // over night
+
+    state = keepFromRunning(state, clock, scope, 2 * 3600)
+
+    expect(openEntry(state, scope)?.seconds).toBe(2 * 3600)
+    expect(state.timers[0]?.startedAt).toBeNull()
+  })
+
+  it('never books more than actually ran', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(600)
+
+    state = keepFromRunning(state, clock, scope, 3600)
+
+    expect(openEntry(state, scope)?.seconds).toBe(600)
+  })
+
+  it('drops the segment entirely when nothing is kept', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(14 * 3600)
+
+    state = keepFromRunning(state, clock, scope, 0)
+
+    expect(openEntry(state, scope)?.seconds).toBe(0)
+    expect(state.timers[0]?.startedAt).toBeNull()
+  })
+})
+
+describe('pausing an entry ProSonata knows', () => {
+  it('queues a write, so the running mark is taken back', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    state.entries[0]!.timeId = 4711
+    clock.advance(600)
+
+    state = pause(state, clock, scope)
+
+    expect(state.pending.map((write) => write.entryId)).toEqual([state.entries[0]!.id])
+  })
+
+  it('queues nothing for an entry ProSonata has never seen', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(600)
+
+    state = pause(state, clock, scope)
+
+    expect(state.pending).toHaveLength(0)
   })
 })

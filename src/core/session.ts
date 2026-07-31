@@ -8,10 +8,22 @@ import { Journal } from './journal.js'
 import { branchKey } from './marker.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
 import { send, type SendResult } from './sender.js'
+import { SegmentLog, atLocal, type Segment } from './segments.js'
 import { StateStore } from './state-store.js'
 import { sync } from './sync.js'
-import { commit, currentSeconds, openEntry, pause, start } from './tracking.js'
+import {
+  commit,
+  currentSeconds,
+  keepFromRunning,
+  openEntry,
+  pause,
+  resumeAfterAdding,
+  resumeAsNew,
+  start,
+  unwrittenSeconds,
+} from './tracking.js'
 import type { EntryMode, Scope, State } from './types.js'
+import { workingTime } from './working-time.js'
 
 /**
  * Wires the pieces together for the two front ends, the CLI and the extension.
@@ -31,7 +43,7 @@ export interface RepoContext {
 
 export class NotConfigured extends Error {
   constructor(readonly repoPath: string) {
-    super(`dieses Repository hat noch kein Projekt — führe "prosonata init" in ${repoPath} aus`)
+    super(`diesem Repository ist noch kein Projekt zugeordnet — führe "prosonata init" in ${repoPath} aus`)
     this.name = 'NotConfigured'
   }
 }
@@ -39,16 +51,18 @@ export class NotConfigured extends Error {
 export class Session {
   readonly store: StateStore
   readonly journal: Journal
+  readonly segments: SegmentLog
   readonly clock: Clock
   private cachedApi: Api | null = null
 
   constructor(
     readonly config: Config,
-    options: { clock?: Clock; api?: Api; store?: StateStore; journal?: Journal } = {},
+    options: { clock?: Clock; api?: Api; store?: StateStore; journal?: Journal; segments?: SegmentLog } = {},
   ) {
     this.clock = options.clock ?? systemClock
     this.store = options.store ?? new StateStore(paths.state())
     this.journal = options.journal ?? new Journal(paths.journal())
+    this.segments = options.segments ?? new SegmentLog(paths.segments())
     this.cachedApi = options.api ?? null
   }
 
@@ -126,8 +140,18 @@ export class Session {
     return switched
   }
 
-  start(context: RepoContext): State {
+  /**
+   * Starts the timer. Arriving at a branch with no entry of its own is exactly
+   * the moment to look whether ProSonata already holds one — from the other
+   * machine, or from a state file that was lost (KONZEPT.md §3).
+   *
+   * The lookup must never keep the timer from starting: measuring works without
+   * a network, sending does not. A failure is therefore noted and swallowed.
+   */
+  async start(context: RepoContext): Promise<State> {
     this.reconcileBranchSwitch(context)
+    if (!openEntry(this.state(), context.scope)) await this.syncQuietly(context)
+
     return this.store.update((state) =>
       start(state, this.clock, {
         scope: context.scope,
@@ -140,8 +164,68 @@ export class Session {
     )
   }
 
+  /** The lookup where a failure is not worth interrupting anyone over. */
+  async syncQuietly(context: RepoContext): Promise<void> {
+    try {
+      await this.sync(context)
+    } catch (error) {
+      this.journal.append({ kind: 'note', entryId: '-', message: `Abgleich nicht möglich: ${(error as Error).message}` })
+    }
+  }
+
   pause(context: RepoContext): State {
-    return this.store.update((state) => pause(state, this.clock, context.scope))
+    const startedAt = this.runningSince(context)
+    const state = this.store.update((current) => pause(current, this.clock, context.scope))
+    if (startedAt !== null) this.recordSegment(context, startedAt, this.clock.now(), 'pause')
+    return state
+  }
+
+  /**
+   * Keeps part of a segment that ran too long and stops the timer. The log gets
+   * the shortened span and how long it really ran — the one place where measured
+   * time disappears on purpose, so it must not disappear silently as well.
+   */
+  keepFromRunning(context: RepoContext, seconds: number): State {
+    const startedAt = this.runningSince(context)
+    if (startedAt === null) return this.state()
+
+    const now = this.clock.now()
+    const state = this.store.update((current) => keepFromRunning(current, this.clock, context.scope, seconds))
+    const kept = Math.min(seconds, Math.max(0, Math.floor((now - startedAt) / 1000)))
+    this.recordSegment(context, now - kept * 1000, now, 'trimmed', Math.floor((now - startedAt) / 1000))
+    return state
+  }
+
+  /** When the running segment of this scope began, or null while paused. */
+  private runningSince(context: RepoContext): number | null {
+    const timer = this.state().timers.find(
+      (candidate) =>
+        candidate.startedAt !== null &&
+        candidate.scope.repoPath === context.scope.repoPath &&
+        candidate.scope.branch === context.scope.branch,
+    )
+    return timer?.startedAt ?? null
+  }
+
+  private recordSegment(
+    context: RepoContext,
+    from: number,
+    until: number,
+    reason: Segment['reason'],
+    ranSeconds?: number,
+  ): void {
+    const entry = openEntry(this.state(), context.scope) ?? this.state().entries.find((candidate) => candidate.key === context.key)
+    this.segments.append({
+      from: atLocal(from),
+      until: atLocal(until),
+      seconds: Math.max(0, Math.floor((until - from) / 1000)),
+      repoPath: context.scope.repoPath,
+      branch: context.scope.branch,
+      projectId: context.projectId,
+      entryId: entry?.id ?? '-',
+      reason,
+      ...(ranSeconds === undefined ? {} : { ranSeconds }),
+    })
   }
 
   /** Called by the hook after a commit. */
@@ -157,6 +241,7 @@ export class Session {
     let closed = false
 
     const switched = this.reconcileBranchSwitch(context)
+    const startedAt = this.runningSince(context)
 
     const state = this.store.update((current) => {
       const outcome = commit(current, {
@@ -206,8 +291,37 @@ export class Session {
       return outcome.state
     })
 
+    if (startedAt !== null && booked > 0) this.recordSegment(context, startedAt, this.clock.now(), 'commit')
     return { state, booked, hadTimer, closed, branchSwitched: switched }
   }
+
+  /**
+   * The answer to "closed on another machine" (KONZEPT.md §3).
+   *
+   * `add` sends what is missing to the entry that was closed — as a `PUT` that
+   * carries `workingTime` alone, so the final text stays exactly as it was left
+   * and the marker does not come back. `fresh` writes nothing there at all.
+   *
+   * Either way this entry lets go of the old `timeID`: what accrues from now on
+   * belongs to a new one, because the old is finished.
+   */
+  async resolveClosedElsewhere(entryId: string, answer: 'add' | 'fresh'): Promise<void> {
+    const entry = this.state().entries.find((candidate) => candidate.id === entryId)
+    if (!entry?.awaitingDecision) return
+
+    if (answer === 'fresh' || entry.timeId === null) {
+      this.store.update((state) => resumeAsNew(state, entryId))
+      return
+    }
+
+    const total = (entry.remoteFinalSeconds ?? 0) + unwrittenSeconds(entry)
+    await this.api.updateEntry(entry.timeId, { workingTime: workingTime(total, this.config.grid) })
+    this.journal.append({ kind: 'sent', entryId, timeId: entry.timeId })
+    this.store.update((state) => resumeAfterAdding(state, entryId))
+  }
+
+  /** Set by the last sync: somebody is measuring on this branch elsewhere. */
+  runningElsewhereSince: string | null = null
 
   /** Looks for an entry of this branch in ProSonata and adopts it if there is one. */
   async sync(context: RepoContext): Promise<void> {
@@ -219,6 +333,7 @@ export class Session {
       categoryId: context.categoryId,
       newId: randomUUID,
     })
+    this.runningElsewhereSince = outcome.runningElsewhereSince
     if (outcome.adopted || outcome.closedElsewhere) {
       this.store.update(() => outcome.state)
     }

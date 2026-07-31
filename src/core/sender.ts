@@ -2,8 +2,8 @@ import { ApiError, type Api, type EntryDraft } from './api.js'
 import type { Clock } from './clock.js'
 import type { Config } from './config.js'
 import type { Journal } from './journal.js'
-import { stripMarker, withMarker } from './marker.js'
-import { findEntry } from './tracking.js'
+import { readKey, stripMarker, withMarker } from './marker.js'
+import { findEntry, parkClosedElsewhere } from './tracking.js'
 import type { State, TimeEntry } from './types.js'
 import { workingTime } from './working-time.js'
 
@@ -27,6 +27,8 @@ export interface SendResult {
   tooLong: { entryId: string; length: number; limit: number }[]
   /** Entries with no time category yet; `category` is mandatory in ProSonata. */
   missingCategory: string[]
+  /** Entries closed on another machine; they wait for an answer, not a write. */
+  awaitingDecision: string[]
 }
 
 export interface SendDeps {
@@ -48,7 +50,7 @@ export function dueWrites(state: State, clock: Clock, delaySeconds: number): str
  */
 export async function send(state: State, deps: SendDeps, force = false): Promise<{ state: State; result: SendResult }> {
   const { clock, config, journal } = deps
-  const result: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [] }
+  const result: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [] }
 
   const due = force ? state.pending.map((write) => write.entryId) : dueWrites(state, clock, config.sendDelaySeconds)
   let next = structuredClone(state)
@@ -56,6 +58,14 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
   for (const entryId of due) {
     const entry = findEntry(next, entryId)
     if (!entry) {
+      next.pending = next.pending.filter((write) => write.entryId !== entryId)
+      continue
+    }
+
+    // Parked because it was closed elsewhere: it waits for an answer, and a
+    // commit in the meantime must not queue it back into being written.
+    if (entry.awaitingDecision) {
+      result.awaitingDecision.push(entryId)
       next.pending = next.pending.filter((write) => write.entryId !== entryId)
       continue
     }
@@ -81,7 +91,13 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
     }
 
     try {
-      await writeEntry(entry, detail, deps)
+      const closedElsewhere = await writeEntry(entry, detail, startedAtOf(next, entry.id), deps)
+      if (closedElsewhere !== null) {
+        next = parkClosedElsewhere(next, entryId, closedElsewhere)
+        result.awaitingDecision.push(entryId)
+        journal.append({ kind: 'note', entryId, message: 'auf einem anderen Rechner abgeschlossen — wartet auf Entscheidung' })
+        continue
+      }
       journal.append(entry.timeId === null ? { kind: 'sent', entryId } : { kind: 'sent', entryId, timeId: entry.timeId })
       next.pending = next.pending.filter((write) => write.entryId !== entryId)
       result.sent.push(entryId)
@@ -103,7 +119,32 @@ export function detailFor(entry: TimeEntry, config: Config): string {
   return entry.state === 'open' ? withMarker(entry.text, entry.key, config.markerWord) : stripMarker(entry.text, config.markerWord)
 }
 
-async function writeEntry(entry: TimeEntry, detail: string, deps: SendDeps): Promise<void> {
+/**
+ * Writes one entry. Returns null when it went out, or the seconds ProSonata
+ * holds when the entry turned out to be closed on another machine — then
+ * nothing is written and the caller parks it.
+ */
+/**
+ * `HH:MM` while a timer is measuring into this entry, null otherwise.
+ *
+ * It rides along with a write that was due anyway — no call of its own. The
+ * value is therefore up to the send delay old, which is plenty for what it is
+ * for: telling another machine that somebody is working here (KONZEPT.md §2).
+ */
+function startedAtOf(state: State, entryId: string): string | null {
+  const timer = state.timers.find((candidate) => candidate.entryId === entryId && candidate.startedAt !== null)
+  if (!timer?.startedAt) return null
+
+  const started = new Date(timer.startedAt)
+  return `${String(started.getHours()).padStart(2, '0')}:${String(started.getMinutes()).padStart(2, '0')}`
+}
+
+async function writeEntry(
+  entry: TimeEntry,
+  detail: string,
+  workingTimeStart: string | null,
+  deps: SendDeps,
+): Promise<number | null> {
   const { api, clock, config } = deps
   const total = entry.foreignSeconds + entry.seconds
   const draft: EntryDraft = {
@@ -112,13 +153,15 @@ async function writeEntry(entry: TimeEntry, detail: string, deps: SendDeps): Pro
     date: clock.today(),
     detail,
     workingTime: workingTime(total, config.grid),
+    // Null clears it; an empty string would write 01:00:00, as measured.
+    workingTimeStart,
   }
 
   if (entry.timeId === null) {
     const created = await api.createEntry(draft)
     entry.timeId = created.timeID
     entry.lastWritten = total
-    return
+    return null
   }
 
   // The same read serves two purposes: the invoiced check, and noticing that
@@ -129,7 +172,16 @@ async function writeEntry(entry: TimeEntry, detail: string, deps: SendDeps): Pro
     const created = await api.createEntry(draft)
     entry.timeId = created.timeID
     entry.lastWritten = total
-    return
+    return null
+  }
+
+  /*
+   * The marker is gone while we still consider the entry open: somebody closed
+   * it on another machine. Writing now would put the marker back and overwrite
+   * the final text — the entry belongs to whoever closed it (KONZEPT.md §3).
+   */
+  if (entry.state === 'open' && readKey(remote.detail, config.markerWord) === null) {
+    return Math.round(remote.hours * 3600)
   }
 
   if (remote.isInvoiced) {
@@ -145,7 +197,7 @@ async function writeEntry(entry: TimeEntry, detail: string, deps: SendDeps): Pro
     entry.foreignSeconds = 0
     entry.seconds = remainder
     entry.lastWritten = remainder
-    return
+    return null
   }
 
   adoptForeignShare(entry, remote.hours)
@@ -153,6 +205,7 @@ async function writeEntry(entry: TimeEntry, detail: string, deps: SendDeps): Pro
   const corrected = entry.foreignSeconds + entry.seconds
   await api.updateEntry(entry.timeId, { ...draft, workingTime: workingTime(corrected, config.grid) })
   entry.lastWritten = corrected
+  return null
 }
 
 /**

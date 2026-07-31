@@ -6,8 +6,19 @@ import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
+import { describeBranch, renderReport } from '../core/report.js'
+import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
-import { applyCategory, applyProject, close, openEntry, setText } from '../core/tracking.js'
+import {
+  applyCategory,
+  applyProject,
+  awaitingDecision,
+  close,
+  openEntry,
+  runningSeconds,
+  setText,
+  unwrittenSeconds,
+} from '../core/tracking.js'
 import { workingTime, type TimeGrid } from '../core/working-time.js'
 import type { SendResult } from '../core/sender.js'
 
@@ -24,7 +35,7 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
 
   prosonata init                    Konto und dieses Repository einrichten, Hook installieren
   prosonata start                   Timer dieses Branches starten oder fortsetzen
-  prosonata pause                   Timer pausieren und das laufende Segment buchen
+  prosonata pause [h:mm|Minuten]    Timer pausieren; mit Dauer wird nur diese gebucht
   prosonata status                  was läuft, was ist offen, was wartet
   prosonata send                    alles senden, was gerade fällig ist
 
@@ -34,6 +45,8 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata mode [branch|commit]    ein Eintrag pro Branch oder pro Commit
   prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
   prosonata text <Text>             Text des offenen Zeiteintrags ändern
+  prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
+  prosonata log [Branch]            gemessene Segmente, ohne Branch die dieses
 
   prosonata post-commit             wird vom Hook gerufen, nicht zum Tippen gedacht
 
@@ -49,9 +62,9 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
       case 'init':
         return await init(cwd)
       case 'start':
-        return start(cwd)
+        return await start(cwd)
       case 'pause':
-        return pause(cwd)
+        return pause(cwd, argument)
       case 'status':
         return await status(cwd)
       case 'send':
@@ -68,6 +81,10 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await closeEntry(cwd, argument)
       case 'text':
         return await changeText(cwd, argument)
+      case 'resume':
+        return await resume(cwd, argument)
+      case 'log':
+        return log(cwd, argument)
       case 'post-commit':
         return await postCommit(cwd)
       case 'help':
@@ -260,6 +277,38 @@ async function closeEntry(cwd: string, argument: string): Promise<number> {
   return report(await session.flush(true))
 }
 
+/**
+ * The answer to "closed on another machine" (KONZEPT.md §3): the time measured
+ * here goes either into the entry somebody closed, or into a new one. The tool
+ * parks such an entry and writes nothing until this is answered.
+ */
+async function resume(cwd: string, argument: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const parked = awaitingDecision(session.state(), context.scope)
+  if (parked.length === 0) {
+    process.stdout.write(`auf ${context.scope.branch} wartet nichts auf eine Entscheidung\n`)
+    return 0
+  }
+
+  for (const entry of parked) {
+    process.stdout.write(
+      `"${entry.text || context.scope.branch}" wurde auf einem anderen Rechner abgeschlossen, hier sind noch ${format(unwrittenSeconds(entry))} angefallen\n`,
+    )
+    const wanted = argument !== '' ? argument : await ask('Hinzufügen oder neu? [add|neu]: ')
+    if (wanted !== 'add' && wanted !== 'neu' && wanted !== 'new') {
+      process.stderr.write(`keine Antwort: ${wanted} — nimm "add" oder "neu"\n`)
+      return 2
+    }
+
+    await session.resolveClosedElsewhere(entry.id, wanted === 'add' ? 'add' : 'fresh')
+    process.stdout.write(wanted === 'add' ? 'zum bestehenden Eintrag hinzugefügt\n' : 'wird ein neuer Eintrag\n')
+  }
+  return 0
+}
+
 /** Changes the text of the open entry, without closing it. */
 async function changeText(cwd: string, argument: string): Promise<number> {
   const session = Session.open()
@@ -283,24 +332,52 @@ async function changeText(cwd: string, argument: string): Promise<number> {
   return 0
 }
 
-function start(cwd: string): number {
+async function start(cwd: string): Promise<number> {
   const session = Session.open()
   const context = session.context(cwd)
   if (!context) return notARepo()
 
-  session.start(context)
+  await session.start(context)
+  if (session.runningElsewhereSince !== null) {
+    process.stderr.write(
+      `auf einem anderen Rechner läuft seit ${session.runningElsewhereSince.slice(0, 5)} ein Timer auf diesem Branch\n`,
+    )
+  }
   process.stdout.write(`läuft auf ${context.scope.branch} — ${nameOfProject(context)}\n`)
   return 0
 }
 
-function pause(cwd: string): number {
+/**
+ * Pauses. With a duration only that much of the running segment is booked — the
+ * answer to a timer that ran overnight, where wall time is not work time.
+ */
+function pause(cwd: string, argument: string): number {
   const session = Session.open()
   const context = session.context(cwd)
   if (!context) return notARepo()
 
-  session.pause(context)
+  if (argument === '') {
+    session.pause(context)
+  } else {
+    const kept = parseDuration(argument)
+    if (kept === null) {
+      process.stderr.write(`keine Dauer: ${argument} — nimm "1:30" oder eine Zahl als Minuten\n`)
+      return 2
+    }
+    const running = runningSeconds(session.state(), session.clock, context.scope)
+    session.keepFromRunning(context, kept)
+    process.stdout.write(`von ${format(running)} wurden ${format(Math.min(kept, running))} gebucht\n`)
+  }
+
   process.stdout.write(`pausiert — ${format(session.seconds(context))} auf ${context.scope.branch}\n`)
   return 0
+}
+
+/** `1:30` or `90` — hours and minutes, or plain minutes. */
+function parseDuration(value: string): number | null {
+  const [hours, minutes] = value.split(':')
+  const seconds = minutes === undefined ? Number(hours) * 60 : Number(hours) * 3600 + Number(minutes) * 60
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
 }
 
 async function status(cwd: string): Promise<number> {
@@ -316,6 +393,15 @@ async function status(cwd: string): Promise<number> {
   process.stdout.write(`  ${timer?.startedAt ? 'läuft' : 'pausiert'}  ${format(session.seconds(context))}\n`)
   if (entry) {
     process.stdout.write(`  offener Eintrag  ${entry.text || '(noch kein Text)'}  ${workingTime(entry.foreignSeconds + entry.seconds, context.config.grid ?? session.config.grid)} h\n`)
+  }
+  const running = runningSeconds(state, session.clock, context.scope)
+  if (running >= session.config.longRunWarningSeconds) {
+    process.stdout.write(`  läuft seit ${format(running)} ohne Unterbruch — "prosonata pause [h:mm]" bucht nur einen Teil\n`)
+  }
+  for (const parked of awaitingDecision(state, context.scope)) {
+    process.stdout.write(
+      `  anderswo abgeschlossen  ${format(unwrittenSeconds(parked))} offen — "prosonata resume" entscheidet\n`,
+    )
   }
   if (context.categoryId <= 0) {
     process.stdout.write('  keine Zeitkategorie — es wird nichts gesendet, bis eine gewählt ist\n')
@@ -337,6 +423,9 @@ async function flush(cwd: string): Promise<number> {
 function report(result: SendResult): number {
   for (const problem of result.tooLong) {
     process.stderr.write(`Text zu lang (${problem.length} von ${problem.limit}) — kürze ihn, ProSonata würde ihn wortlos abschneiden\n`)
+  }
+  if (result.awaitingDecision.length > 0) {
+    process.stderr.write('auf einem anderen Rechner abgeschlossen — "prosonata resume" entscheidet, wohin die restliche Zeit geht\n')
   }
   if (result.missingCategory.length > 0) {
     process.stderr.write('keine Zeitkategorie für dieses Projekt — wähle eine mit "prosonata category", ProSonata verlangt sie\n')
@@ -382,6 +471,33 @@ async function postCommit(cwd: string): Promise<number> {
     process.stderr.write(`prosonata: ${(error as Error).message}\n`)
     return 0
   }
+}
+
+/**
+ * The segment log. Without an argument the current branch, with `alle` every
+ * one the log knows — including branches that git has long forgotten.
+ */
+function log(cwd: string, argument: string): number {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const segments = session.segments.read().filter((segment) => segment.repoPath === context.repo.root)
+  if (segments.length === 0) {
+    process.stdout.write('für dieses Repository ist noch kein Segment aufgezeichnet\n')
+    return 0
+  }
+
+  if (argument === '?' || argument === 'branches') {
+    for (const summary of branchesIn(segments, context.repo.root)) {
+      process.stdout.write(`  ${summary.branch.padEnd(30)} ${describeBranch(summary)}\n`)
+    }
+    return 0
+  }
+
+  const branch = argument === 'alle' ? null : argument !== '' ? argument : context.scope.branch
+  process.stdout.write(renderReport(segments, { branch, grid: context.config.grid ?? session.config.grid }))
+  return 0
 }
 
 /** One question on the terminal. Opened and closed per question, so a command

@@ -20,6 +20,8 @@ export class FakeApi implements Api {
   detailLimit = 800
 
   calls: string[] = []
+  /** Entries of other users; `userID=myself` keeps them out of every search. */
+  private readonly foreign = new Set<number>()
   private nextId = 2000
   private limit: RateLimit = { remaining: 50, resetSeconds: 900 }
 
@@ -45,10 +47,21 @@ export class FakeApi implements Api {
   async findByKey(projectId: number, key: string, markerWord: string): Promise<RemoteEntry[]> {
     this.record(`findByKey ${projectId} ${key}`)
     const term = searchTerm(key, markerWord)
-    // A substring match, as measured against the account.
+    // A substring match, as measured against the account — and `userID=myself`,
+    // which is why entries of other people never show up here.
     return [...this.entries.values()].filter(
-      (entry) => entry.projectID === projectId && !entry.isInvoiced && entry.detail.includes(term),
+      (entry) =>
+        entry.projectID === projectId && !entry.isInvoiced && entry.detail.includes(term) && !this.foreign.has(entry.timeID),
     )
+  }
+
+  /**
+   * Marks an entry as belonging to somebody else — a colleague on the same
+   * branch. Whose entry it is lives in ProSonata, not in `RemoteEntry`, so the
+   * double keeps it: it is server behaviour, not a field we read.
+   */
+  belongsToSomebodyElse(timeId: number): void {
+    this.foreign.add(timeId)
   }
 
   async createEntry(draft: EntryDraft): Promise<RemoteEntry> {
@@ -61,6 +74,7 @@ export class FakeApi implements Api {
       detail: this.truncate(draft.detail),
       hours: parseWorkingTime(draft.workingTime),
       isInvoiced: false,
+      workingTimeStart: normaliseStart(draft.workingTimeStart),
       notInvoiceable: false,
     }
     this.entries.set(entry.timeID, entry)
@@ -78,6 +92,8 @@ export class FakeApi implements Api {
     if (patch.date !== undefined) entry.date = patch.date
     if (patch.projectID !== undefined) entry.projectID = patch.projectID
     if (patch.category !== undefined) entry.category = patch.category
+    // Measured: null clears, an empty string writes 01:00:00 instead.
+    if (patch.workingTimeStart !== undefined) entry.workingTimeStart = normaliseStart(patch.workingTimeStart)
     return { ...entry }
   }
 
@@ -99,4 +115,11 @@ export class FakeApi implements Api {
   private truncate(detail: string): string {
     return detail.length > this.detailLimit ? detail.slice(0, this.detailLimit) : detail
   }
+}
+
+/** `09:12` becomes `09:12:00`, null clears, `''` writes an hour — as measured. */
+function normaliseStart(value: string | null | undefined): string | null {
+  if (value === undefined || value === null) return null
+  if (value === '') return '01:00:00'
+  return value.length === 5 ? `${value}:00` : value
 }
