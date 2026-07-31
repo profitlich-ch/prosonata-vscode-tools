@@ -4,6 +4,18 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unveröffentlicht
+
+### Geändert
+
+- **Die Kategorienauswahl ist gruppiert.** Die Gruppe steht als Überschrift über
+  ihrem Block statt klein hinter jedem Namen — im Editor über
+  `QuickPickItemKind.Separator`, im Terminal als Zwischenzeile in der
+  durchlaufenden Nummerierung. Die Reihenfolge ist ProSonatas eigene:
+  `categoryOrder` läuft über die ganze Liste, die Gruppen fallen als
+  zusammenhängende Blöcke daraus. Der Platz in der Beschreibung gehört damit
+  wieder allein dem Hinweis „aktuell" an der zuletzt benutzten Kategorie.
+
 ## [0.3.0] — 2026-07-31
 
 Zwei Wege, auf denen Zeit still nicht bei ProSonata ankam, sind geschlossen, die

@@ -32,7 +32,22 @@ export interface Category {
   categoryOrder: number
   active: number
   linkedCustomerID: number | null
+  /** Id of the group. It carries ProSonata's own order of the groups. */
+  group: number | null
   groupName: string | null
+}
+
+/**
+ * The categories in ProSonata's own order, which is `categoryOrder` alone: it
+ * runs across the whole list, not within a group, so the groups fall out of it
+ * as contiguous blocks. Ordering by the group id instead was measurably wrong,
+ * and ordering the group names alphabetically is a list nobody knows. `group`
+ * only breaks a tie, so equal numbers cannot interleave two groups.
+ */
+export function inProsonataOrder(categories: Category[]): Category[] {
+  return [...categories].sort(
+    (a, b) => a.categoryOrder - b.categoryOrder || (a.group ?? Infinity) - (b.group ?? Infinity),
+  )
 }
 
 export interface RemoteEntry {
@@ -243,6 +258,7 @@ function toCategory(row: Record<string, unknown>): Category {
     categoryOrder: Number(row['categoryOrder'] ?? 0),
     active: Number(row['active'] ?? 1),
     linkedCustomerID: linked === null || linked === undefined || linked === '' ? null : Number(linked),
+    group: row['group'] === null || row['group'] === undefined || row['group'] === '' ? null : Number(row['group']),
     groupName: row['groupName'] === null || row['groupName'] === undefined ? null : String(row['groupName']),
   }
 }

@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import * as vscode from 'vscode'
 
-import type { Project } from '../core/api.js'
+import { inProsonataOrder, type Category, type Project } from '../core/api.js'
 import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { describeRepo, fetchPrune, isMerged, remoteBranchGone, type GitRepo } from '../core/git.js'
 import { hookNeedsRepair, installHook } from '../core/hooks.js'
@@ -317,17 +317,43 @@ async function chooseCategory(session: Session, repo: GitRepo, project?: Project
 
   const current = config.categories.get(projectId)
   const picked = await vscode.window.showQuickPick(
-    categories.map((category) => ({
-      label: category.categoryName,
-      description: category.category === current ? 'aktuell' : category.groupName ?? '',
-      category,
-    })),
+    groupedItems(categories, current),
     { title: `ProSonata: Zeitkategorie für ${project?.projectName ?? config.projects.find((p) => p.id === projectId)?.name ?? `#${projectId}`}` },
   )
-  if (!picked) return
+  if (!picked?.category) return
 
   rememberCategory(repo.root, projectId, picked.category.category, picked.category.categoryName)
-  session.store.update((state) => applyCategory(state, repo.root, projectId, picked.category.category, session.clock.now()))
+  session.store.update((state) => applyCategory(state, repo.root, projectId, picked.category!.category, session.clock.now()))
+}
+
+/**
+ * The categories under their group, the way a `<select>` groups its options: a
+ * separator item is a heading VS Code draws but never lets anyone select.
+ *
+ * The order is ProSonata's own — `group` orders the groups, `categoryOrder`
+ * orders inside one. Sorting the group names alphabetically would look tidy and
+ * be a different list than the one the customer knows. Headings appear only
+ * where there is something to head; an account without groups keeps a plain
+ * list instead of one heading over everything.
+ */
+function groupedItems(categories: Category[], current: number | undefined): (vscode.QuickPickItem & { category?: Category })[] {
+  const sorted = inProsonataOrder(categories)
+  const grouped = sorted.some((category) => category.groupName !== null)
+
+  const items: (vscode.QuickPickItem & { category?: Category })[] = []
+  let group: string | null | undefined
+  for (const category of sorted) {
+    if (grouped && category.groupName !== group) {
+      group = category.groupName
+      items.push({ label: group ?? 'Ohne Gruppe', kind: vscode.QuickPickItemKind.Separator })
+    }
+    items.push({
+      label: category.categoryName,
+      description: category.category === current ? 'aktuell' : '',
+      category,
+    })
+  }
+  return items
 }
 
 function installHookHere(repoRoot: string): void {

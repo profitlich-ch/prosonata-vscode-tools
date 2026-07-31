@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { ApiError, HttpApi } from './api.js'
+import { ApiError, HttpApi, inProsonataOrder, type Category } from './api.js'
 
 /**
  * The guards that turn a missing setup into a sentence someone can act on.
@@ -47,5 +47,38 @@ describe('a base URL that is not the API', () => {
     })
 
     await expect(api.listProjects()).rejects.toThrow(/404/)
+  })
+})
+
+describe('the order of the categories', () => {
+  const category = (id: number, group: number | null, order: number): Category => ({
+    category: id,
+    categoryName: `K${id}`,
+    categoryOrder: order,
+    active: 1,
+    linkedCustomerID: null,
+    group,
+    groupName: group === null ? null : `G${group}`,
+  })
+
+  // Measured: `categoryOrder` runs across the whole list, so the groups come out
+  // in the order ProSonata shows them — the group id says nothing about that.
+  it('follows categoryOrder across all groups', () => {
+    const sorted = inProsonataOrder([category(1, 20, 3), category(2, 3, 1), category(3, 20, 2)])
+
+    expect(sorted.map((entry) => entry.category)).toEqual([2, 3, 1])
+  })
+
+  it('keeps a group together when two entries share a number', () => {
+    const sorted = inProsonataOrder([category(1, 20, 1), category(2, 3, 1), category(3, 20, 1)])
+
+    expect(sorted.map((entry) => entry.group)).toEqual([3, 20, 20])
+  })
+
+  it('leaves the given array alone', () => {
+    const given = [category(1, 9, 2), category(2, 1, 1)]
+    inProsonataOrder(given)
+
+    expect(given.map((entry) => entry.category)).toEqual([1, 2])
   })
 })

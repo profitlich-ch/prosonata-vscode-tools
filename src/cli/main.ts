@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline/promises'
 
-import type { Project } from '../core/api.js'
+import { inProsonataOrder, type Project } from '../core/api.js'
 import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook } from '../core/hooks.js'
@@ -155,10 +155,19 @@ async function chooseCategory(cwd: string): Promise<number> {
  * knows that nothing will be sent until there is one.
  */
 async function askForCategory(session: Session, repoRoot: string, project: Project): Promise<number> {
-  const categories = (await session.api.listCategories()).filter(
-    (category) => category.linkedCustomerID === null || category.linkedCustomerID === project.customerID,
+  const categories = inProsonataOrder(
+    (await session.api.listCategories()).filter(
+      (category) => category.linkedCustomerID === null || category.linkedCustomerID === project.customerID,
+    ),
   )
-  const category = await pick(categories, (candidate) => candidate.categoryName, 'Kategorienummer: ')
+
+  const grouped = categories.some((category) => category.groupName !== null)
+  const category = await pick(
+    categories,
+    (candidate) => candidate.categoryName,
+    'Kategorienummer: ',
+    grouped ? (candidate) => candidate.groupName : undefined,
+  )
   if (!category) {
     process.stderr.write('keine Kategorie gewählt — ProSonata verlangt eine, es wird also nichts gesendet\n')
     return 0
@@ -386,14 +395,31 @@ async function ask(question: string): Promise<string> {
   }
 }
 
-/** A numbered list, the way `init` has always shown projects and categories. */
-async function pick<T>(items: T[], label: (item: T) => string, question: string): Promise<T | null> {
+/**
+ * A numbered list, the way `init` has always shown projects and categories.
+ * `group` puts a heading over each block, the terminal's answer to `optgroup`;
+ * the numbering runs on through it, because that is what gets typed.
+ */
+async function pick<T>(
+  items: T[],
+  label: (item: T) => string,
+  question: string,
+  group?: (item: T) => string | null,
+): Promise<T | null> {
   if (items.length === 0) {
     process.stderr.write('nichts zur Auswahl\n')
     return null
   }
 
+  let heading: string | null | undefined
   items.slice(0, 40).forEach((item, index) => {
+    if (group) {
+      const name = group(item)
+      if (name !== heading) {
+        heading = name
+        process.stdout.write(`\n  ${name ?? 'Ohne Gruppe'}\n`)
+      }
+    }
     process.stdout.write(`  ${String(index + 1).padStart(2)}  ${label(item)}\n`)
   })
 
