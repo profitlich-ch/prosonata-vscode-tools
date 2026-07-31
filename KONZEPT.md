@@ -748,17 +748,24 @@ Kein `end` – ein Timer kennt kein Beenden.
 
   ```
   ProSonata
-    Projekt        Feature Buchungsmodul    15,25 von 20 h
+    Projekt        24-017 Feature Buchungsmodul
     Zeitraster     exakt
-    Branch         feature/buchung · pro Branch
-    ─────────────────────────────────────────
+    Branch         feature/buchung
+    Zeiteintrag    pro Branch
+    Kategorie      Programmierung
     Laufend        Buchungsmodul        2:14
     Offen          Rabattstufen         seit 6 Tagen
   ```
 
   Klick auf eine Zeile öffnet den passenden QuickPick – Projekt wechseln, Zeitraster setzen,
-  Modus umschalten, Zeiteintrag abschliessen. Auf dem Hauptbranch ist die Modus-Zeile
-  deaktiviert und zeigt `pro Commit`.
+  Kategorie und Modus umschalten, Zeiteintrag abschliessen. Auf dem Hauptbranch ist die Zeile
+  `Zeiteintrag` deaktiviert und zeigt `pro Commit`.
+
+  Der Modus steht in einer **eigenen Zeile**, nicht hinter dem Branchnamen: Namen wie
+  `167-startseite-mobile-tablet-expertise-layout` schieben in einer schmalen Seitenleiste
+  alles Nachfolgende aus dem Bild – ausgerechnet die Einstellung, die bestimmt, was auf der
+  Rechnung landet. Die frühere Trennlinie in dieser Skizze gibt es nicht: Eine TreeView kennt
+  keine Separatoren, und eine Zeile, die nur so aussieht, ist gebastelt.
 
   Die Stundenangabe neben dem Projekt stammt aus `timeNeeded` und `timePlanned`
   (Abschnitt 9) – beim Zeiterfassen die nützlichste Zahl, die die API hergibt. Sie wird nur

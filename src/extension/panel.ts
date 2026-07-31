@@ -81,13 +81,23 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
         command: 'prosonata.chooseGrid',
         title: 'Zeitraster wählen',
       }),
+      new PanelRow('Branch', context.scope.branch, 'git-branch'),
+      /*
+       * Its own row, not appended to the branch name: names like
+       * `167-startseite-mobile-tablet-expertise-layout` push everything behind
+       * them out of a side bar, and this is the setting that decides what ends
+       * up on the invoice. On the main branch it is fixed to per commit and
+       * therefore not clickable (KONZEPT.md §3).
+       */
       new PanelRow(
-        'Branch',
-        `${context.scope.branch} · ${context.mode === 'branch' ? 'ein Eintrag pro Branch' : 'ein Eintrag pro Commit'}`,
-        'git-branch',
+        'Zeiteintrag',
+        context.mode === 'branch' ? 'pro Branch' : 'pro Commit',
+        // `clockface`, not `clock`: the latter is an alias for `history`, which
+        // the log in the title bar already uses.
+        'clockface',
         context.scope.branch === context.mainBranch
           ? undefined
-          : { command: 'prosonata.toggleMode', title: 'Modus wechseln' },
+          : { command: 'prosonata.toggleMode', title: 'Zwischen pro Branch und pro Commit wechseln' },
       ),
       // Directly above the timer: the category belongs to the work that is about
       // to run, and without one ProSonata refuses the entry.

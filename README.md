@@ -92,21 +92,72 @@ Solange ein Eintrag offen ist, trägt er eine Markierung:
 ProSonata sichtbar — die API hat kein Statusfeld — und sie trägt die Identität
 des Branches, sodass es möglich ist, auf weiteren Computern am selben Branch zu arbeiten.
 
+## Auf mehreren Computern
+
+Die Kennung im Marker entsteht aus dem ersten Commit des Repositories und dem
+Branchnamen — in jedem Klon dieselbe. Der zweite Computer findet den Zeiteintrag
+deshalb wieder und **ergänzt** ihn, statt einen zweiten anzulegen. Vorausgesetzt
+ist, dass nicht beide gleichzeitig messen.
+
+Zwei **Personen** stören einander dagegen nicht: Zeiten gehören in ProSonata
+Benutzern, und jede führt ihren eigenen Eintrag pro Branch.
+
+Läuft auf einem anderen Computer gerade ein Timer auf demselben Branch, sagt es
+dir das beim Starten. Mehr nicht — anhalten lässt sich ein Timer auf einem
+zugeklappten Rechner nicht.
+
+Schliesst ein Computer den Eintrag ab, während auf dem anderen noch Zeit
+angefallen ist, wird dort gefragt: **zum abgeschlossenen Eintrag hinzufügen**
+oder **einen neuen anlegen**. Geschrieben wird bis zur Antwort nichts, und der
+abgeschlossene Eintrag wird nie ungefragt wieder angefasst.
+
+## Wenn ein Timer vergessen geht
+
+Läuft ein Segment stundenlang am Stück, fragt die Erweiterung, **wie viel davon
+zählt** — alles, eine eigene Dauer, oder nichts. Sie rät nicht: Ein Timer, der
+über Nacht lief, hat Wanduhrzeit gemessen, und was davon Arbeit war, weisst nur
+du. Im Terminal macht `prosonata pause 1:30` dasselbe.
+
+Beim Schliessen des letzten VS-Code-Fensters wird pausiert. Abschalten lässt
+sich das mit `"pauseOnWindowClose": false` in `~/.prosonata/config.json`.
+
+Deshalb zeigt die Statusleiste das **laufende Segment** und nicht die Summe des
+Branches: `14:22:07` fällt auf, `37:15:44` nach zwei Wochen auf einem Branch
+nicht. Der Tooltip nennt Branch, Gesamtsumme und was auf den Versand wartet.
+
+## Der Log
+
+Das Uhr-Symbol in der Titelleiste des ProSonata-Panels öffnet alle gemessenen
+Segmente als Dokument, nach Tagen gruppiert, mit einer Branch-Auswahl davor.
+
+Die Branch-Liste stammt aus dem Protokoll unter `~/.prosonata/segments.jsonl`,
+nicht aus Git — **gelöschte Branches behalten damit ihre Stunden**. Das
+Protokoll wird nie gekürzt; es beantwortet als einziges, wie viel an welchem
+*Tag* gearbeitet wurde. Ein Zeiteintrag trägt nur eine Summe und das Datum
+seines letzten Schreibvorgangs.
+
+Aufgezeichnet wird, was auf diesem Computer gemessen wurde. Was auf einem
+anderen anfiel, steht in ProSonata, aber nicht hier.
+
+Im Terminal: `prosonata log`, `log alle`, `log <branch>`, `log ?` für die Liste.
+
 ## CLI Befehle
 
 ```sh
 prosonata init                    Konto und dieses Repository einrichten, Hook installieren
 prosonata start                   Timer dieses Branches starten oder fortsetzen
-prosonata pause                   Timer pausieren und das laufende Segment buchen
+prosonata pause [h:mm|Minuten]    Timer pausieren; mit Dauer wird nur diese gebucht
 prosonata status                  was läuft, was ist offen, was wartet
 prosonata send                    alles senden, was gerade fällig ist
 
 prosonata project                 Projekt dieses Repositories wählen
 prosonata category                Zeitkategorie dieses Projekts wählen
-prosonata grid [exakt|5|15|30]    Zeitraster setzen
-prosonata mode [branch|commit]    an Branch oder an Commits binden
+prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
+prosonata mode [branch|commit]    ein Eintrag pro Branch oder pro Commit
 prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
 prosonata text <Text>             Text des offenen Zeiteintrags ändern
+prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
+prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
 ```
 
 Was ein Argument nimmt, fragt danach, wenn es weggelassen wird — mit Argument
@@ -117,6 +168,9 @@ läuft der Befehl ohne Rückfrage durch und taugt damit auch für Skripte.
 - **Keine Aktivitätserkennung.** Aktivität im Dateisystem ist nicht dasselbe wie
   abrechenbare Zeit. Das Werkzeug warnt, es bucht nie von selbst.
 - **Kein automatischer Start** bei Checkout, Merge oder beim Öffnen des Editors.
+- **Kein Anhalten aus der Ferne.** Läuft auf einem anderen Computer ein Timer,
+  warnt es — anhalten kann es ihn nicht, und die Zeit für dich buchen erst
+  recht nicht.
 - **Keine Speicherung im Repository.** Sie lägen im Repository des Kunden und
   zeigten ihm den Aufwand pro Commit. Alle Segmente liegen lokal auf dem Computer.
 - **Zum Commit-Zeitpunkt wird nichts gesendet.** Ein Schreibvorgang geht raus,
