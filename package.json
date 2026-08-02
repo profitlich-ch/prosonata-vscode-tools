@@ -2,7 +2,7 @@
   "name": "prosonata-vscode-tools",
   "displayName": ":Profitlich",
   "description": "Verbindet VS Code mit ProSonata. Vorerst: Zeiterfassung, gebunden an Commits und Branches.",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "publisher": "profitlich",
   "repository": {
     "type": "git",
@@ -99,6 +99,11 @@
         "command": "prosonata.adjust",
         "title": "Zeit korrigieren",
         "icon": "$(edit)",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.attachToLast",
+        "title": "Zeit dem letzten Eintrag zuschlagen",
         "category": "ProSonata"
       },
       {

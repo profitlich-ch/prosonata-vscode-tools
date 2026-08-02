@@ -308,3 +308,31 @@ describe('the running mark', () => {
     expect(api.entries.get(timeId)?.workingTimeStart).toBeNull()
   })
 })
+
+/*
+ * A repository may round differently from the default. What counts is the grid
+ * at the moment of writing: choosing 15 minutes is meant to reach every entry
+ * still open, exactly as a corrected project or category does.
+ */
+describe('the grid a repository rounds by', () => {
+  it('rounds the write by the repository, not by the default', async () => {
+    const { api, clock, deps } = setup({ grid: { kind: 'exact' } })
+    const state = stateWith(entry({ seconds: 2 * 3600 + 300 }))
+    clock.advance(DEFAULTS.sendDelaySeconds)
+
+    await send(state, { ...deps, gridFor: () => ({ kind: 'minutes', minutes: 15 }) })
+
+    // 2:05 h measured, and the grid rounds up to the next quarter hour.
+    expect([...api.entries.values()][0]?.hours).toBeCloseTo(2.25, 2)
+  })
+
+  it('falls back to the default when the repository has none', async () => {
+    const { api, clock, deps } = setup({ grid: { kind: 'minutes', minutes: 30 } })
+    const state = stateWith(entry({ seconds: 2 * 3600 + 300 }))
+    clock.advance(DEFAULTS.sendDelaySeconds)
+
+    await send(state, { ...deps, gridFor: () => deps.config.grid })
+
+    expect([...api.entries.values()][0]?.hours).toBeCloseTo(2.5, 2)
+  })
+})

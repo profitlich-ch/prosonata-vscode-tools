@@ -1,9 +1,10 @@
 import * as vscode from 'vscode'
 
-import { awaitingDecision, currentSeconds, openEntry, runningSeconds, unwrittenSeconds } from '../core/tracking.js'
+import { awaitingDecision, currentSeconds, lastClosedEntry, openEntry, runningSeconds, unwrittenSeconds } from '../core/tracking.js'
 import type { RepoProject } from '../core/repo-config.js'
 import type { RepoContext, Session } from '../core/session.js'
 import type { State } from '../core/types.js'
+import { hoursAndMinutes } from '../core/report.js'
 import { workingTime } from '../core/working-time.js'
 
 /**
@@ -129,6 +130,24 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
         'timer',
       ),
     )
+
+    /*
+     * Time with nowhere to go yet: measured after a commit closed its entry, and
+     * no new commit has claimed it. It would travel with the next one — under
+     * that commit's text. Whoever worked on after the commit can say otherwise
+     * here. The condition is read from the state alone; the panel asks nothing
+     * of ProSonata.
+     */
+    if (entry && entry.text === '' && unwrittenSeconds(entry) > 0 && lastClosedEntry(state, context.scope)) {
+      rows.push(
+        new PanelRow(
+          'Nicht gebucht',
+          `${hoursAndMinutes(unwrittenSeconds(entry))} h → letzter Eintrag`,
+          'fold-up',
+          { command: 'prosonata.attachToLast', title: 'Dem letzten Eintrag zuschlagen' },
+        ),
+      )
+    }
 
     for (const open of state.entries.filter((candidate) => candidate.state === 'open' && candidate.text !== '')) {
       rows.push(

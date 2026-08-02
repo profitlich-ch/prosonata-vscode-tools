@@ -4,6 +4,42 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] — 2026-08-02
+
+### Hinzugefügt
+
+- **Nacharbeit lässt sich dem letzten Eintrag zuschlagen.** Auf `main` schliesst
+  jeder Commit seinen Eintrag; wer danach weiterarbeitet und nicht mehr
+  committet, hat Zeit gemessen, die zum eben gemachten Commit gehört. Die
+  Seitenleiste zeigt dafür **Nicht gebucht**, im Terminal `prosonata attach`.
+  Geschrieben wird nur die neue Gesamtsumme — Text und Datum des Eintrags
+  bleiben unberührt.
+- **Die Bestätigung nennt die Zahlen, die wirklich hinausgehen**: `2.00 h wird
+  2.25 h`. Das Zeitraster rundet auf, fünf Minuten kosten bei
+  Viertelstunden-Raster also eine Viertelstunde — das gehört vor den Klick, nicht
+  in eine Meldung danach.
+- **Fakturierte Einträge werden abgelehnt**, und die Ausgangszahl kommt aus
+  ProSonata statt aus dem lokalen Zustand: Dort kann von Hand korrigiert worden
+  sein, und geschrieben wird eine Summe.
+
+### Behoben
+
+- **Das Zeitraster eines Repositories erreichte den Versand nie.** Panel und Log
+  zeigten es, gerundet wurde beim Schreiben aber immer mit der Vorgabe aus
+  `~/.prosonata/config.json` — ein Repository konnte also eine Rundung anzeigen,
+  die nie stattfand. Der Versand fragt das Raster jetzt für jeden Eintrag beim
+  Repository ab und fällt nur zurück, wenn dort keines gesetzt ist. Damit wirkt
+  ein geändertes Raster wie beschrieben auf alle noch offenen Einträge.
+
+### Geändert
+
+- **Die Statusleiste zeigt die Summe des Branches** statt des laufenden
+  Segments; das Segment steht im Tooltip. Im Panel stehen weiterhin beide Zahlen.
+- **Das Log öffnet als gesetzte Markdown-Vorschau** statt als Text und ist
+  wirklich schreibgeschützt. Bisher war es ein unbenanntes Dokument: Man konnte
+  hineintippen — wirkungslos —, und beim Schliessen fragte VS Code nach dem
+  Speichern einer Datei, die es nie gab.
+
 ## [0.5.1] — 2026-08-02
 
 Nachlese zur 0.5.0: vier Fehler, die erst im Alltag auffielen, und ein

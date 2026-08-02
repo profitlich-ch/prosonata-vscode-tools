@@ -7,6 +7,7 @@ import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import { noteFor, readAdjustment } from '../core/adjust.js'
+import { describeAttachment, describePlan } from '../core/attach.js'
 import { describeBranch, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
@@ -46,6 +47,7 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata mode [branch|commit]    ein Eintrag pro Branch oder pro Commit
   prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
   prosonata text <Text>             Text des offenen Zeiteintrags ändern
+  prosonata attach                  Zeit seit dem letzten Commit dem Eintrag jenes Commits zuschlagen
   prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
   prosonata log [Branch]            gemessene Segmente, ohne Branch die dieses
   prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
@@ -83,6 +85,8 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await closeEntry(cwd, argument)
       case 'text':
         return await changeText(cwd, argument)
+      case 'attach':
+        return await attach(cwd)
       case 'resume':
         return await resume(cwd, argument)
       case 'log':
@@ -279,6 +283,28 @@ async function closeEntry(cwd: string, argument: string): Promise<number> {
   session.store.update((state) => close(state, entry.id, text, session.clock.now(), randomUUID))
   process.stdout.write(`abgeschlossen: ${text}\n`)
   return report(await session.flush(true))
+}
+
+/**
+ * Adds the time measured since the last commit to the entry that commit closed.
+ * Asks first: it writes to an entry the tool considers finished.
+ */
+async function attach(cwd: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const result = await session.attachToLastClosed(context, async (plan) => {
+    const answer = await ask(`${describePlan(plan)}\nZuschlagen? [j/N] `)
+    return /^(j|ja|y|yes)$/i.test(answer.trim())
+  })
+
+  if (result.kind === 'done') {
+    process.stdout.write(`zugeschlagen: ${describeAttachment(result)}\n`)
+    return 0
+  }
+  process.stderr.write(`${describeAttachment(result)}\n`)
+  return result.kind === 'cancelled' ? 0 : 2
 }
 
 /**

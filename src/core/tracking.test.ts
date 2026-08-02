@@ -9,6 +9,8 @@ import {
   commit,
   currentSeconds,
   keepFromRunning,
+  lastClosedEntry,
+  moveToClosed,
   openEntry,
   runningSeconds,
   parkClosedElsewhere,
@@ -601,5 +603,60 @@ describe('a correction while nothing runs', () => {
     state.entries[0]!.awaitingDecision = true
 
     expect(bookCorrection(state, options, 900).seconds).toBe(0)
+  })
+})
+
+describe('moving follow-up time onto a closed entry', () => {
+  /** A commit on main: the entry is closed, the timer runs on into a new one. */
+  function afterCommit() {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock, main)
+    clock.advance(2 * 3600)
+    state = commit(state, {
+      scope: main,
+      mode: 'commit',
+      text: 'Kirby Update',
+      fromTrailer: false,
+      sha: 'deadbee',
+      at: clock.now(),
+      newId,
+      projectId: 166,
+      categoryId: 70,
+      key: 'a3f9c1',
+    }).state
+
+    const closed = state.entries.find((entry) => entry.state === 'closed')!
+    closed.timeId = 2112
+    const open = openEntry(state, main)!
+    open.seconds = 300
+    return { state, closedId: closed.id, openId: open.id }
+  }
+
+  it('is the last closed entry of this branch that gets it', () => {
+    const { state, closedId } = afterCommit()
+
+    expect(lastClosedEntry(state, main)?.id).toBe(closedId)
+    // Another branch has its own history and must not be reached from here.
+    expect(lastClosedEntry(state, scope)).toBeUndefined()
+  })
+
+  it('moves the seconds and leaves the finished entry finished', () => {
+    const { state, closedId, openId } = afterCommit()
+
+    const next = moveToClosed(state, openId, closedId, 300)
+
+    const closed = next.entries.find((entry) => entry.id === closedId)!
+    expect(closed.seconds).toBe(2 * 3600 + 300)
+    expect(closed.timeId).toBe(2112)
+    expect(closed.text).toBe('Kirby Update')
+    expect(closed.state).toBe('closed')
+    expect(next.entries.find((entry) => entry.id === openId)?.seconds).toBe(0)
+  })
+
+  it('refuses an entry ProSonata does not know, since nothing could be written there', () => {
+    const { state, closedId, openId } = afterCommit()
+    state.entries.find((entry) => entry.id === closedId)!.timeId = null
+
+    expect(moveToClosed(state, openId, closedId, 300)).toBe(state)
   })
 })

@@ -162,3 +162,134 @@ describe('the boundary a correction must not set', () => {
     expect(session.lastSegmentEnd(context)).toBe(NINE + 3600_000)
   })
 })
+
+/**
+ * Follow-up work after a commit (KONZEPT.md §3). On the main branch the commit
+ * closes its entry and the timer runs on into a new one — whatever is measured
+ * from then on would travel with the *next* commit, under its text.
+ */
+describe('adding follow-up time to the entry a commit closed', () => {
+  const main = { ...context, scope: { repoPath: '/work/shop', branch: 'main' }, mode: 'commit' } as RepoContext
+
+  async function afterCommit(options: { invoiced?: boolean; grid?: Config['grid']; hours?: string } = {}) {
+    const api = new FakeApi()
+    const clock = fixedClock(NINE)
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-attach-'))
+    const config: Config = { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k', ...(options.grid ? { grid: options.grid } : {}) }
+    const session = new Session(config, {
+      api,
+      clock,
+      store: new StateStore(join(dir, 'state.json')),
+      journal: new Journal(join(dir, 'log.jsonl')),
+      segments: new SegmentLog(join(dir, 'segments.jsonl')),
+    })
+
+    await session.start(main)
+    clock.advance(2 * 3600)
+    session.commit(main, { text: 'Kirby Update, Linkfarbe', fromTrailer: false, sha: 'deadbee' })
+
+    // As if the closing write had gone out: ProSonata holds the two hours.
+    const remote = await api.createEntry({
+      projectID: 166,
+      category: 70,
+      date: '2026-07-30',
+      detail: 'Kirby Update, Linkfarbe',
+      workingTime: options.hours ?? '2.00',
+    })
+    if (options.invoiced) api.entries.get(remote.timeID)!.isInvoiced = true
+    session.store.update((state) => {
+      const closed = state.entries.find((entry) => entry.state === 'closed')!
+      closed.timeId = remote.timeID
+      closed.lastWritten = closed.seconds
+      state.pending = []
+      return state
+    })
+
+    // Five minutes of follow-up, the timer still running.
+    clock.advance(300)
+    api.calls.length = 0
+    return { api, session, clock, remote }
+  }
+
+  it('adds the minutes to the closed entry and leaves its text alone', async () => {
+    const { api, session, remote } = await afterCommit()
+
+    const result = await session.attachToLastClosed(main, async () => true)
+
+    expect(result.kind).toBe('done')
+    expect(api.entries.get(remote.timeID)?.hours).toBeCloseTo(2 + 5 / 60, 2)
+    expect(api.entries.get(remote.timeID)?.detail).toBe('Kirby Update, Linkfarbe')
+    // Gone from here, so the next commit cannot book the same minutes again.
+    expect(openEntry(session.state(), main.scope)?.seconds).toBe(0)
+  })
+
+  // Somebody may have corrected the entry in ProSonata by hand. The write is a
+  // sum, so the sum has to start from what stands there, not from what we
+  // remember writing.
+  it('counts from what ProSonata holds, not from the local number', async () => {
+    const { api, session, remote } = await afterCommit({ hours: '3.00' })
+
+    await session.attachToLastClosed(main, async () => true)
+
+    expect(api.entries.get(remote.timeID)?.hours).toBeCloseTo(3 + 5 / 60, 2)
+  })
+
+  it('refuses an invoiced entry without asking anybody', async () => {
+    const { api, session, remote } = await afterCommit({ invoiced: true })
+
+    const result = await session.attachToLastClosed(main, async () => {
+      throw new Error('darf nicht gefragt werden')
+    })
+
+    expect(result.kind).toBe('invoiced')
+    expect(api.entries.get(remote.timeID)?.hours).toBe(2)
+    expect(api.calls.some((call) => call.startsWith('updateEntry'))).toBe(false)
+  })
+
+  /*
+   * The grid rounds up, so a small amount never disappears — but it can land in
+   * the quarter hour that was already being charged. Then the confirmation has
+   * to say that the hours do not move, or one confirms a write for nothing.
+   */
+  it('says when the grid leaves the hours where they are', async () => {
+    const { session } = await afterCommit({ grid: { kind: 'minutes', minutes: 15 }, hours: '2.05' })
+
+    const result = await session.attachToLastClosed(main, async () => true)
+
+    expect(result.kind === 'done' && result.plan.before).toBe('2.25')
+    expect(result.kind === 'done' && result.plan.after).toBe('2.25')
+  })
+
+  // A quarter-hour grid turns five minutes into a quarter hour. The number the
+  // customer pays is the one that has to be shown before the click.
+  it('shows the hours the grid will actually write', async () => {
+    const { session } = await afterCommit({ grid: { kind: 'minutes', minutes: 15 } })
+
+    const result = await session.attachToLastClosed(main, async () => true)
+
+    expect(result.kind === 'done' && result.plan.after).toBe('2.25')
+  })
+
+  it('writes nothing when the answer is no', async () => {
+    const { api, session, remote } = await afterCommit()
+
+    const result = await session.attachToLastClosed(main, async () => false)
+
+    expect(result.kind).toBe('cancelled')
+    expect(api.entries.get(remote.timeID)?.hours).toBe(2)
+    // The measured time stays where it was, ready for the next commit.
+    expect(openEntry(session.state(), main.scope)?.seconds).toBe(300)
+  })
+
+  it('has nothing to add to on a branch that never closed an entry', async () => {
+    const api = new FakeApi()
+    const session = sessionWith(api)
+    await session.start(context)
+    session.store.update((state) => {
+      state.entries[0]!.seconds = 300
+      return state
+    })
+
+    expect((await session.attachToLastClosed(context, async () => true)).kind).toBe('noTarget')
+  })
+})

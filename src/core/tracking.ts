@@ -223,6 +223,39 @@ function detach(state: State, entryId: string, secondsOf: (entry: TimeEntry) => 
 }
 
 /**
+ * The entry a follow-up may be added to: the last one closed on this branch that
+ * ProSonata knows. There is no closing time in the model — entries are appended
+ * as they are created, so the last one in that order is the last one there was.
+ */
+export function lastClosedEntry(state: State, scope: Scope): TimeEntry | undefined {
+  return [...state.entries]
+    .reverse()
+    .find((entry) => entry.state === 'closed' && entry.timeId !== null && sameScope(entry.scope, scope))
+}
+
+/**
+ * Moves measured time from the open entry onto a closed one (KONZEPT.md §3).
+ *
+ * The work happened after the commit that closed it and belongs to it — a case
+ * only a person can judge, which is why nothing here decides it. The closed
+ * entry keeps its `timeId` and its text: what goes out is a `workingTime` alone.
+ */
+export function moveToClosed(state: State, openId: string, closedId: string, seconds: number): State {
+  const next = structuredClone(state)
+  const open = findEntry(next, openId)
+  const closed = findEntry(next, closedId)
+  if (!open || !closed || closed.timeId === null || seconds <= 0) return state
+
+  open.seconds = Math.max(0, open.seconds - seconds)
+  closed.seconds += seconds
+  // What ProSonata holds after the write — the entry is finished, so this is
+  // its final total, not a running one.
+  closed.remoteFinalSeconds = (closed.remoteFinalSeconds ?? 0) + seconds
+  closed.lastWritten = closed.seconds + closed.foreignSeconds
+  return next
+}
+
+/**
  * Changes the text of an entry that is still open (KONZEPT.md §8). A typo in a
  * trailer would otherwise only be correctable by another commit.
  *

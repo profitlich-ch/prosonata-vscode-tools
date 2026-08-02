@@ -8,6 +8,7 @@ import { describeRepo, fetchPrune, isMerged, remoteBranchGone, type GitRepo } fr
 import { hookNeedsRepair, installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import { noteFor, planAdjustment, readAdjustment, type Adjustment } from '../core/adjust.js'
+import { describeAttachment, describePlan } from '../core/attach.js'
 import { describeBranch, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
@@ -65,6 +66,10 @@ export function activate(context: vscode.ExtensionContext): void {
   panel = new Panel(currentSession, currentContext, () => cached)
   context.subscriptions.push(vscode.window.registerTreeDataProvider('prosonata.panel', panel))
 
+  context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(LOG_SCHEME, logDocuments),
+  )
+
   register(context, 'prosonata.setup', () => setUpAccount())
   register(context, 'prosonata.start', withContext(async (s, c) => void (await s.start(c))))
   register(context, 'prosonata.pause', withContext((s, c) => void s.pause(c)))
@@ -77,6 +82,7 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.closeEntry', withContext(closeEntry))
   register(context, 'prosonata.changeText', withContext(changeText))
   register(context, 'prosonata.resolveClosedElsewhere', withContext(askAboutClosedElsewhere))
+  register(context, 'prosonata.attachToLast', withContext(attachToLast))
   register(context, 'prosonata.log', withRepo(showLog))
   register(context, 'prosonata.adjust', withContext(adjustTime))
 
@@ -542,8 +548,9 @@ function describe(
  * The segment log (KONZEPT.md §7). The branches come from the log, not from git,
  * so a branch that was deleted long ago still has its hours here.
  *
- * Shown as a read-only document, not a webview: native, no UI code of our own,
- * and it can be searched, copied and printed like any other text.
+ * Shown as VS Code's own markdown preview, not as a webview of ours: the table
+ * is set, the headings are headings, and it can still be searched, copied and
+ * printed. The text behind it stays reachable over the preview's own button.
  */
 async function showLog(session: Session, repo: GitRepo): Promise<void> {
   const segments = session.segments.read().filter((segment) => segment.repoPath === repo.root)
@@ -567,12 +574,47 @@ async function showLog(session: Session, repo: GitRepo): Promise<void> {
   if (!picked) return
 
   const grid = readRepoConfig(repo.root).grid ?? session.config.grid
-  const document = await vscode.workspace.openTextDocument({
-    content: renderReport(segments, { branch: picked.branch, grid }),
-    language: 'markdown',
-  })
-  await vscode.window.showTextDocument(document, { preview: true })
+  const uri = logDocuments.set(picked.branch ?? 'Alle Branches', renderReport(segments, { branch: picked.branch, grid }))
+  try {
+    await vscode.commands.executeCommand('markdown.showPreview', uri)
+  } catch {
+    // The preview belongs to a built-in extension. Where it is missing — a
+    // stripped build, a remote without it — the text is still worth showing.
+    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri), { preview: true })
+  }
 }
+
+/**
+ * The log as a document VS Code owns but nobody can write to. An untitled
+ * document would look editable, keep the typing, and ask whether to save a file
+ * that does not exist — for an archive that is only ever appended to
+ * (KONZEPT.md §3), that is the wrong offer.
+ *
+ * The same branch reuses its URI, so opening the log twice refreshes the tab
+ * instead of stacking a second one.
+ */
+const LOG_SCHEME = 'prosonata'
+
+class LogDocuments implements vscode.TextDocumentContentProvider {
+  private readonly texts = new Map<string, string>()
+  private readonly changed = new vscode.EventEmitter<vscode.Uri>()
+  readonly onDidChange = this.changed.event
+
+  set(title: string, text: string): vscode.Uri {
+    // The suffix is what gives the tab its markdown highlighting; a branch name
+    // carries slashes, which would otherwise become path segments.
+    const uri = vscode.Uri.parse(`${LOG_SCHEME}:${encodeURIComponent(title)}.md`)
+    this.texts.set(uri.toString(), text)
+    this.changed.fire(uri)
+    return uri
+  }
+
+  provideTextDocumentContent(uri: vscode.Uri): string {
+    return this.texts.get(uri.toString()) ?? ''
+  }
+}
+
+const logDocuments = new LogDocuments()
 
 function installHookHere(repoRoot: string): void {
   const cli = vscode.Uri.joinPath(extensionUri!, 'dist', 'cli.cjs').fsPath
@@ -654,6 +696,27 @@ async function closeEntry(session: Session, context: RepoContext, entryId?: stri
 
   session.store.update((current) => close(current, entry.id, text, session.clock.now(), randomUUID))
   await session.flush(true)
+}
+
+/**
+ * Adds the time measured since the last commit to the entry that commit closed
+ * (KONZEPT.md §3). Modal on purpose: it writes to an entry the tool has already
+ * declared finished, and the grid may swallow the whole amount — both belong in
+ * front of the click, not in a message afterwards.
+ */
+async function attachToLast(session: Session, context: RepoContext): Promise<void> {
+  const result = await session.attachToLastClosed(context, async (plan) => {
+    const answer = await vscode.window.showWarningMessage(
+      'Zeit dem letzten Eintrag zuschlagen?',
+      { modal: true, detail: describePlan(plan) },
+      'Zuschlagen',
+    )
+    return answer === 'Zuschlagen'
+  })
+
+  if (result.kind === 'done') void vscode.window.showInformationMessage(`ProSonata: ${describeAttachment(result)}`)
+  else if (result.kind !== 'cancelled') void vscode.window.showWarningMessage(`ProSonata: ${describeAttachment(result)}`)
+  reload()
 }
 
 /** Every 30 seconds: watch HEAD, send what is due, warn if needed. */
@@ -875,21 +938,23 @@ function draw(): void {
   }
 
   /*
-   * The running segment, not the entry's total. A timer shows how long it has
-   * been running — that is the number that makes a forgotten one visible.
-   * `14:22:07` catches the eye; `37:15:44` on a long-lived branch does not.
-   * What the branch has collected altogether belongs in the panel and on the
-   * invoice, and into the tooltip here.
+   * What the branch has collected — the number that ends up on the invoice. A
+   * single figure without a label is read as "my time here", and that is the
+   * total, not the stretch since the last start.
+   *
+   * The running segment moves into the tooltip. It keeps its own job elsewhere:
+   * the panel shows both side by side, and `warnAboutLongRun` still measures the
+   * segment, because a forgotten timer shows in that number alone.
    */
   const icon = here?.startedAt ? '$(debug-pause)' : '$(play)'
   const others = running.length > 1 ? ` +${running.length - 1}` : ''
   const segment = runningSeconds(state, active.clock, context.scope)
   const total = currentSeconds(state, active.clock, context.scope)
 
-  statusBar.text = `${icon} ${clock(segment)}${others}`
+  statusBar.text = `${icon} ${clock(total)}${others}`
   statusBar.tooltip = [
     context.scope.branch,
-    `Branch insgesamt ${clock(total)}`,
+    here?.startedAt ? `laufendes Segment ${clock(segment)}` : 'pausiert',
     state.pending.length > 0 ? `${state.pending.length} warten auf Versand` : 'nichts wartet auf Versand',
   ].join(' · ')
   statusBar.show()

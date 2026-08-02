@@ -200,13 +200,76 @@ Besonders festgehalten wird die **Kürzung**: mit der behaltenen Spanne *und* de
 gelaufenen Dauer. Es ist die einzige Stelle, an der gemessene Zeit absichtlich verschwindet –
 sie darf nicht zusätzlich unbemerkt verschwinden.
 
-Gezeigt wird das Protokoll als **schreibgeschütztes Dokument** im Editor, mit einer QuickPick
-für den Branch davor; im Terminal gibt `prosonata log` dasselbe aus. Kein Webview
-(Abschnitt 8), und die Darstellung liegt in `core`, damit beide Frontends dieselben Summen und
-dieselben Worte zeigen.
+Gezeigt wird das Protokoll als **gesetzte Markdown-Vorschau** von VS Code, mit einer QuickPick
+für den Branch davor; im Terminal gibt `prosonata log` dasselbe aus. Kein eigenes Webview
+(Abschnitt 8): Der Text kommt aus einem `TextDocumentContentProvider` unter dem Schema
+`prosonata:`, VS Code setzt ihn. Damit ist er nicht bearbeitbar, ohne dass es jemand verbieten
+müsste – ein unbenanntes Dokument liesse sich beschreiben und fragte beim Schliessen nach dem
+Speichern einer Datei, die es nie gab. Die Darstellung selbst liegt in `core`, damit beide
+Frontends dieselben Summen und dieselben Worte zeigen.
 
 Was es nicht weiss: den anderen Rechner. Segmente werden dort aufgezeichnet, wo sie anfallen –
 ProSonata hält die Summe beider, dieses Protokoll die Einzelheiten eines einzigen.
+
+**Warum es nicht bearbeitbar ist.** Die Frage kommt naheliegenderweise auf: Da steht eine Liste,
+und in ihr steht eine falsche Zeile. Bearbeiten wäre trotzdem falsch:
+
+- Das Protokoll ist **keine Autorität**. Abgerechnet wird `entry.seconds` und, sobald gesendet,
+  der Eintrag in ProSonata; die Segmente fliessen nie dorthin zurück. Eine geänderte Zeile
+  änderte den Bericht, nicht die Rechnung – danach widersprächen sich beide, und das Protokoll
+  wäre das Dokument, das lügt.
+- Es wird **nur angehängt**. Das macht es unempfindlich gegen Abstürze: Eine abgerissene Zeile
+  kostet diese Zeile, nicht die Datei. Bearbeiten hiesse, die Datei neu zu schreiben.
+- Das Ändern einer Summe **gibt es bereits**, in der Form, die zum Archiv passt: als
+  Korrekturzeile. Sie hängt an, statt zu überschreiben, und hält damit fest, *dass* korrigiert
+  wurde – ein Bearbeiten löschte genau diese Spur.
+- Der auf einem anderen Rechner gemessene Anteil liegt gar nicht hier und wäre von hier aus
+  ohnehin nicht zu berichtigen.
+
+Wer einen bereits gesendeten Eintrag korrigieren muss, tut das in ProSonata. Was hier korrigiert
+werden kann, ist das laufende Segment – über die Zeitkorrektur (Abschnitt 3, *Zeitwert und
+Datum*).
+
+### Das Zeitraster
+
+Gerundet wird **einmal**: beim Schreiben, auf die Gesamtsumme des Zeiteintrags. Segmente bleiben
+sekundengenau – rundete jedes für sich, summierten sich die Fehler. Gerundet wird **aufwärts**
+(`Math.ceil`): Bei einem Raster von 15 Minuten werden aus 2:05 h gebuchte 2.25 h.
+
+Das Raster gehört zum **Repository**, denn die Abmachung, wie gerundet wird, gehört zum Kunden.
+Hat ein Repository keines, gilt die Vorgabe aus `config.json`; die ist nur dort zu ändern und
+steht auf `exakt`. Beides zusammen ist eine Kette – `readRepoConfig(root).grid ?? config.grid` –,
+und sie muss überall dieselbe sein: Panel, Log **und** Versand. Genau daran fehlte es lange: Der
+Versand kannte nur die Vorgabe, sodass ein Repository eine Rundung anzeigen konnte, die nie
+stattfand.
+
+Gefragt wird im Augenblick des Schreibens, nicht beim Anlegen des Eintrags. Damit erreicht ein
+geändertes Raster jeden noch offenen Eintrag – dieselbe Linie wie bei Projekt und Kategorie, wo
+eine Korrektur ebenfalls alles Unfertige mitzieht.
+
+### Nacharbeit einem geschlossenen Eintrag zuschlagen
+
+Auf dem Hauptbranch schliesst ein Commit seinen Eintrag, und der Timer läuft in einen neuen
+weiter. Wer danach noch nacharbeitet und nicht mehr committet, misst Zeit, die zum eben
+gemachten Commit gehört – gebucht würde sie aber beim nächsten, unter dessen Text.
+
+Deshalb lässt sie sich **von Hand** dem zuletzt abgeschlossenen Eintrag dieses Branches
+zuschlagen. Geschrieben wird dabei nur `workingTime` als neue **Gesamtsumme**; Text, Datum und
+Marker bleiben unberührt – dieselbe Mechanik wie bei der Antwort „hinzufügen" auf einen anderswo
+abgeschlossenen Eintrag.
+
+Das biegt bewusst eine Regel: `close()` verspricht, dass eine geschlossene `timeID` nie wieder
+geschrieben wird. Das gilt für alles, was das Werkzeug von sich aus tut. Hier entscheidet ein
+Mensch, einmal, für einen Eintrag. Drei Grenzen bleiben:
+
+- Ein **fakturierter** Eintrag wird abgelehnt (`isInvoiced`), auch auf Wunsch.
+- Die Ausgangszahl kommt aus **ProSonata**, nicht aus dem lokalen Zustand – dort kann von Hand
+  korrigiert worden sein, und geschrieben wird eine Summe.
+- Der offene Eintrag muss ProSonata noch **unbekannt** sein. Ist er schon angelegt, bliebe dort
+  sonst eine leere Hülle zurück; dann ist Abschliessen der richtige Weg.
+
+Gezeigt wird vorher, was tatsächlich geschrieben wird – **nach** dem Raster, das aufrundet: Fünf
+Minuten machen bei Viertelstunden-Raster aus 2.00 h nicht 2.08 h, sondern 2.25 h.
 
 ### Offene Zeiteinträge: `[LAUFEND:kennung]`
 

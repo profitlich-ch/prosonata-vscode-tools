@@ -53,6 +53,10 @@ Auch das Projekt lässt sich später korrigieren. Weil ein Wechsel fast immer ei
 
 Zusätzlich kannst du das Zeitraster wählen und ob Zeiteinträge an Branches oder an Commits gebunden werden. Das Zeitraster wirkt auf alle noch offenen Zeiteinträge, sobald diese das nächste Mal geschrieben werden. Der Wechsel auf «ein Eintrag pro Commit» dagegen schliesst den offenen Branch-Eintrag und fragt vorher nach seinem endgültigen Text.
 
+Das **Zeitraster gilt allein für den Zeiteintrag**, der nach ProSonata geht — nie für die Segmente. Gemessen und im Log gezeigt wird sekundengenau; gerundet wird erst beim Schreiben, und zwar die Gesamtsumme des Eintrags, nicht jedes Segment für sich. So summieren sich keine Rundungen auf. Gerundet wird **aufwärts**, auf die nächste Stufe: Bei einem Raster von 15 Minuten werden aus gemessenen 2:05 h gebuchte 2.25 h.
+
+Wählt ein Repository kein eigenes Raster, gilt die Vorgabe aus `~/.prosonata/config.json` (`"grid"`). Sie steht auf `exakt` und lässt sich nur dort ändern — wer grundsätzlich viertelstündlich abrechnet, setzt sie einmal und muss es nicht in jedem Repository wiederholen.
+
 Alle Befehle stehen auch als [CLI Befehle](#cli-befehle) zur Verfügung.
 
 ## Funktionsweise
@@ -146,16 +150,38 @@ Unter null fällt ein Eintrag ebenfalls nie. Im Terminal:
 Beim Schliessen des letzten VS-Code-Fensters wird pausiert. Abschalten lässt
 sich das mit `"pauseOnWindowClose": false` in `~/.prosonata/config.json`.
 
-Deshalb zeigt die Statusleiste das **laufende Segment** und nicht die Summe des
-Branches: `14:22:07` fällt auf, `37:15:44` nach zwei Wochen auf einem Branch
-nicht. Der Tooltip nennt Branch, Gesamtsumme und was auf den Versand wartet. Im
-Panel stehen beide Zahlen nebeneinander, das laufende Segment zuerst:
-`0:42:13 · 3:48:02`.
+Die Statusleiste zeigt, was der Branch **insgesamt** gesammelt hat — die Zahl,
+die auf die Rechnung geht. Das laufende Segment steht im Tooltip, zusammen mit
+Branch und Versandstand. Im Panel stehen beide Zahlen nebeneinander, das
+laufende Segment zuerst: `0:42:13 · 3:48:02`.
+
+## Nacharbeit nach dem Commit
+
+Auf `main` schliesst jeder Commit seinen Zeiteintrag. Wer danach noch
+nacharbeitet — der letzte Blick, das Deployment, der Anruf — und nicht mehr
+committet, hat Zeit gemessen, die zum eben gemachten Commit gehört. Sie ginge
+sonst erst mit dem **nächsten** Commit hinaus, unter dessen Text.
+
+Dafür steht in der Seitenleiste **Nicht gebucht**, sobald solche Zeit daliegt;
+im Terminal heisst das `prosonata attach`. Zugeschlagen wird immer dem zuletzt
+abgeschlossenen Eintrag dieses Branches, und zwar als reine Summe — Text und
+Datum dort bleiben, wie sie sind. Bestätigt wird vorher, mit den Zahlen:
+
+    5 Minuten an «Kirby Update, Startseite Linkfarbe» (2026-08-02)
+    2.00 h wird 2.25 h
+
+Die zweite Zeile ist der Grund für die Rückfrage: Das Zeitraster rundet **auf**,
+eine Viertelstunde als Raster macht aus fünf Minuten also eine Viertelstunde.
+Ein bereits **fakturierter** Eintrag wird abgelehnt — das geht nur noch in
+ProSonata selbst.
 
 ## Der Log
 
 Das Uhr-Symbol in der Titelleiste des ProSonata-Panels öffnet alle gemessenen
-Segmente als Dokument, nach Tagen gruppiert, mit einer Branch-Auswahl davor.
+Segmente als gesetzte Vorschau, nach Tagen gruppiert, mit einer Branch-Auswahl
+davor. Bearbeiten lässt sie sich nicht: Das Protokoll ist ein Archiv, und was
+abgerechnet wird, steht im Zeiteintrag. Korrigiert wird deshalb über die
+Zeitkorrektur, nicht im Text.
 
 Die Branch-Liste stammt aus dem Protokoll unter `~/.prosonata/segments.jsonl`,
 nicht aus Git — **gelöschte Branches behalten damit ihre Stunden**. Das

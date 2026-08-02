@@ -5,7 +5,7 @@ import type { Journal } from './journal.js'
 import { readKey, stripMarker, withMarker } from './marker.js'
 import { findEntry, parkClosedElsewhere } from './tracking.js'
 import type { State, TimeEntry } from './types.js'
-import { workingTime } from './working-time.js'
+import { workingTime, type TimeGrid } from './working-time.js'
 
 /**
  * The deferred send (KONZEPT.md §4).
@@ -36,6 +36,17 @@ export interface SendDeps {
   clock: Clock
   config: Config
   journal: Journal
+  /**
+   * The grid of the repository an entry belongs to. A repository may round
+   * differently from the default, and the number that matters is the one that
+   * goes out — not the one the panel happens to show. Left out, everything
+   * rounds by `config.grid`.
+   *
+   * Asked for at the moment of writing, not frozen into the entry: changing the
+   * grid is meant to reach every entry still open, the same way a corrected
+   * project or category does.
+   */
+  gridFor?: (repoPath: string) => TimeGrid
 }
 
 /** Entry ids whose write is due now. */
@@ -146,13 +157,14 @@ async function writeEntry(
   deps: SendDeps,
 ): Promise<number | null> {
   const { api, clock, config } = deps
+  const grid = deps.gridFor?.(entry.scope.repoPath) ?? config.grid
   const total = entry.foreignSeconds + entry.seconds
   const draft: EntryDraft = {
     projectID: entry.projectId,
     category: entry.categoryId,
     date: clock.today(),
     detail,
-    workingTime: workingTime(total, config.grid),
+    workingTime: workingTime(total, grid),
     // Null clears it; an empty string would write 01:00:00, as measured.
     workingTimeStart,
   }
@@ -191,7 +203,7 @@ async function writeEntry(
     const remainder = Math.max(0, total - alreadyBilled)
     const created = await api.createEntry({
       ...draft,
-      workingTime: workingTime(remainder, config.grid),
+      workingTime: workingTime(remainder, grid),
     })
     entry.timeId = created.timeID
     entry.foreignSeconds = 0
@@ -203,7 +215,7 @@ async function writeEntry(
   adoptForeignShare(entry, remote.hours)
 
   const corrected = entry.foreignSeconds + entry.seconds
-  await api.updateEntry(entry.timeId, { ...draft, workingTime: workingTime(corrected, config.grid) })
+  await api.updateEntry(entry.timeId, { ...draft, workingTime: workingTime(corrected, grid) })
   entry.lastWritten = corrected
   return null
 }

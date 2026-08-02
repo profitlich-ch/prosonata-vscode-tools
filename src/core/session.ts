@@ -9,6 +9,7 @@ import { branchKey } from './marker.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
 import { send, type SendResult } from './sender.js'
 import { planAdjustment, type Adjustment, type Plan, type Situation } from './adjust.js'
+import type { AttachPlan, Attachment } from './attach.js'
 import { SegmentLog, atLocal, type Segment } from './segments.js'
 import { StateStore } from './state-store.js'
 import { sync } from './sync.js'
@@ -17,18 +18,21 @@ import {
   commit,
   currentSeconds,
   keepFromRunning,
+  lastClosedEntry,
+  moveToClosed,
   openEntry,
   pause,
   pauseAt,
   queueWriteFor,
   resumeAfterAdding,
   resumeAsNew,
+  settle,
   shiftStart,
   start,
   unwrittenSeconds,
 } from './tracking.js'
 import type { EntryMode, Scope, State } from './types.js'
-import { workingTime } from './working-time.js'
+import { workingTime, type TimeGrid } from './working-time.js'
 
 /**
  * Wires the pieces together for the two front ends, the CLI and the extension.
@@ -442,9 +446,56 @@ export class Session {
     }
 
     const total = (entry.remoteFinalSeconds ?? 0) + unwrittenSeconds(entry)
-    await this.api.updateEntry(entry.timeId, { workingTime: workingTime(total, this.config.grid) })
+    await this.api.updateEntry(entry.timeId, { workingTime: workingTime(total, this.gridFor(entry.scope.repoPath)) })
     this.journal.append({ kind: 'sent', entryId, timeId: entry.timeId })
     this.store.update((state) => resumeAfterAdding(state, entryId))
+  }
+
+  /**
+   * Adds what has been measured since the last commit to the entry that commit
+   * closed (KONZEPT.md §3) — the follow-up that belongs to work already booked.
+   *
+   * `close()` promises that a closed `timeID` is never written again. That holds
+   * for everything the tool does by itself; here a person says otherwise, once,
+   * for one entry. What stays absolute is the refusal to touch an invoiced one.
+   *
+   * The current total comes from ProSonata, not from the local number: it may
+   * have been corrected there by hand, and the write is a sum.
+   */
+  async attachToLastClosed(
+    context: RepoContext,
+    confirm: (plan: AttachPlan) => Promise<boolean>,
+  ): Promise<Attachment> {
+    // A running timer keeps running; its segment so far is booked, so nothing
+    // measured is left out of the sum.
+    this.store.update((state) => settle(state, this.clock, context.scope))
+
+    const open = openEntry(this.state(), context.scope)
+    const seconds = open ? unwrittenSeconds(open) : 0
+    if (!open || seconds <= 0) return { kind: 'nothing' }
+    if (open.timeId !== null) return { kind: 'known' }
+
+    const target = lastClosedEntry(this.state(), context.scope)
+    if (!target || target.timeId === null) return { kind: 'noTarget' }
+
+    const remote = await this.api.getEntry(target.timeId)
+    if (!remote) return { kind: 'gone' }
+    if (remote.isInvoiced) return { kind: 'invoiced' }
+
+    const held = Math.round(remote.hours * 3600)
+    const plan: AttachPlan = {
+      seconds,
+      text: remote.detail,
+      date: remote.date,
+      before: workingTime(held, this.gridFor(context.scope.repoPath)),
+      after: workingTime(held + seconds, this.gridFor(context.scope.repoPath)),
+    }
+    if (!(await confirm(plan))) return { kind: 'cancelled' }
+
+    await this.api.updateEntry(target.timeId, { workingTime: plan.after })
+    this.journal.append({ kind: 'sent', entryId: target.id, timeId: target.timeId })
+    this.store.update((state) => moveToClosed(state, open.id, target.id, seconds))
+    return { kind: 'done', plan }
   }
 
   /** Set by the last sync: somebody is measuring on this branch elsewhere. */
@@ -465,6 +516,14 @@ export class Session {
       this.store.update(() => outcome.state)
     }
   }
+
+  /**
+   * The grid a repository rounds by: its own if it has one, otherwise the
+   * default from `~/.prosonata/config.json`. The same chain the panel and the
+   * log show — until now the write path was the one place that did not follow
+   * it, so a repository could display a rounding that never happened.
+   */
+  gridFor = (repoPath: string): TimeGrid => readRepoConfig(repoPath).grid ?? this.config.grid
 
   /** Sends everything that is due (KONZEPT.md §4). */
   async flush(force = false): Promise<SendResult> {
