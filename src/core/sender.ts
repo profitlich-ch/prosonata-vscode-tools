@@ -88,8 +88,16 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       continue
     }
 
-    // An entry is only written once it has a text (KONZEPT.md §4).
-    if (entry.state === 'open' && entry.text === '') continue
+    /*
+     * A **closed** entry without a text is refused: it is written straight away
+     * and would stand on a customer's project as a nameless, final line.
+     *
+     * An open one goes out under a placeholder instead of waiting. That is what
+     * makes it findable from the second machine before the first commit — the
+     * search runs over the marker, and a marker only exists once something has
+     * been written (KONZEPT.md §3). The first trailer replaces the placeholder.
+     */
+    if (entry.state === 'closed' && entry.text === '') continue
 
     // `category` is mandatory in ProSonata. Sending a 0 would either be refused
     // or book onto a category that does not exist, so the write waits for a
@@ -139,9 +147,11 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
  * tells a running timer from one forgotten last week (KONZEPT.md §2).
  */
 export function detailFor(entry: TimeEntry, config: Config, runningSince: number | null = null): string {
-  return entry.state === 'open'
-    ? withMarker(entry.text, entry.key, config.markerWord, runningSince)
-    : stripMarker(entry.text, config.markerWord)
+  if (entry.state !== 'open') return stripMarker(entry.text, config.markerWord)
+  // The placeholder lives on the wire, never in the entry: locally it stays
+  // text-less, so the panel keeps asking for a text and nothing mistakes the
+  // stand-in for the line a customer will read.
+  return withMarker(entry.text || config.placeholderText, entry.key, config.markerWord, runningSince)
 }
 
 /**

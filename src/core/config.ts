@@ -29,6 +29,12 @@ export interface Config {
   detailLimit: number
   /** Trailer key that carries the invoice text. */
   trailerKey: string
+  /**
+   * What an entry is called in ProSonata until a commit gives it its text.
+   * Never a branch name — that would carry internals onto a customer's project
+   * (KONZEPT.md §5).
+   */
+  placeholderText: string
   /** Default rounding grid; a repository may override it. */
   grid: TimeGrid
   /** Seconds a write waits before it goes out (KONZEPT.md §4). */
@@ -43,6 +49,7 @@ export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
   markerWord: DEFAULT_MARKER_WORD,
   detailLimit: 200,
   trailerKey: 'Prosonata',
+  placeholderText: '(in Arbeit)',
   grid: { kind: 'exact' },
   sendDelaySeconds: 600,
   longRunWarningSeconds: 6 * 3600,
@@ -59,7 +66,6 @@ export const paths = {
   state: () => join(stateDir(), 'state.json'),
   journal: () => join(stateDir(), 'log.jsonl'),
   segments: () => join(stateDir(), 'segments.jsonl'),
-  cache: () => join(stateDir(), 'cache.json'),
 }
 
 export class MissingConfig extends Error {

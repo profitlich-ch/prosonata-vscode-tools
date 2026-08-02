@@ -35,6 +35,12 @@ export class PanelRow extends vscode.TreeItem {
   }
 }
 
+/** Hours a project has planned and used up, as the last look reported them. */
+export interface Budget {
+  needed: number
+  planned: number
+}
+
 export class Panel implements vscode.TreeDataProvider<PanelRow> {
   private readonly changed = new vscode.EventEmitter<void>()
   readonly onDidChangeTreeData = this.changed.event
@@ -45,6 +51,8 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     private readonly context: () => RepoContext | null,
     /** The cached state. The panel never reads from disk itself. */
     private readonly snapshot: () => State | null,
+    /** Likewise the budget: it is fetched elsewhere, never from here. */
+    private readonly budget: (projectId: number) => Budget | undefined,
   ) {}
 
   refresh(): void {
@@ -71,7 +79,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     const rows: PanelRow[] = [
       // With the number: that is what a customer call and an invoice refer to,
       // and two projects of the same name are told apart by nothing else.
-      new PanelRow('Projekt', describeProject(project, context.projectId), 'briefcase', {
+      new PanelRow('Projekt', describeProject(project, context.projectId, this.budget(context.projectId)), 'briefcase', {
         command: 'prosonata.chooseProject',
         title: 'Projekt wählen',
       }),
@@ -131,6 +139,23 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     )
 
     /*
+     * An entry without a text does reach ProSonata — under the placeholder — but
+     * that is a stand-in, not the line a customer should read. On a branch only
+     * a trailer or a hand-typed text ever replaces it, so the row keeps asking.
+     * Per commit it would only nag: the next commit brings the text along.
+     */
+    if (context.mode === 'branch' && entry && entry.text === '' && unwrittenSeconds(entry) > 0) {
+      rows.push(
+        new PanelRow(
+          'Ohne Text',
+          `${hoursAndMinutes(unwrittenSeconds(entry))} h — steht als «${session.config.placeholderText}» in ProSonata`,
+          'warning',
+          { command: 'prosonata.changeText', title: 'Text setzen' },
+        ),
+      )
+    }
+
+    /*
      * Time with nowhere to go yet: measured after a commit closed its entry, and
      * no new commit has claimed it. It would travel with the next one — under
      * that commit's text. Whoever worked on after the commit can say otherwise
@@ -182,9 +207,17 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
   }
 }
 
-function describeProject(project: RepoProject | undefined, projectId: number): string {
-  if (!project) return `#${projectId}`
-  return project.no ? `${project.no} ${project.name}` : project.name
+function describeProject(project: RepoProject | undefined, projectId: number, budget?: Budget): string {
+  const name = !project ? `#${projectId}` : project.no ? `${project.no} ${project.name}` : project.name
+  // Only with a plan to measure against: "15,25 h" alone says nothing about
+  // whether the pot is full or empty.
+  if (!budget || budget.planned <= 0) return name
+  return `${name} · ${hours(budget.needed)} von ${hours(budget.planned)} h`
+}
+
+/** `15,25` — decimal hours, as the budget is agreed, with a German comma. */
+function hours(value: number): string {
+  return value.toFixed(2).replace(/[.,]?0+$/, '').replace('.', ',')
 }
 
 /** `1:23:45`. Seconds included, so a running timer is visibly running. */

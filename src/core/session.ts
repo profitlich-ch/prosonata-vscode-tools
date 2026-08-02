@@ -335,22 +335,6 @@ export class Session {
     return ends.length === 0 ? 0 : Math.max(...ends)
   }
 
-  /** The last commit on this branch, as the log saw it — an anchor to count from. */
-  lastCommitAt(context: RepoContext): number | null {
-    const commits = this.segments
-      .read()
-      .filter(
-        (segment) =>
-          segment.reason === 'commit' &&
-          segment.repoPath === context.scope.repoPath &&
-          segment.branch === context.scope.branch,
-      )
-      .map((segment) => Date.parse(segment.until))
-      .filter((value) => Number.isFinite(value))
-
-    return commits.length === 0 ? null : Math.max(...commits)
-  }
-
   private startOptionsFor(context: RepoContext) {
     return {
       scope: context.scope,

@@ -492,14 +492,33 @@ describe('pausing an entry ProSonata knows', () => {
     expect(state.pending.map((write) => write.entryId)).toEqual([state.entries[0]!.id])
   })
 
-  it('queues nothing for an entry ProSonata has never seen', () => {
+  /*
+   * Starting already queued one. Pausing must not add a second: a pending write
+   * carries the whole current sum, so one per entry is all there ever is.
+   */
+  it('leaves it at the one write the start already queued', () => {
     const clock = fixedClock(NINE)
     let state = startOn(emptyState(), clock)
+    expect(state.pending).toHaveLength(1)
     clock.advance(600)
 
     state = pause(state, clock, scope)
 
-    expect(state.pending).toHaveLength(0)
+    expect(state.pending).toHaveLength(1)
+  })
+})
+
+/*
+ * The entry has to exist in ProSonata early, or a second machine cannot find it
+ * and opens one of its own for the same branch — the search runs over the marker
+ * (KONZEPT.md §3). Starting is therefore worth a write, text or no text.
+ */
+describe('starting the timer', () => {
+  it('queues the write that creates the entry over there', () => {
+    const state = startOn(emptyState(), fixedClock(NINE))
+
+    expect(state.pending.map((write) => write.entryId)).toEqual([state.entries[0]!.id])
+    expect(state.pending[0]?.closing).toBe(false)
   })
 })
 
@@ -658,5 +677,26 @@ describe('moving follow-up time onto a closed entry', () => {
     state.entries.find((entry) => entry.id === closedId)!.timeId = null
 
     expect(moveToClosed(state, openId, closedId, 300)).toBe(state)
+  })
+})
+
+/*
+ * A closed entry goes out at once — so it must never be closed without a text.
+ * The rule "no text, no write" alone would not catch it: it holds back open
+ * entries, and a closed one is past that point.
+ */
+describe('closing without a text', () => {
+  it('does not happen', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(1800)
+    state = pause(state, clock, scope)
+    const entry = openEntry(state, scope)!
+
+    expect(close(state, entry.id, '', at(10), newId)).toBe(state)
+    expect(close(state, entry.id, '   ', at(10), newId)).toBe(state)
+    // With a text it closes — the successor the timer gets is not this entry.
+    const closed = close(state, entry.id, 'Buchungsmodul', at(10), newId)
+    expect(closed.entries.find((candidate) => candidate.id === entry.id)?.state).toBe('closed')
   })
 })

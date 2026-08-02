@@ -3,6 +3,8 @@ Prosonata Tools für Visual Studio Code
 
 Diese VS-Code-Erweiterung ermöglicht es, [ProSonata](https://www.prosonata.de)-Zeiteinträge direkt aus VS Code anzulegen, gebunden an Commits und Branches, per ProSonata-API. Statt in der SaaS-Oberfläche von ProSonata einen Timer zu starten und die Beschreibung von Hand einzutragen, startest du den Timer in VS Code, und die gemessene Zeit wird zu einem Zeiteintrag pro Branch (alternativ: pro Commit) — mit einer Beschreibung, die aus dem Commit stammt.
 
+Die Idee: Ein Zeiteintrag stellt eine Leistung dar, die dem Kunden verrechenbar ist. Ob sie an einem Tag entsteht oder an mehreren spielt für den Kunden keine Rolle.
+
 Dies ist kein offizielles ProSonata-Produkt. Es steht nicht im Marketplace, du musst es von Hand installieren.
 
 ## Installation
@@ -45,7 +47,7 @@ Fürs Update dasselbe noch einmal, nach `git pull`.
 
 ## Einstellungen pro Repository
 
-Klicke **ProSonata: Projekt für dieses Repository wählen** — es verknüpft das Repository mit einem Projekt und installiert den `post-commit`-Hook.
+Klicke **ProSonata: Projekt für dieses Repository wählen** — es verknüpft das Repository mit einem Projekt und installiert den `post-commit`-Hook. Neben dem Projekt steht danach sein Budget, etwa «15,25 von 20 h». Geholt wird es beim Öffnen des Fensters und jedes Mal, wenn ein abgeschlossener Zeiteintrag in ProSonata angekommen ist — nicht laufend.
 
 Direkt danach fragt die Erweiterung nach der **Zeitkategorie**. ProSonata verlangt sie bei jedem Zeiteintrag; solange keine gewählt ist, wird nichts geschrieben. Ändern lässt sie sich jederzeit über die Zeile *Kategorie* im Panel, und die Änderung greift auch auf die noch offenen Zeiteinträge durch.
 
@@ -53,7 +55,7 @@ Auch das Projekt lässt sich später korrigieren. Weil ein Wechsel fast immer ei
 
 Zusätzlich kannst du das Zeitraster wählen und ob Zeiteinträge an Branches oder an Commits gebunden werden. Das Zeitraster wirkt auf alle noch offenen Zeiteinträge, sobald diese das nächste Mal geschrieben werden. Der Wechsel auf «ein Eintrag pro Commit» dagegen schliesst den offenen Branch-Eintrag und fragt vorher nach seinem endgültigen Text.
 
-Das **Zeitraster gilt allein für den Zeiteintrag**, der nach ProSonata geht — nie für die Segmente. Gemessen und im Log gezeigt wird sekundengenau; gerundet wird erst beim Schreiben, und zwar die Gesamtsumme des Eintrags, nicht jedes Segment für sich. So summieren sich keine Rundungen auf. Gerundet wird **aufwärts**, auf die nächste Stufe: Bei einem Raster von 15 Minuten werden aus gemessenen 2:05 h gebuchte 2:15 h. Gezeigt wird diese Zahl überall als Stunden:Minuten; in ProSonata selbst steht sie als Dezimalstunde (2.25), weil die API es so speichert.
+Das **Zeitraster gilt allein für den Zeiteintrag**, der nach ProSonata geht — nie für die Segmente. Gemessen und im Log gezeigt wird sekundengenau; gerundet wird erst beim Schreiben, und zwar einmal je Zeiteintrag — nicht jedes Segment für sich. Gerundet wird **aufwärts**, auf die nächste Stufe: Bei einem Raster von 15 Minuten werden aus gemessenen 2:05 h gebuchte 2:15 h. Weil je Eintrag gerundet wird, **wächst die Aufrundung mit der Zahl der Einträge**: Auf `main` mit drei Commits von je zwanzig Minuten werden daraus dreimal eine halbe Stunde, also 1:30 h statt einer Stunde. Ein Branch-Eintrag, der dieselbe Arbeit sammelt, wird einmal gerundet. Gezeigt wird diese Zahl überall als Stunden:Minuten; in ProSonata selbst steht sie als Dezimalstunde (2.25), weil die API es so speichert.
 
 Wählt ein Repository kein eigenes Raster, gilt die Vorgabe aus `~/.prosonata/config.json` (`"grid"`). Sie steht auf `exakt` und lässt sich nur dort ändern — wer grundsätzlich viertelstündlich abrechnet, setzt sie einmal und muss es nicht in jedem Repository wiederholen.
 
@@ -76,7 +78,7 @@ Abschluss ist nur das letzte Update.
 | Auf einem Branch | Ein Eintrag pro Branch, der über dessen ganze Lebensdauer wächst (alternativ: pro Commit) |
 | Auf dem Main-Branch | Ein Eintrag pro Commit |
 
-Die Konzeptidee: Ein Branch ist das Stück Arbeit, das ein Kunde als Einheit bezahlt. Commits sind eher Zwischenschritte, die der Kunde nicht zu sehen braucht. Wird hingegen auf dem Main-Branch gearbeitet, ist es Wartung und jeder Commit ist es Wert als Zeiteintrag erfasst zu werden.
+Die Konzeptidee: Ein Branch ist das Stück Arbeit, das ein Kunde als Einheit bezahlt. Commits sind eher Zwischenschritte, die der Kunde nicht zu sehen braucht. Wird hingegen auf dem Main-Branch gearbeitet, ist es Wartung und jeder Commit ist es wert, als Zeiteintrag erfasst zu werden.
 
 Der Text des Zeiteintrags kommt aus dem Commit, aus einem mit `Prosonata:` beginnenden Trailer:
 
@@ -88,8 +90,13 @@ Prosonata: Rabattberechnung im Shop korrigiert
 
 Auf dem Main-Branch, wo jeder Commit seinen eigenen Eintrag abschliesst, gilt
 die Betreffzeile, wenn es keinen Trailer gibt. Auf einem Branch dagegen zählt nur der Trailer; der zuletzt in einem Commit geschriebene gewinnt, normale Betreffzeilen
-bleiben aussen vor. Solange ein offener Eintrag keinen Text hat, wird er nicht
-nach ProSonata geschrieben.
+bleiben aussen vor. Ein Eintrag ohne Text steht in ProSonata als `[LAUFEND:a3f9c1] (in Arbeit)` —
+der erste Trailer ersetzt den Platzhalter. Er wird gebraucht, damit ein zweiter
+Computer den Eintrag findet, bevor der erste Commit fällt; gesucht wird über den
+Marker, und den gibt es erst nach dem ersten Schreibvorgang. Auf einem Branch
+erinnert die Seitenleiste mit der Zeile **Ohne Text** daran, dass die
+Rechnungszeile noch fehlt. Abschliessen lässt sich ein Eintrag ohne Text nicht:
+Er stünde endgültig namenlos beim Kunden.
 
 Solange ein Eintrag offen ist, trägt er eine Markierung:
 `[LAUFEND:a3f9c1][260802-08:12] …`. Sie macht einen unfertigen Eintrag in
@@ -119,10 +126,6 @@ gestern her, heisst es nicht mehr «läuft seit», sondern «dort wurde vermutli
 das Anhalten vergessen». Mehr als sagen kann die Erweiterung nicht: Ein Timer auf
 einem zugeklappten Rechner lässt sich von hier nicht anhalten.
 
-**Beide Computer sollten denselben Stand haben.** Die Markierung ist die Sprache,
-in der sie sich verständigen; ein älterer Stand versteht die Zeitklammer nicht und
-zeigt sie als Textrest.
-
 Schliesst ein Computer den Eintrag ab, während auf dem anderen noch Zeit
 angefallen ist, wird dort gefragt: **zum abgeschlossenen Eintrag hinzufügen**
 oder **einen neuen anlegen**. Geschrieben wird bis zur Antwort nichts, und der
@@ -133,13 +136,13 @@ abgeschlossene Eintrag wird nie ungefragt wieder angefasst.
 Läuft ein Segment stundenlang am Stück, fragt die Erweiterung, **wie viel davon
 zählt** — alles, eine eigene Dauer, oder nichts. Sie rät nicht: Ein Timer, der
 über Nacht lief, hat Wanduhrzeit gemessen, und was davon Arbeit war, weisst nur
-du. Im Terminal macht `prosonata pause 1:30` dasselbe.
+du.
 
 Ohne auf diese Frage zu warten, lässt sich ein laufendes Segment jederzeit **ganz
 verwerfen** — der Fall «committet, Anhalten vergessen, danach nicht mehr
-gearbeitet». Die Zeile steht zuoberst im Korrektur-Dialog und nennt den Betrag;
-im Terminal heisst sie `prosonata discard`. Gebucht wird nichts, der Timer hält
-an, und im Log bleibt die verworfene Dauer als `gekürzt von …` stehen.
+gearbeitet». Die Zeile steht zuoberst im Korrektur-Dialog und nennt den Betrag.
+Gebucht wird nichts, der Timer hält an, und im Log bleibt die verworfene Dauer
+als `gekürzt von …` stehen.
 
 **Vor- und zurückdrehen** lässt sich die Zeit über das Stift-Symbol an der
 Timer-Zeile oder über «ProSonata: Zeit korrigieren». Getippt wird entweder eine
@@ -158,13 +161,12 @@ lässt sich dann über eine Dauer — `+20` bucht zwanzig Minuten, ohne zu
 behaupten, wann sie angefallen sind. Im Log steht eine solche Korrektur deshalb
 ohne Anfangszeit.
 
-Jede Zeile zeigt vorher, was sie bewirkt: `7:13:09 → 0:40:00`. Weiter zurück als
+Jede Zeile zeigt vorher, was sie bewirkt: `7:13:09 → 7:08:09`. Weiter zurück als
 bis zum **Ende des letzten Segments** reicht keine Korrektur — ein
 abgeschlossenes Segment sagt ja gerade, dass bis dahin alles richtig erfasst
 ist. Wird deshalb gekürzt, sagt dieselbe Zeile, was stattdessen geht und woran
 es liegt: „erst ab 14:25 → so weit reicht das letzte Segment".
-Unter null fällt ein Eintrag ebenfalls nie. Im Terminal:
-`prosonata adjust "bis 9:40"`.
+Unter null fällt ein Eintrag ebenfalls nie.
 
 Beim Schliessen des letzten VS-Code-Fensters wird pausiert. Abschalten lässt
 sich das mit `"pauseOnWindowClose": false` in `~/.prosonata/config.json`.
@@ -181,8 +183,8 @@ nacharbeitet — der letzte Blick, das Deployment, der Anruf — und nicht mehr
 committet, hat Zeit gemessen, die zum eben gemachten Commit gehört. Sie ginge
 sonst erst mit dem **nächsten** Commit hinaus, unter dessen Text.
 
-Dafür steht in der Seitenleiste **Nicht gebucht**, sobald solche Zeit daliegt;
-im Terminal heisst das `prosonata attach`. Zugeschlagen wird immer dem zuletzt
+Dafür steht in der Seitenleiste **Nicht gebucht**, sobald solche Zeit daliegt.
+Zugeschlagen wird immer dem zuletzt
 abgeschlossenen Eintrag dieses Branches, und zwar als reine Summe — Text und
 Datum dort bleiben, wie sie sind. Bestätigt wird vorher, mit den Zahlen:
 
@@ -217,7 +219,6 @@ seines letzten Schreibvorgangs.
 Aufgezeichnet wird, was auf diesem Computer gemessen wurde. Was auf einem
 anderen anfiel, steht in ProSonata, aber nicht hier.
 
-Im Terminal: `prosonata log`, `log alle`, `log <branch>`, `log ?` für die Liste.
 
 ## CLI Befehle
 
@@ -234,6 +235,8 @@ prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
 prosonata mode [branch|commit]    ein Eintrag pro Branch oder pro Commit
 prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
 prosonata text <Text>             Text des offenen Zeiteintrags ändern
+prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
+prosonata attach                  Zeit dem Eintrag des letzten Commits zuschlagen
 prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
 prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
 prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"

@@ -50,7 +50,7 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
   prosonata attach                  Zeit seit dem letzten Commit dem Eintrag jenes Commits zuschlagen
   prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
-  prosonata log [Branch]            gemessene Segmente, ohne Branch die dieses
+  prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
   prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 
   prosonata post-commit             wird vom Hook gerufen, nicht zum Tippen gedacht

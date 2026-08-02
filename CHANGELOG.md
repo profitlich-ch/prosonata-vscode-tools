@@ -4,6 +4,38 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] — 2026-08-03
+
+### Hinzugefügt
+
+- **Das Panel zeigt das Budget des Projekts**, etwa «15,25 von 20 h», aus
+  `timeNeeded` und `timePlanned`. Die Zahl steht im Fenster, nicht auf der
+  Platte, und wird geholt, wo sie sich geändert haben kann: beim Öffnen des
+  Fensters, beim ersten Auftauchen eines Projekts und sobald ein abgeschlossener
+  Eintrag wirklich in ProSonata angekommen ist. Kein Zeitgeber, kein Polling.
+- **Ein Eintrag ohne Text wird jetzt geschrieben — unter dem Platzhalter
+  `(in Arbeit)`**, sobald ein Timer für ihn läuft. Bisher wartete er auf den
+  ersten Commit, und das kostete zweierlei: Ein zweiter Computer fand ihn nicht
+  (gesucht wird über den Marker, den es erst nach dem ersten Schreibvorgang gibt)
+  und legte einen zweiten Eintrag für denselben Branch an; und ein Verlust von
+  `state.json` nahm den ganzen Eintrag mit. Der Platzhalter steht nur in
+  ProSonata, lokal bleibt der Eintrag textlos — der erste Trailer ersetzt ihn.
+  Der Text ist über `placeholderText` in `~/.prosonata/config.json` einstellbar.
+- **Die Seitenleiste erinnert an den fehlenden Text**: Zeile «Ohne Text» mit
+  einem Klick zum Textfeld, auf Branches. Auf dem Hauptbranch erscheint sie
+  nicht, dort bringt der nächste Commit den Text mit.
+
+### Behoben
+
+- **Ein Eintrag liess sich im Editor ohne Text abschliessen** — abgefangen war
+  nur das Abbrechen. Er wäre sofort als namenlose Zeile ins Kundenprojekt
+  gegangen, denn die Regel «ohne Text kein Versand» galt nur für offene
+  Einträge. Jetzt verweigert `core` den Abschluss, der Editor sagt es, und der
+  Versand hält auch geschlossene textlose Einträge zurück.
+- **Toter Code entfernt**: `Session.lastCommitAt()` (Rest des in 0.5.1
+  entfernten Ankers «ab dem letzten Commit») und `paths.cache()`, das auf eine
+  Datei zeigte, die nie jemand geschrieben hat.
+
 ## [0.8.0] — 2026-08-02
 
 ### Geändert

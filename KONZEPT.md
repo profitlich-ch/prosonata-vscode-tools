@@ -3,8 +3,10 @@
 Werkzeug zur Zeiterfassung für Code-Arbeit, angebunden an ProSonata (SaaS, REST API).
 Bedienung über eine VS-Code-Extension, Beschreibung der Arbeit über Git-Commits.
 
-Dieses Dokument ist die Entscheidungsgrundlage. Abschnitt 11 listet bewusst verworfene
-Alternativen – diese nicht erneut vorschlagen.
+Dieses Dokument ist die Entscheidungsgrundlage, nicht die Zustandsbeschreibung: Es beschreibt,
+wie das Werkzeug gedacht ist, auch wo das noch nicht gebaut ist. Was fehlt, steht gesammelt in
+Abschnitt 13 und ist an Ort und Stelle als *noch nicht gebaut* gekennzeichnet. Abschnitt 11
+listet bewusst verworfene Alternativen – diese nicht erneut vorschlagen.
 
 ---
 
@@ -142,7 +144,11 @@ Der Text geht auf die **Kundenrechnung**. Woher er im Einzelnen stammt, steht in
 Commit" und in der Tabelle darunter. Zwei Eigenschaften gelten übergreifend:
 
 - **Beim ersten Commit auf einem neuen Branch** fragt das Werkzeug einmal nach einer
-  Bezeichnung. Einmal pro Feature, nicht einmal pro Commit.
+  Bezeichnung. *(Die Rückfrage ist verworfen: Ein Rechnungstext, der beim Start entsteht, ist
+  geraten – formulieren lässt er sich erst, wenn der Commit bereitliegt. An ihre Stelle tritt
+  der Platzhalter aus Abschnitt 4.)* Damit auf einem Branch niemand vergisst, ihn zu ersetzen,
+  zeigt das Panel dort die Zeile **Ohne Text**, die zum Textfeld führt. Auf dem Hauptbranch
+  erscheint sie nicht: Dort bringt der nächste Commit den Text ohnehin mit.
 - **Änderbar bleibt er jederzeit**, über die Oberfläche oder über einen späteren Commit. Oft
   lässt sich der endgültige Rechnungstext erst bei Fertigstellung sinnvoll schreiben.
 
@@ -181,7 +187,7 @@ Fakturieren zu prüfen. Der Text ist in ProSonata jederzeit nachbearbeitbar.
 | **Commit auf einem Branch** | Das laufende Segment wird geschnitten, seine Zeit fliesst in den Branch-Eintrag. Der bleibt **offen**. Ein Trailer ersetzt seinen Text. |
 | **Erster Commit auf einem neuen Branch** | Zusätzlich: Rückfrage nach der Bezeichnung, falls kein Trailer vorliegt. |
 | **Commit auf dem Hauptbranch** | Das Segment wird geschnitten, seine Zeit wird als eigener Zeiteintrag **abgeschlossen**. `detail` = Trailer, sonst Subject. |
-| **Commit ohne laufenden Timer** | Keine Zeit zu buchen. Hinweis mit Angebot, die Zeit seit dem letzten Commit nachzutragen. |
+| **Commit ohne laufenden Timer** | Keine Zeit zu buchen. Hinweis mit Angebot, die Zeit seit dem letzten Commit nachzutragen. *(Angebot noch nicht gebaut; der Hook meldet nur, dass nichts gebucht wurde.)* |
 
 Ein laufender Timer wird durch keinen dieser Fälle angehalten; das nächste Segment gehört zum
 nächsten Zeiteintrag.
@@ -192,7 +198,8 @@ nächsten Zeiteintrag.
 ### Das Segmentprotokoll
 
 `segments.jsonl` hält **jedes gemessene Segment** fest: Beginn, Ende, Dauer, Repository,
-Branch, Projekt und was das Segment beendet hat – Pause, Commit oder eine Kürzung von Hand.
+Branch, Projekt und was das Segment beendet hat – Pause, Commit, eine Kürzung von Hand oder,
+ohne laufenden Timer, eine reine Korrektur.
 Anders als `log.jsonl`, das ein Puffer ist und gekürzt wird, ist es ein **Archiv**.
 
 Es beantwortet zwei Fragen, die sonst niemand beantworten kann:
@@ -229,8 +236,8 @@ ProSonata hält die Summe beider, dieses Protokoll die Einzelheiten eines einzig
 **Warum es nicht bearbeitbar ist.** Die Frage kommt naheliegenderweise auf: Da steht eine Liste,
 und in ihr steht eine falsche Zeile. Bearbeiten wäre trotzdem falsch:
 
-- Das Protokoll ist **keine Autorität**. Abgerechnet wird `entry.seconds` und, sobald gesendet,
-  der Eintrag in ProSonata; die Segmente fliessen nie dorthin zurück. Eine geänderte Zeile
+- Das Protokoll ist **keine Autorität**. Abgerechnet wird die Summe des Zeiteintrags – eigene
+  plus fremde Sekunden – und, sobald gesendet, der Eintrag in ProSonata; die Segmente fliessen nie dorthin zurück. Eine geänderte Zeile
   änderte den Bericht, nicht die Rechnung – danach widersprächen sich beide, und das Protokoll
   wäre das Dokument, das lügt.
 - Es wird **nur angehängt**. Das macht es unempfindlich gegen Abstürze: Eine abgerissene Zeile
@@ -412,8 +419,8 @@ sind nur Vorschläge, keines schliesst von selbst ab.
 |---|---|
 | Branch ist gemergt | `git merge-base --is-ancestor <branch> <hauptbranch>` |
 | **Remote-Branch verschwunden** | `git fetch --prune`, danach fehlt `refs/remotes/origin/<branch>` |
-| Lokaler Branch gelöscht | Ref existiert nicht mehr, Zeiteintrag aber schon |
-| Zeiteintrag ruht | Seit längerem keine neue Zeit und kein Commit |
+| Lokaler Branch gelöscht | Ref existiert nicht mehr, Zeiteintrag aber schon *(noch nicht gebaut)* |
+| Zeiteintrag ruht | Seit längerem keine neue Zeit und kein Commit *(noch nicht gebaut)* |
 
 Das zweite Signal ist das wichtigste, weil Pull Requests auf github.com geschlossen werden und
 VS Code davon nichts mitbekommt. Ein **Squash-Merge** ist über den ersten Weg nämlich nicht
@@ -454,7 +461,7 @@ Rein informierend. Gebucht wird nie automatisch.
   Segmentprotokoll auch die Uhrzeiten, während ein verschobener Beginn die Dauer erhielte und
   den Zeitpunkt erfände. `ab 9:40` verschiebt den **Beginn** des
   laufenden Segments dorthin, sodass eine durchgehende Messung entsteht statt einer Messung
-  plus Nachtrag; ohne laufenden Timer wird die Zeit seither als eine Spanne ergänzt.
+  plus Nachtrag.
 
   **Uhrzeiten setzen einen laufenden Timer voraus.** Sie ändern das laufende Segment; steht
   der Timer, gibt es keines, auf das sie zeigen könnten. Ein fertiges Segment wird nicht
@@ -498,6 +505,8 @@ erreichbar, war der Commit zurückgerollt:
   erschienen.
 - **Schon gesendet** – der Zeiteintrag steht in ProSonata und trägt echte Zeit. Rückfrage im
   nächsten VS-Code-Fenster, nicht im Hook: **zusammenführen** oder **stehen lassen**.
+  *(Noch nicht gebaut: Ein zurückgerollter, bereits gesendeter Commit bleibt heute stehen, wie
+  er ist – `DELETE` wird nirgends aufgerufen.)*
   Zusammenführen heisst summieren – ein Zeiteintrag behält die Gesamtzeit und den neuen Text,
   die übrigen werden per `DELETE /projecttimes/{id}` entfernt. Stehen lassen heisst: der alte
   bleibt mit seiner Zeit und seinem Text, der neue Commit legt einen eigenen an. Beide Wege
@@ -525,8 +534,15 @@ Versand an ein Remote gebunden wäre. Ein `pre-push`-Hook hätte drei Löcher: R
 tagelange lokale Arbeit, und ein Rebase mit Force-Push, nach dem sämtliche Zuordnungen eines
 Branches verwaist sind.
 
-- Ein Zeiteintrag wird erst geschrieben, wenn er **einen Text hat** – also ab dem ersten
-  Commit auf dem Branch. Vorher bleibt er lokal.
+- Ein Zeiteintrag wird geschrieben, **sobald ein Timer für ihn läuft** – notfalls unter einem
+  Platzhalter, `(in Arbeit)`, konfigurierbar. Zu warten, bis ein Commit einen Text liefert,
+  kostete zwei Dinge: Ein zweiter Rechner findet den Eintrag nicht, denn gesucht wird über den
+  Marker, den es erst nach dem ersten Schreibvorgang gibt – beide legten dann einen eigenen an.
+  Und ein Verlust von `state.json` nähme den ganzen Eintrag mit, statt nur das laufende Segment.
+  Der Platzhalter steht **nur in ProSonata**; lokal bleibt der Eintrag textlos, sodass die
+  Oberfläche weiter nach einem Text fragt und nichts den Behelf für die Rechnungszeile hält.
+  Der erste Trailer ersetzt ihn. Ein **abgeschlossener** Eintrag ohne Text wird dagegen
+  verweigert: Er ginge sofort hinaus und stünde endgültig namenlos im Kundenprojekt.
 - Erster Schreibzugriff POST, danach PUT.
 - Mehrere Änderungen innerhalb des Fensters werden zusammengefasst; dank absoluter Summe
   zählt ohnehin nur der letzte Stand.
@@ -612,7 +628,8 @@ zufällig. `git config prosonata.category.412 7` scheitert mit „invalid key".
   ohne Rückfrage. Gemerkt wird sie **pro Projekt** – nicht weil die Liste projektabhängig
   wäre (sie ist es nicht, siehe unten), sondern weil sich die Art der Arbeit je Projekt
   unterscheidet: in der Wartung wird anders gebucht als in der Feature-Entwicklung.
-- Die **Kategorienliste ist global** (Abschnitt 9). Sie wird einmal geholt und gecacht.
+- Die **Kategorienliste ist global** (Abschnitt 9). Sie soll einmal geholt und gecacht werden;
+  *heute wird sie bei jeder Wahl neu abgerufen, `cache.json` ist unbenutzt.*
   Eingeschränkt wird sie clientseitig auf `active = 1` und auf die Kategorien, die für den
   Kunden des aktiven Projekts gelten – das sind die allgemeinen mit
   `linkedCustomerID: null` plus die mit der `customerID` des Projekts.
@@ -641,7 +658,7 @@ Repos verstreuen und wäre beim Neu-Klonen weg.
                    ausstehende Schreibzugriffe            (atomar, mit Version)
   log.jsonl        abgeschlossene Segmente,
                    SHA-Annotationen           (append-only, gekürzt statt archiviert)
-  cache.json       Projekte, Kategorien
+  cache.json       Projekte, Kategorien                    (noch nicht gebaut)
   segments.jsonl   jedes gemessene Segment, dauerhaft
 ```
 
@@ -760,10 +777,13 @@ id            lokale UUID (nicht auf eine ProSonata-ID warten)
 origin        "local" | "remote"      – heute konstant "local"
 remoteTimerId null                    – reserviert für die Timer-API
 repoPath, branch
-startedAt     Zeitstempel des laufenden Segments
-accumulated   Sekunden aus vorherigen Segmenten desselben Zeiteintrags
+startedAt     Zeitstempel des laufenden Segments, null solange pausiert
 entryId       lokaler Zeiteintrag, in den die Zeit fliesst
 ```
+
+Einen zweiten Zähler für bereits gemessene Sekunden gibt es **nicht**: Fertige Segmente gehen
+sofort in den Zeiteintrag, das laufende ist `startedAt` allein. Zwei Zähler könnten
+auseinanderlaufen, einer nicht.
 
 Ein Zeiteintrag trägt:
 
@@ -778,7 +798,7 @@ foreignSeconds  Anteil anderer Rechner, aus dem letzten GET abgeleitet
 lastWritten     zuletzt geschriebener Gesamtwert – daran erkennt der
                 Rechner, dass ein anderer dazugeschrieben hat
 timeID          ProSonata-ID, null vor dem ersten POST
-state           "offen" | "abgeschlossen"
+state           "open" | "closed"
 ```
 
 Die Statusleiste rendert eine **Liste** laufender Timer, kein Singleton – parallele Timer sind
@@ -792,7 +812,7 @@ der Normalfall, und später können fremde Timer von anderen Geräten dazukommen
 
 ```
 src/core        Logik, Zustand, API-Client. Importiert NIEMALS "vscode".
-bin/cli         bin "prosonata". Wird vom post-commit-Hook aufgerufen.
+src/cli         bin "prosonata". Wird vom post-commit-Hook aufgerufen.
 src/extension   QuickPicks, Statusleiste, FileSystemWatcher.
 ```
 
@@ -853,8 +873,9 @@ bin heisst **`prosonata`** – nicht `ps`. `ps` ist das Unix-Werkzeug für die P
 der npm-bin-Pfad liegt in `$PATH` meist vor `/bin`; ein global installiertes `ps` würde bei
 Fremdnutzern `ps aux` brechen. Ein kurzer Alias ist optional.
 
-Befehle: `init`, `start`, `pause`, `status`, Zeiteintrag abschliessen, Text ändern.
-Kein `end` – ein Timer kennt kein Beenden.
+Befehle: `init`, `start`, `pause`, `status`, `send`, `project`, `category`, `grid`, `mode`,
+`close`, `text`, `discard`, `attach`, `resume`, `log`, `adjust` – die verbindliche Liste steht
+in `prosonata help`. Kein `end` – ein Timer kennt kein Beenden.
 
 ### Extension
 
@@ -863,7 +884,7 @@ Kein `end` – ein Timer kennt kein Beenden.
 
   ```
   ProSonata
-    Projekt        24-017 Feature Buchungsmodul
+    Projekt        24-017 Feature Buchungsmodul · 15,25 von 20 h
     Zeitraster     exakt
     Branch         feature/buchung
     Zeiteintrag    pro Branch
@@ -887,8 +908,11 @@ Kein `end` – ein Timer kennt kein Beenden.
   keine Separatoren, und eine Zeile, die nur so aussieht, ist gebastelt.
 
   Die Stundenangabe neben dem Projekt stammt aus `timeNeeded` und `timePlanned`
-  (Abschnitt 9) – beim Zeiterfassen die nützlichste Zahl, die die API hergibt. Sie wird nur
-  beim Projektwechsel aktualisiert, nicht laufend abgefragt.
+  (Abschnitt 9) – beim Zeiterfassen die nützlichste Zahl, die die API hergibt. Sie steht im
+  Fenster, nicht auf der Platte: ein veraltetes Budget ist schlechter als keines. Geholt wird
+  es dort, wo es sich geändert haben **kann** – beim Öffnen des Fensters, wenn ein Projekt zum
+  ersten Mal auftaucht, und sobald ein abgeschlossener Eintrag tatsächlich in ProSonata
+  angekommen ist. Nie auf Zuruf eines Zeitgebers; dieses Werkzeug pollt nicht.
 - Dropdowns über `window.showQuickPick` – native Liste mit Suchfeld, kein UI-Code, kein
   Webview, kein Svelte.
 - Der Projekt-QuickPick ist **dreistufig**: oben die im Repo registrierten Projekte, darunter
@@ -1090,9 +1114,11 @@ ihre eigenen Zeiten, was für dieses Werkzeug richtig ist, aber `projects` erst 
 ### Testzugang
 
 `https://www.prosonata-demo.de` mit eigener APP-ID und eigenem API-Key. Die Demo wird
-**täglich zurückgesetzt**, beide Werte müssen danach neu gesetzt werden – dafür gibt es einen
-Befehl (`prosonata init --demo` oder gleichwertig), damit das kein Handgriff in einer
-JSON-Datei ist.
+**täglich zurückgesetzt**. Ein eigener Befehl dafür ist **verworfen**: Die API-Eigenheiten sind
+am eigenen Konto gemessen und in [bruno/](bruno/) festgehalten, und `core` wird gegen einen
+Fake-Client geprüft. Ein Befehl, der täglich neue Zugangsdaten einträgt, bediente einen
+Arbeitsablauf, den es nicht gibt – wer die Demo doch braucht, ändert zwei Zeilen in
+`config.json`.
 
 **Die Zugangsdaten gehören nicht ins Repo**, auch nicht die der Demo. Sie liegen wie alle
 anderen in `~/.prosonata/config.json` mit Dateirechten 0600. Ein öffentliches Repo mit einem
@@ -1214,7 +1240,24 @@ Nicht erneut vorschlagen:
 
 ---
 
-## 13. Umsetzungsreihenfolge
+## 13. Stand der Umsetzung
+
+Gebaut sind die Punkte 1 bis 9 der Reihenfolge unten, dazu Zeitkorrektur, Verwerfen,
+Zuschlagen, Segmentprotokoll samt Bericht und der Abgleich über mehrere Rechner.
+
+**Noch nicht gebaut** – jeweils an Ort und Stelle gekennzeichnet:
+
+| Was | Abschnitt |
+|---|---|
+| Angebot, nach einem Commit ohne Timer die Zeit nachzutragen | 3, *Wirkung eines Commits* |
+| Abschlussvorschlag aus „lokaler Branch gelöscht" und „Zeiteintrag ruht" | 3, *Abschluss* |
+| Zusammenführen zurückgerollter, bereits gesendeter Zeiteinträge | 3, *Zurückgerollte Commits* |
+| Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
+
+Gebaut sind dagegen die beiden wichtigsten Abschlusssignale: gemergter Branch und
+verschwundene Remote-Ref.
+
+## Umsetzungsreihenfolge
 
 1. Gerüst, `core` mit Zustandsverwaltung, Segmenten und Zeiteinträgen
 2. API-Client und aufgeschobener Versand

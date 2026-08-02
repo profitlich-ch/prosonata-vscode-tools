@@ -66,12 +66,20 @@ describe('the first write', () => {
     expect(state.pending).toHaveLength(0)
   })
 
-  it('holds back an entry that has no text yet', async () => {
+  /*
+   * Without a text it goes out under a placeholder rather than waiting: only an
+   * entry that exists over there is findable from the second machine, and the
+   * first trailer replaces the stand-in.
+   */
+  it('creates an entry that has no text yet under a placeholder', async () => {
     const { api, deps } = setup()
+
     const { state } = await send(stateWith(entry({ text: '' })), deps, true)
 
-    expect(api.entries.size).toBe(0)
-    expect(state.pending).toHaveLength(1)
+    expect([...api.entries.values()][0]?.detail).toBe('[LAUFEND:a3f9c1] (in Arbeit)')
+    // Locally it stays text-less, so the panel keeps asking for a real one.
+    expect(state.entries[0]?.text).toBe('')
+    expect(state.pending).toHaveLength(0)
   })
 
   // `category` is mandatory in ProSonata; a 0 would be refused or land nowhere.
@@ -374,5 +382,21 @@ describe('the grid a repository rounds by', () => {
     await send(state, { ...deps, gridFor: () => deps.config.grid })
 
     expect([...api.entries.values()][0]?.hours).toBeCloseTo(2.5, 2)
+  })
+})
+
+describe('an entry without a text', () => {
+  it('is held back even once it is closed', async () => {
+    const { api, clock, deps } = setup()
+    const state = stateWith(entry({ text: '', state: 'closed' }))
+    clock.advance(DEFAULTS.sendDelaySeconds)
+
+    const { state: after, result } = await send(state, deps)
+
+    expect(api.entries.size).toBe(0)
+    expect(result.sent).toEqual([])
+    // It stays pending, and the panel shows the backlog — better than a
+    // nameless line on a customer's project.
+    expect(after.pending).toHaveLength(1)
   })
 })

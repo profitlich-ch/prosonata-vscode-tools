@@ -62,6 +62,14 @@ export function start(state: State, clock: Clock, options: StartOptions): State 
     startedAt: clock.now(),
     entryId: entry.id,
   })
+  /*
+   * Starting is worth a write of its own — under the placeholder if there is no
+   * text yet. Until the entry exists in ProSonata, a second machine cannot find
+   * it and would open a second one for the same branch; and a lost `state.json`
+   * would take the whole entry with it. Ten minutes later, not now: the delay
+   * still keeps a rolled-back commit from ever arriving.
+   */
+  queueWrite(next, entry.id, clock.now(), false)
   return next
 }
 
@@ -281,6 +289,11 @@ export function close(state: State, entryId: string, text: string, at: number, n
   const next = structuredClone(state)
   const entry = findEntry(next, entryId)
   if (!entry || entry.state === 'closed') return state
+  // Never without a text. A closed entry is written straight away, and an empty
+  // one would appear on the customer's project as a nameless line — while the
+  // rule "no text, no write" would no longer catch it, because it only holds
+  // back open entries.
+  if (text.trim() === '') return state
 
   entry.text = text
   return closeEntry(next, entry, newId, at)

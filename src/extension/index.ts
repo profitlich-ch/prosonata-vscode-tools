@@ -25,7 +25,7 @@ import {
 } from '../core/tracking.js'
 import type { State } from '../core/types.js'
 import type { TimeGrid } from '../core/working-time.js'
-import { clock, Panel } from './panel.js'
+import { clock, Panel, type Budget } from './panel.js'
 
 /**
  * The VS Code side (KONZEPT.md §8). It contains no rules of its own — those all
@@ -57,13 +57,40 @@ let extensionUri: vscode.Uri | null = null
 /** Per branch key: until when the long-run question has been answered with "later". */
 const snoozedUntil = new Map<string, number>()
 
+/**
+ * What a project has planned and used up, per project id (KONZEPT.md §8).
+ *
+ * Kept in the window, not on disk: it is a look at ProSonata, not a decision,
+ * and a stale budget is worse than none. Refreshed where it can actually have
+ * changed — when the window opens, when a project appears for the first time,
+ * and once a closed entry has really reached ProSonata. Never on a timer; this
+ * tool does not poll (KONZEPT.md §9).
+ */
+const budgets = new Map<number, Budget>()
+
+/** Whether one of the entries just sent was a closing write. */
+function closedAmong(session: Session, sent: string[]): boolean {
+  if (sent.length === 0) return false
+  return session.state().entries.some((entry) => sent.includes(entry.id) && entry.state === 'closed')
+}
+
+async function refreshBudget(session: Session, projectId: number): Promise<void> {
+  try {
+    const project = (await session.api.listProjects()).find((candidate) => candidate.projectID === projectId)
+    if (project) budgets.set(projectId, { needed: project.timeNeeded, planned: project.timePlanned })
+    panel.refresh()
+  } catch {
+    // A budget nobody could fetch is simply not shown.
+  }
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   extensionUri = context.extensionUri
   statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100)
   statusBar.command = 'prosonata.toggle'
   context.subscriptions.push(statusBar)
 
-  panel = new Panel(currentSession, currentContext, () => cached)
+  panel = new Panel(currentSession, currentContext, () => cached, (projectId) => budgets.get(projectId))
   context.subscriptions.push(vscode.window.registerTreeDataProvider('prosonata.panel', panel))
 
   context.subscriptions.push(
@@ -745,9 +772,14 @@ async function closeEntry(session: Session, context: RepoContext, entryId?: stri
     value: entry.text,
   })
   if (text === undefined) return
+  if (text.trim() === '') {
+    void vscode.window.showWarningMessage('ProSonata: ohne Text wird ein Eintrag nie gesendet — nichts getan.')
+    return
+  }
 
   session.closeEntry(entry.id, text)
   await session.flush(true)
+  void refreshBudget(session, context.projectId)
 }
 
 /**
@@ -781,7 +813,10 @@ async function work(): Promise<void> {
   reload()
 
   try {
-    await active.flush()
+    const result = await active.flush()
+    // A budget in ProSonata only moves once time has actually arrived there —
+    // and it is worth looking again exactly when an entry was finished.
+    if (closedAmong(active, result.sent)) void refreshBudget(active, context.projectId)
   } catch {
     // Sending failures are not worth a popup every 30 seconds; they stay
     // pending and the panel shows the backlog.
@@ -959,6 +994,9 @@ function reload(): void {
   // Drives the `when` clauses of the welcome content in package.json.
   void vscode.commands.executeCommand('setContext', 'prosonata.hasAccount', active !== null)
   void vscode.commands.executeCommand('setContext', 'prosonata.hasProject', currentContext() !== null)
+
+  const context = currentContext()
+  if (active && context && !budgets.has(context.projectId)) void refreshBudget(active, context.projectId)
 
   draw()
   panel.refresh()
