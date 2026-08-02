@@ -114,14 +114,21 @@ weil auf ihm mehrere unabhängige Kleinigkeiten liegen, die der Kunde einzeln se
   welchen Tag der Client für heute hält – und das ist der, an dem der Benutzer sitzt.
   Der Randfall bleibt bewusst: Wer über Mitternacht hinaus arbeitet und danach schreibt,
   bekommt den neuen Tag. Das passt zur Datumssemantik.
-- `workingTimeEnd` bleibt **immer leer**. Bei unterbrochener Arbeit wäre es unehrlich; die
-  Dauer genügt.
-- `workingTimeStart` trägt, **solange gemessen wird**, den Beginn des laufenden Segments –
-  sonst `null`. Nicht als Zeitangabe für die Rechnung, sondern als Zustand: Die blosse
-  **Anwesenheit** des Werts heisst „hier läuft ein Timer". Ein Statusfeld hat die API nicht,
-  dieses Feld nimmt sie an und zeigt es nur an. Ein zweiter Rechner erkennt daran, dass gerade
-  jemand an diesem Branch arbeitet, und **warnt** – anhalten kann er nichts, ein schlafender
-  Rechner liest nichts, und was diese Stunden waren, weiss nur, wer dabei war.
+- `workingTimeStart` und `workingTimeEnd` tragen die **Spanne des Arbeitstages**: den Beginn
+  des ersten und das Ende des jüngsten Segments dieses Eintrags, aus dem Segmentprotokoll.
+  ProSonata zeigt beide nur an und rechnet nichts daraus; für die Rechnung zählt die Dauer.
+  **Beide Enden müssen auf denselben Tag fallen** – sonst wird `null` geschrieben, was die
+  Felder löscht. Eine Spanne sagt nur etwas über einen Tag; `08:12–17:40` auf einem Eintrag,
+  der über drei Wochen gewachsen ist, behauptete eine Anwesenheit, die es nie gab. Wächst ein
+  Eintrag über Mitternacht, verliert er seine Spanne also wieder. Mit dem Modus hat das nichts
+  zu tun: Auch ein Commit-Eintrag kann über Mitternacht gehen.
+- **Der laufende Timer steht nicht in diesen Feldern, sondern in der Marke** (Abschnitt 3).
+  Früher trug `workingTimeStart` diesen Zustand – die blosse Anwesenheit hiess „hier läuft ein
+  Timer". Das kostete zweierlei: das Feld selbst, und die Auskunft, *wann*. Eine Uhrzeit ohne
+  Tag lässt einen auf einem schlafenden Rechner vergessenen Timer eine Woche später aussehen
+  wie einen von heute früh. Ein zweiter Rechner **warnt** daran weiterhin – anhalten kann er
+  nichts, ein schlafender Rechner liest nichts, und was diese Stunden waren, weiss nur, wer
+  dabei war.
 - Der Vermerk reist mit einem **ohnehin fälligen** Schreibvorgang, nie mit einem eigenen
   Aufruf. Er ist damit bis zu zehn Minuten alt; für eine Warnung genügt das. Das Pausieren
   merkt dafür einen Schreibvorgang vor, damit der Vermerk auch wieder verschwindet – beim
@@ -276,11 +283,18 @@ Minuten machen bei Viertelstunden-Raster aus 2.00 h nicht 2.08 h, sondern 2.25 h
 Ein Branch-Eintrag ist wochenlang offen. Solange steht am Anfang seines Textes ein Marker:
 
 ```
-[LAUFEND:a3f9c1] Buchungsmodul
+[LAUFEND:a3f9c1][260802-08:12] Buchungsmodul
 ```
 
-Er leistet zweierlei:
+Er leistet dreierlei:
 
+- **Er sagt, seit wann gemessen wird.** Die zweite Klammer `[JJMMTT-HH:MM]` steht nur, solange
+  ein Timer läuft; Pausieren entfernt sie. Sie ist der Statusanzeiger, der früher
+  `workingTimeStart` war – im eigenen Namensraum, und mit dem Tag, den eine Uhrzeit allein
+  nicht hat. Eine **eigene** Klammer, keine erweiterte erste: Ein älterer Stand liest
+  `^\[LAUFEND:([0-9a-f]+)\]` und fände eine Marke mit Zeit *innerhalb* der Klammer nicht mehr –
+  er schlösse daraus „anderswo abgeschlossen" und parkte laufende Stunden. Daneben greift sein
+  Muster weiter.
 - **Er macht den Eintrag als unfertig sichtbar.** Die API hat **kein Statusfeld** –
   `timeViaApi` ist nur lesend. Der Text ist der einzige Kanal dafür. Bleibt der Abschluss
   einmal aus, fällt der Marker beim Fakturieren auf – genau dort, wo es darauf ankommt.
@@ -1006,7 +1020,7 @@ liegen in [bruno/](bruno/).
   den Text unverändert lassen. Auf eine Ablehnung durch die API ist kein Verlass – ein
   abgeschnittener Satz auf einer Kundenrechnung entstünde sonst unbemerkt. Die
   anzunehmende Grenze ist konfigurierbar, Default 200 wie dokumentiert.
-  Der Marker `[LAUFEND:kennung]` verbraucht 18 Zeichen davon.
+  Der Marker `[LAUFEND:kennung]` verbraucht 15 Zeichen davon, mit der Zeitklammer 29.
 - `timeViaApi` markiert per API erzeugte Einträge (nur lesend) – **kein** Statusfeld für
   „offen/fertig" vorhanden. Deshalb der Marker im Text.
 - Rechte: Benutzer bis Stufe »Zeiterfasser 1« sehen und bearbeiten **nur ihre eigenen**

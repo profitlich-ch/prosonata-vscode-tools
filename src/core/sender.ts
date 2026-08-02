@@ -47,6 +47,13 @@ export interface SendDeps {
    * project or category does.
    */
   gridFor?: (repoPath: string) => TimeGrid
+  /**
+   * The span of the day an entry was worked, `HH:MM` each, or null when there
+   * is none to tell. Null also when the segments straddle days: a span says
+   * something only for a single day — `08:12–17:40` over three weeks would
+   * claim an attendance that never happened, so the fields are cleared instead.
+   */
+  spanFor?: (entry: TimeEntry) => { start: string; end: string } | null
 }
 
 /** Entry ids whose write is due now. */
@@ -92,7 +99,7 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       continue
     }
 
-    const detail = detailFor(entry, config)
+    const detail = detailFor(entry, config, runningSinceOf(next, entry.id))
     if (detail.length > config.detailLimit) {
       // ProSonata truncates silently, so we refuse instead of letting a cut
       // sentence reach an invoice. The write stays pending until the text is
@@ -102,7 +109,7 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
     }
 
     try {
-      const closedElsewhere = await writeEntry(entry, detail, startedAtOf(next, entry.id), deps)
+      const closedElsewhere = await writeEntry(entry, detail, deps.spanFor?.(entry) ?? null, deps)
       if (closedElsewhere !== null) {
         next = parkClosedElsewhere(next, entryId, closedElsewhere)
         result.awaitingDecision.push(entryId)
@@ -125,9 +132,16 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
   return { state: next, result }
 }
 
-/** The text as it goes out: with the marker while open, without once closed. */
-export function detailFor(entry: TimeEntry, config: Config): string {
-  return entry.state === 'open' ? withMarker(entry.text, entry.key, config.markerWord) : stripMarker(entry.text, config.markerWord)
+/**
+ * The text as it goes out: with the marker while open, without once closed. The
+ * marker carries the moment the timer started, so another machine sees not only
+ * *that* someone is measuring but since when — including the day, which is what
+ * tells a running timer from one forgotten last week (KONZEPT.md §2).
+ */
+export function detailFor(entry: TimeEntry, config: Config, runningSince: number | null = null): string {
+  return entry.state === 'open'
+    ? withMarker(entry.text, entry.key, config.markerWord, runningSince)
+    : stripMarker(entry.text, config.markerWord)
 }
 
 /**
@@ -136,24 +150,21 @@ export function detailFor(entry: TimeEntry, config: Config): string {
  * nothing is written and the caller parks it.
  */
 /**
- * `HH:MM` while a timer is measuring into this entry, null otherwise.
+ * When a timer began measuring into this entry, or null while none runs.
  *
  * It rides along with a write that was due anyway — no call of its own. The
  * value is therefore up to the send delay old, which is plenty for what it is
  * for: telling another machine that somebody is working here (KONZEPT.md §2).
  */
-function startedAtOf(state: State, entryId: string): string | null {
+function runningSinceOf(state: State, entryId: string): number | null {
   const timer = state.timers.find((candidate) => candidate.entryId === entryId && candidate.startedAt !== null)
-  if (!timer?.startedAt) return null
-
-  const started = new Date(timer.startedAt)
-  return `${String(started.getHours()).padStart(2, '0')}:${String(started.getMinutes()).padStart(2, '0')}`
+  return timer?.startedAt ?? null
 }
 
 async function writeEntry(
   entry: TimeEntry,
   detail: string,
-  workingTimeStart: string | null,
+  span: { start: string; end: string } | null,
   deps: SendDeps,
 ): Promise<number | null> {
   const { api, clock, config } = deps
@@ -165,8 +176,10 @@ async function writeEntry(
     date: clock.today(),
     detail,
     workingTime: workingTime(total, grid),
-    // Null clears it; an empty string would write 01:00:00, as measured.
-    workingTimeStart,
+    // Null clears them; an empty string would write 01:00:00, as measured. So a
+    // span that has become multi-day takes the old one away again.
+    workingTimeStart: span?.start ?? null,
+    workingTimeEnd: span?.end ?? null,
   }
 
   if (entry.timeId === null) {

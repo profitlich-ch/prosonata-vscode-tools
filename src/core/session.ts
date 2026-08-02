@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { HttpApi, type Api } from './api.js'
-import { systemClock, type Clock } from './clock.js'
+import { localDate, systemClock, type Clock } from './clock.js'
 import { paths, readConfig, type Config } from './config.js'
 import { describeRepo, mainBranch, type GitRepo } from './git.js'
 import { Journal } from './journal.js'
@@ -31,7 +31,7 @@ import {
   start,
   unwrittenSeconds,
 } from './tracking.js'
-import type { EntryMode, Scope, State } from './types.js'
+import type { EntryMode, Scope, State, TimeEntry } from './types.js'
 import { workingTime, type TimeGrid } from './working-time.js'
 
 /**
@@ -499,7 +499,7 @@ export class Session {
   }
 
   /** Set by the last sync: somebody is measuring on this branch elsewhere. */
-  runningElsewhereSince: string | null = null
+  runningElsewhereSince: number | null = null
 
   /** Looks for an entry of this branch in ProSonata and adopts it if there is one. */
   async sync(context: RepoContext): Promise<void> {
@@ -525,6 +525,37 @@ export class Session {
    */
   gridFor = (repoPath: string): TimeGrid => readRepoConfig(repoPath).grid ?? this.config.grid
 
+  /**
+   * The span of the working day for an entry, from the segment log: earliest
+   * beginning, latest end, plus the segment running right now — otherwise the
+   * end would lag behind by however long the timer has been going.
+   *
+   * Null as soon as the two fall on different days. A span describes a day; a
+   * `08:12–17:40` on an entry that grew over three weeks would claim an
+   * attendance nobody had. Null clears the fields in ProSonata, so an entry
+   * that grows past midnight loses its span again — which is correct.
+   *
+   * Corrections have no beginning and are therefore left out (KONZEPT.md §3).
+   */
+  spanFor = (entry: TimeEntry): { start: string; end: string } | null => {
+    const stamps: number[] = []
+    for (const segment of this.segments.read()) {
+      if (segment.entryId !== entry.id || segment.from === undefined) continue
+      stamps.push(Date.parse(segment.from), Date.parse(segment.until))
+    }
+
+    const running = this.state().timers.find((timer) => timer.entryId === entry.id && timer.startedAt !== null)
+    if (running?.startedAt) stamps.push(running.startedAt, this.clock.now())
+
+    const known = stamps.filter((value) => Number.isFinite(value))
+    if (known.length === 0) return null
+
+    const start = Math.min(...known)
+    const end = Math.max(...known)
+    if (localDate(new Date(start)) !== localDate(new Date(end))) return null
+    return { start: hourAndMinute(start), end: hourAndMinute(end) }
+  }
+
   /** Sends everything that is due (KONZEPT.md §4). */
   async flush(force = false): Promise<SendResult> {
     const { state, result } = await send(this.state(), this, force)
@@ -537,4 +568,9 @@ export class Session {
   seconds(context: RepoContext): number {
     return currentSeconds(this.state(), this.clock, context.scope)
   }
+}
+
+function hourAndMinute(at: number): string {
+  const time = new Date(at)
+  return `${String(time.getHours()).padStart(2, '0')}:${String(time.getMinutes()).padStart(2, '0')}`
 }

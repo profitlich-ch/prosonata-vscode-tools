@@ -8,7 +8,7 @@ import { DEFAULTS, type Config } from './config.js'
 import { FakeApi } from './fake-api.js'
 import { Journal } from './journal.js'
 import { send } from './sender.js'
-import { sync } from './sync.js'
+import { describeRunningElsewhere, sync } from './sync.js'
 import { openEntry } from './tracking.js'
 import { emptyState, type Scope, type State, type TimeEntry } from './types.js'
 
@@ -153,5 +153,56 @@ describe('an entry closed on another machine', () => {
     expect(parked.awaitingDecision).toBe(true)
     expect(parked.remoteFinalSeconds).toBe(3600)
     expect(outcome.state.pending).toHaveLength(0)
+  })
+})
+
+/**
+ * Somebody measuring on another machine (KONZEPT.md §2). The signal is the time
+ * bracket in the marker — it carries the day, which is what tells a timer that
+ * runs right now from one forgotten last week.
+ */
+describe('a timer running on another machine', () => {
+  const EIGHT_TWELVE = new Date(2026, 6, 30, 8, 12, 0).getTime()
+
+  async function seen(detail: string): Promise<number | null> {
+    const api = new FakeApi()
+    const remote = await api.createEntry({
+      projectID: 166,
+      category: 70,
+      date: '2026-07-30',
+      detail,
+      workingTime: '1.00',
+    })
+    const state: State = { ...emptyState(), entries: [entryOf({ timeId: remote.timeID })] }
+
+    const outcome = await sync(state, api, config, { scope, key: KEY, projectId: 166, categoryId: 70, newId })
+    return outcome.runningElsewhereSince
+  }
+
+  it('is read from the marker, with its day', async () => {
+    expect(await seen(`[LAUFEND:${KEY}][260730-08:12] Buchungsmodul`)).toBe(EIGHT_TWELVE)
+  })
+
+  it('is absent while the marker carries no time', async () => {
+    expect(await seen(`[LAUFEND:${KEY}] Buchungsmodul`)).toBeNull()
+  })
+
+  it('says the hour when it began today', () => {
+    expect(describeRunningElsewhere(EIGHT_TWELVE, new Date(2026, 6, 30, 11, 0, 0).getTime())).toBe(
+      'auf einem anderen Rechner läuft seit 08:12 ein Timer auf diesem Branch',
+    )
+  })
+
+  it('names yesterday as yesterday', () => {
+    expect(describeRunningElsewhere(EIGHT_TWELVE, new Date(2026, 6, 31, 11, 0, 0).getTime())).toContain('seit gestern 08:12')
+  })
+
+  // Older than that it is no longer news that somebody is working — it is the
+  // suspicion that a timer was forgotten. Said out loud, not swallowed.
+  it('calls an older mark what it probably is', () => {
+    const message = describeRunningElsewhere(EIGHT_TWELVE, new Date(2026, 7, 3, 11, 0, 0).getTime())
+
+    expect(message).toContain('seit 30.07. 08:12')
+    expect(message).toContain('Anhalten vergessen')
   })
 })

@@ -9,6 +9,7 @@ import { hookNeedsRepair, installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import { noteFor, planAdjustment, readAdjustment, type Adjustment } from '../core/adjust.js'
 import { describeAttachment, describePlan } from '../core/attach.js'
+import { describeRunningElsewhere } from '../core/sync.js'
 import { describeBranch, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
@@ -787,9 +788,7 @@ function warnAboutRunningElsewhere(active: Session): void {
   const since = active.runningElsewhereSince
   if (since === null) return
 
-  void vscode.window.showWarningMessage(
-    `ProSonata: auf einem anderen Rechner läuft seit ${since.slice(0, 5)} ein Timer auf diesem Branch.`,
-  )
+  void vscode.window.showWarningMessage(`ProSonata: ${describeRunningElsewhere(since, active.clock.now())}.`)
 }
 
 /**

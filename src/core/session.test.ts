@@ -293,3 +293,103 @@ describe('adding follow-up time to the entry a commit closed', () => {
     expect((await session.attachToLastClosed(context, async () => true)).kind).toBe('noTarget')
   })
 })
+
+/**
+ * The span of the working day, read from the segment log — the only place that
+ * knows when work actually began and ended (KONZEPT.md §7).
+ */
+describe('the span an entry is written with', () => {
+  function sessionWithLog() {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-span-'))
+    const clock = fixedClock(NINE)
+    const segments = new SegmentLog(join(dir, 'segments.jsonl'))
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      {
+        api: new FakeApi(),
+        clock,
+        store: new StateStore(join(dir, 'state.json')),
+        journal: new Journal(join(dir, 'log.jsonl')),
+        segments,
+      },
+    )
+    return { session, segments, clock }
+  }
+
+  const segment = (entryId: string, from: number, until: number) => ({
+    from: atLocal(from),
+    until: atLocal(until),
+    seconds: Math.round((until - from) / 1000),
+    repoPath: scope.repoPath,
+    branch: scope.branch,
+    projectId: 166,
+    entryId,
+    reason: 'pause' as const,
+  })
+
+  const on = (day: number, hour: number, minute = 0) => new Date(2026, 6, day, hour, minute, 0).getTime()
+
+  it('reaches from the first beginning to the last end', async () => {
+    const { session, segments } = sessionWithLog()
+    await session.start(context)
+    const entry = openEntry(session.state(), scope)!
+    segments.append(segment(entry.id, on(30, 8, 12), on(30, 11, 30)))
+    segments.append(segment(entry.id, on(30, 13, 5), on(30, 17, 40)))
+
+    expect(session.spanFor(entry)).toEqual({ start: '08:12', end: '17:40' })
+  })
+
+  // Over midnight a span would claim an attendance nobody had, so the fields
+  // are cleared instead of carrying a half-truth.
+  it('is nothing at all once the segments straddle two days', () => {
+    const { session, segments } = sessionWithLog()
+    const entry = { id: 'e1' } as never
+    segments.append(segment('e1', on(29, 22, 40), on(29, 23, 50)))
+    segments.append(segment('e1', on(30, 8, 12), on(30, 9, 30)))
+
+    expect(session.spanFor(entry)).toBeNull()
+  })
+
+  /*
+   * And it has to reach the write. A span the session computes but never hands
+   * over would be as good as none — the same wiring the grid was missing.
+   */
+  it('arrives in ProSonata with the entry', async () => {
+    const api = new FakeApi()
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-span-'))
+    const clock = fixedClock(NINE)
+    const segments = new SegmentLog(join(dir, 'segments.jsonl'))
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      { api, clock, store: new StateStore(join(dir, 'state.json')), journal: new Journal(join(dir, 'log.jsonl')), segments },
+    )
+
+    await session.start(context)
+    const entry = openEntry(session.state(), scope)!
+    segments.append(segment(entry.id, on(30, 8, 12), on(30, 8, 40)))
+    session.store.update((state) => {
+      state.entries[0]!.text = 'Buchungsmodul'
+      state.timers = []
+      state.pending = [{ entryId: entry.id, since: NINE, closing: false }]
+      return state
+    })
+
+    await session.flush(true)
+
+    const written = [...api.entries.values()][0]
+    expect(written?.workingTimeStart).toBe('08:12:00')
+    expect(written?.workingTimeEnd).toBe('08:40:00')
+  })
+
+  // While a timer runs the last recorded segment may be hours old; the end has
+  // to follow the running one, or the entry would look long finished.
+  it('counts the running segment towards the end', async () => {
+    const { session, segments, clock } = sessionWithLog()
+    await session.start(context)
+    const entry = openEntry(session.state(), scope)!
+    segments.append(segment(entry.id, on(30, 8, 12), on(30, 8, 40)))
+    clock.advance(3 * 3600)
+
+    expect(session.spanFor(entry)).toEqual({ start: '08:12', end: '12:00' })
+  })
+})

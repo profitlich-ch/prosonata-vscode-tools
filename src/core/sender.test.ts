@@ -282,14 +282,14 @@ describe('the running mark', () => {
     entryId,
   })
 
-  it('rides along with a write while the timer runs', async () => {
+  it('rides along in the marker while the timer runs', async () => {
     const { api, deps } = setup()
     const nineTwelve = new Date(2026, 6, 30, 9, 12, 0).getTime()
     const state = { ...stateWith(entry()), timers: [timerOn('e1', nineTwelve)] }
 
     const { state: after } = await send(state, deps, true)
 
-    expect(api.entries.get(after.entries[0]!.timeId!)?.workingTimeStart).toBe('09:12:00')
+    expect(api.entries.get(after.entries[0]!.timeId!)?.detail).toBe('[LAUFEND:a3f9c1][260730-09:12] Buchungsmodul')
   })
 
   it('is taken back by the next write once the timer stands still', async () => {
@@ -305,7 +305,47 @@ describe('the running mark', () => {
     }
     await send(paused, deps, true)
 
+    expect(api.entries.get(timeId)?.detail).toBe('[LAUFEND:a3f9c1] Buchungsmodul')
+  })
+
+  // The status used to sit in `workingTimeStart`. It does not any more, and the
+  // field must stay free for the span — otherwise both would fight over it.
+  it('leaves workingTimeStart alone', async () => {
+    const { api, deps } = setup()
+    const nineTwelve = new Date(2026, 6, 30, 9, 12, 0).getTime()
+
+    const { state: after } = await send({ ...stateWith(entry()), timers: [timerOn('e1', nineTwelve)] }, deps, true)
+
+    expect(api.entries.get(after.entries[0]!.timeId!)?.workingTimeStart).toBeNull()
+  })
+})
+
+/*
+ * The span of the working day. It only says something for a single day, so the
+ * session hands over `null` as soon as the segments straddle midnight — and
+ * `null` has to clear what stands there, or a span would outlive its truth.
+ */
+describe('the span of the working day', () => {
+  it('writes the beginning and the end into the two fields', async () => {
+    const { api, deps } = setup()
+
+    const { state: after } = await send(stateWith(entry()), { ...deps, spanFor: () => ({ start: '08:12', end: '17:40' }) }, true)
+
+    const written = api.entries.get(after.entries[0]!.timeId!)
+    expect(written?.workingTimeStart).toBe('08:12:00')
+    expect(written?.workingTimeEnd).toBe('17:40:00')
+  })
+
+  it('clears both fields again once no single day can be named', async () => {
+    const { api, deps } = setup()
+    const first = await send(stateWith(entry()), { ...deps, spanFor: () => ({ start: '08:12', end: '17:40' }) }, true)
+    const timeId = first.state.entries[0]!.timeId!
+
+    const later = { ...first.state, pending: [{ entryId: 'e1', since: NINE, closing: false }] }
+    await send(later, { ...deps, spanFor: () => null }, true)
+
     expect(api.entries.get(timeId)?.workingTimeStart).toBeNull()
+    expect(api.entries.get(timeId)?.workingTimeEnd).toBeNull()
   })
 })
 

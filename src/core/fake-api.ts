@@ -75,6 +75,7 @@ export class FakeApi implements Api {
       hours: parseWorkingTime(draft.workingTime),
       isInvoiced: false,
       workingTimeStart: normaliseStart(draft.workingTimeStart),
+      workingTimeEnd: normaliseStart(draft.workingTimeEnd),
       notInvoiceable: false,
     }
     this.entries.set(entry.timeID, entry)
@@ -94,6 +95,7 @@ export class FakeApi implements Api {
     if (patch.category !== undefined) entry.category = patch.category
     // Measured: null clears, an empty string writes 01:00:00 instead.
     if (patch.workingTimeStart !== undefined) entry.workingTimeStart = normaliseStart(patch.workingTimeStart)
+    if (patch.workingTimeEnd !== undefined) entry.workingTimeEnd = normaliseStart(patch.workingTimeEnd)
     return { ...entry }
   }
 

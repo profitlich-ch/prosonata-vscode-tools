@@ -61,11 +61,12 @@ export interface RemoteEntry {
   isInvoiced: boolean
   notInvoiceable: boolean
   /**
-   * `HH:MM:SS` while a timer is running for this entry, null otherwise. Its mere
-   * presence is the signal: ProSonata has no status field, but it takes this one
-   * and only shows it (KONZEPT.md §2).
+   * `HH:MM:SS` or null. ProSonata only displays the pair; nothing is derived
+   * from it there. We write the span of the day the entry was worked
+   * (KONZEPT.md §2) — the running status lives in the marker, not here.
    */
   workingTimeStart: string | null
+  workingTimeEnd: string | null
 }
 
 export interface EntryDraft {
@@ -76,11 +77,12 @@ export interface EntryDraft {
   /** Decimal hours with a dot, as `workingTime()` produces it. */
   workingTime: string
   /**
-   * `HH:MM` while measuring, null to clear it. Measured against the account:
-   * the short form is accepted and stored as `HH:MM:SS`, null really clears —
-   * but an empty string does not, it writes `01:00:00`.
+   * The span of the working day, `HH:MM` each, null to clear. Measured against
+   * the account: the short form is accepted and stored as `HH:MM:SS`, null
+   * really clears — but an empty string does not, it writes `01:00:00`.
    */
   workingTimeStart?: string | null
+  workingTimeEnd?: string | null
 }
 
 /** How much of the rate limit is left, from every response (KONZEPT.md §9). */
@@ -307,6 +309,7 @@ function toEntry(row: Record<string, unknown>): RemoteEntry {
     hours: parseWorkingTime(row['workingTime']),
     isInvoiced: Number(row['isInvoiced'] ?? 0) === 1,
     workingTimeStart: typeof row['workingTimeStart'] === 'string' ? row['workingTimeStart'] : null,
+    workingTimeEnd: typeof row['workingTimeEnd'] === 'string' ? row['workingTimeEnd'] : null,
     notInvoiceable: Number(row['notInvoiceable'] ?? 0) === 1,
   }
 }

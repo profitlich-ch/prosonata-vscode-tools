@@ -8,6 +8,7 @@ import { installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import { noteFor, readAdjustment } from '../core/adjust.js'
 import { describeAttachment, describePlan } from '../core/attach.js'
+import { describeRunningElsewhere } from '../core/sync.js'
 import { describeBranch, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
@@ -369,9 +370,7 @@ async function start(cwd: string): Promise<number> {
 
   await session.start(context)
   if (session.runningElsewhereSince !== null) {
-    process.stderr.write(
-      `auf einem anderen Rechner läuft seit ${session.runningElsewhereSince.slice(0, 5)} ein Timer auf diesem Branch\n`,
-    )
+    process.stderr.write(`${describeRunningElsewhere(session.runningElsewhereSince, session.clock.now())}\n`)
   }
   process.stdout.write(`läuft auf ${context.scope.branch} — ${nameOfProject(context)}\n`)
   return 0

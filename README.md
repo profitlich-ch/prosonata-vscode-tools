@@ -92,9 +92,16 @@ bleiben aussen vor. Solange ein offener Eintrag keinen Text hat, wird er nicht
 nach ProSonata geschrieben.
 
 Solange ein Eintrag offen ist, trägt er eine Markierung:
-`[LAUFEND:a3f9c1] …`. Sie macht einen unfertigen Eintrag in
+`[LAUFEND:a3f9c1][260802-08:12] …`. Sie macht einen unfertigen Eintrag in
 ProSonata sichtbar — die API hat kein Statusfeld — und sie trägt die Identität
 des Branches, sodass es möglich ist, auf weiteren Computern am selben Branch zu arbeiten.
+Die zweite Klammer steht nur, solange ein Timer läuft, und nennt Tag und Uhrzeit
+seines Starts; beim Abschliessen verschwindet die ganze Markierung.
+
+In den Feldern **Start** und **Ende** steht dafür die Spanne des Arbeitstages —
+Beginn des ersten und Ende des jüngsten Segments. Erstreckt sich ein Eintrag über
+mehrere Tage, bleiben beide leer: Eine Spanne sagt nur über einen einzelnen Tag
+etwas aus.
 
 ## Auf mehreren Computern
 
@@ -107,8 +114,14 @@ Zwei **Personen** stören einander dagegen nicht: Zeiten gehören in ProSonata
 Benutzern, und jede führt ihren eigenen Eintrag pro Branch.
 
 Läuft auf einem anderen Computer gerade ein Timer auf demselben Branch, sagt es
-dir das beim Starten. Mehr nicht — anhalten lässt sich ein Timer auf einem
-zugeklappten Rechner nicht.
+dir das beim Starten — mit dem Tag, an dem er gestartet wurde. Ist das länger als
+gestern her, heisst es nicht mehr «läuft seit», sondern «dort wurde vermutlich
+das Anhalten vergessen». Mehr als sagen kann die Erweiterung nicht: Ein Timer auf
+einem zugeklappten Rechner lässt sich von hier nicht anhalten.
+
+**Beide Computer sollten denselben Stand haben.** Die Markierung ist die Sprache,
+in der sie sich verständigen; ein älterer Stand versteht die Zeitklammer nicht und
+zeigt sie als Textrest.
 
 Schliesst ein Computer den Eintrag ab, während auf dem anderen noch Zeit
 angefallen ist, wird dort gefragt: **zum abgeschlossenen Eintrag hinzufügen**

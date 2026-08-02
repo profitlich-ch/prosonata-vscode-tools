@@ -2,7 +2,7 @@
   "name": "prosonata-vscode-tools",
   "displayName": ":Profitlich",
   "description": "Verbindet VS Code mit ProSonata. Vorerst: Zeiterfassung, gebunden an Commits und Branches.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "publisher": "profitlich",
   "repository": {
     "type": "git",

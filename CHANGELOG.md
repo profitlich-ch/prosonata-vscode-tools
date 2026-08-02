@@ -4,6 +4,35 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] — 2026-08-02
+
+Der Statusanzeiger zieht aus einem geliehenen API-Feld in die eigene Marke — und
+die Felder sagen endlich, was sie in ProSonata bedeuten.
+
+### Geändert
+
+- **Die Marke trägt jetzt, seit wann gemessen wird**:
+  `[LAUFEND:a3f9c1][260802-08:12] Text`. Die zweite Klammer steht nur, solange
+  ein Timer läuft, und reist mit einem ohnehin fälligen Schreibvorgang — kein
+  zusätzlicher Aufruf. Bewusst eine **eigene** Klammer: Ein älterer Stand liest
+  `^\[LAUFEND:([0-9a-f]+)\]` und fände eine Marke mit der Zeit *innerhalb* der
+  Klammer nicht mehr — er hielte den Eintrag für anderswo abgeschlossen und
+  parkte laufende Stunden.
+- **Die Warnung über einen fremden Timer kennt den Tag.** Bisher stand dort eine
+  Uhrzeit ohne Datum, also klang ein auf einem schlafenden Rechner vergessener
+  Timer eine Woche später wie einer von heute früh. Jetzt: „läuft seit 08:12",
+  „läuft seit gestern 23:50" oder „trägt seit 30.07. 08:12 eine laufende Messung
+  — dort wurde vermutlich das Anhalten vergessen".
+
+### Hinzugefügt
+
+- **Start und Ende in ProSonata**: `workingTimeStart` und `workingTimeEnd`
+  tragen die Spanne des Arbeitstages, aus dem Segmentprotokoll — Beginn des
+  ersten, Ende des jüngsten Segments, das laufende eingerechnet. Fallen die
+  beiden Enden auf verschiedene Tage, werden die Felder **geleert**: Eine Spanne
+  sagt nur über einen einzelnen Tag etwas aus. `workingTimeEnd` war bisher gar
+  nicht abgebildet.
+
 ## [0.6.0] — 2026-08-02
 
 ### Hinzugefügt

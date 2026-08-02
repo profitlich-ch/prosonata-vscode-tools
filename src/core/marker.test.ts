@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { branchKey, buildMarker, readKey, searchTerm, stripMarker, withMarker } from './marker.js'
+import { branchKey, buildMarker, readKey, readRunningSince, searchTerm, stripMarker, withMarker } from './marker.js'
 import { localDate } from './clock.js'
 import { EXACT, parseWorkingTime, toHours, workingTime } from './working-time.js'
 
@@ -56,6 +56,54 @@ describe('the marker', () => {
     const term = searchTerm('a3f9c1')
     expect(buildMarker('a3f9c1')).toContain(term)
     expect(term).not.toContain('[')
+  })
+})
+
+/**
+ * Since when a timer runs — in our own namespace, because an API field for a
+ * status costs the field and carries no day (KONZEPT.md §2).
+ */
+describe('the time bracket of a running timer', () => {
+  const EIGHT_TWELVE = new Date(2026, 7, 2, 8, 12, 0).getTime()
+
+  it('carries the day and the minute the timer started', () => {
+    expect(withMarker('Kirby Update', 'a3f9c1', undefined, EIGHT_TWELVE)).toBe(
+      '[LAUFEND:a3f9c1][260802-08:12] Kirby Update',
+    )
+  })
+
+  it('is absent while nothing runs', () => {
+    expect(withMarker('Kirby Update', 'a3f9c1')).toBe('[LAUFEND:a3f9c1] Kirby Update')
+    expect(withMarker('Kirby Update', 'a3f9c1', undefined, null)).toBe('[LAUFEND:a3f9c1] Kirby Update')
+  })
+
+  it('reads back the moment it was written from', () => {
+    const detail = withMarker('Kirby Update', 'a3f9c1', undefined, EIGHT_TWELVE)
+
+    expect(readRunningSince(detail)).toBe(EIGHT_TWELVE)
+    expect(readRunningSince('[LAUFEND:a3f9c1] Kirby Update')).toBeNull()
+    expect(readRunningSince('Kirby Update')).toBeNull()
+  })
+
+  // The other machine may still run an older version, and its entries must stay
+  // readable — otherwise a missing marker would read as "closed elsewhere".
+  it('leaves a marker from before it existed fully readable', () => {
+    expect(readKey('[LAUFEND:a3f9c1] Kirby Update')).toBe('a3f9c1')
+    expect(stripMarker('[LAUFEND:a3f9c1] Kirby Update')).toBe('Kirby Update')
+  })
+
+  it('disappears with the marker when the entry is closed', () => {
+    expect(stripMarker('[LAUFEND:a3f9c1][260802-08:12] Kirby Update')).toBe('Kirby Update')
+    expect(stripMarker('[LAUFEND:a3f9c1][260802-08:12]')).toBe('')
+  })
+
+  it('does not stop the search from finding the entry', () => {
+    const detail = withMarker('Kirby Update', 'a3f9c1', undefined, EIGHT_TWELVE)
+    expect(detail).toContain(searchTerm('a3f9c1'))
+  })
+
+  it('reads the key even with the time in the way', () => {
+    expect(readKey('[LAUFEND:a3f9c1][260802-08:12] Kirby Update')).toBe('a3f9c1')
   })
 })
 
