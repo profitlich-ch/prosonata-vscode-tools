@@ -450,7 +450,21 @@ async function adjustTime(session: Session, context: RepoContext): Promise<void>
   pick.items = standingOffers(session, context)
   pick.onDidChangeValue((value) => {
     const offers = readAdjustment(value, session.clock.now())
-    pick.items = offers.length === 0 ? standingOffers(session, context) : offers.map((offer) => describe(offer, session, context))
+    const possible = offers.filter((offer) => planAdjustment(offer, session.situation(context)).action !== 'impossible')
+
+    /*
+     * A QuickPick filters its items against what was typed, so a line whose
+     * label does not contain "17:15" disappears the moment it is typed. The
+     * refusal therefore belongs in the title, which stays visible — not in a
+     * line that cannot be shown anyway.
+     */
+    pick.title =
+      offers.length > 0 && possible.length === 0
+        ? 'ProSonata: ohne laufenden Timer keine Uhrzeit — nimm eine Dauer, etwa -0:06'
+        : 'ProSonata: Zeit korrigieren'
+    pick.items = possible.length === 0 && offers.length === 0
+      ? standingOffers(session, context)
+      : possible.map((offer) => describe(offer, session, context))
   })
 
   const chosen = await new Promise<Adjustment | undefined>((resolve) => {
@@ -483,7 +497,10 @@ function hourOf(at: number): string {
   return new Date(at).toTimeString().slice(0, 5)
 }
 
-/** The list before anything is typed: steps, and the anchor that fits the state. */
+/**
+ * The list before anything is typed. Only amounts: they work in either state,
+ * while a time of day needs a running segment to refer to.
+ */
 function standingOffers(
   session: Session,
   context: RepoContext,
@@ -493,19 +510,6 @@ function standingOffers(
     seconds: minutes * 60,
     label: `${minutes > 0 ? '+' : '−'}${Math.abs(minutes)} Minuten`,
   }))
-
-  /*
-   * Only with the timer stopped: while it runs, its segment already begins at
-   * the last commit, so counting from there would add nothing (tracking.ts).
-   */
-  const lastCommit = session.situation(context).runningSince === null ? session.lastCommitAt(context) : null
-  if (lastCommit !== null) {
-    offers.unshift({
-      kind: 'startAt',
-      at: lastCommit,
-      label: `ab dem letzten Commit zählen (${new Date(lastCommit).toTimeString().slice(0, 5)})`,
-    })
-  }
 
   return offers.map((offer) => describe(offer, session, context))
 }
@@ -524,10 +528,6 @@ function describe(
    * that was typed: a timer that started later cannot end earlier than it began.
    */
   const stopped = plan.action === 'stop' && plan.at !== undefined ? ` · hält um ${hourOf(plan.at)} an` : ''
-
-  if (plan.action === 'impossible') {
-    return { label: 'ohne laufenden Timer nicht möglich', detail: noteFor(plan, adjustment) ?? '', adjustment }
-  }
 
   return {
     label: adjustment.label,

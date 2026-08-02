@@ -9,6 +9,7 @@ import { DEFAULTS, type Config } from './config.js'
 import { FakeApi } from './fake-api.js'
 import { Journal } from './journal.js'
 import { Session, type RepoContext } from './session.js'
+import { SegmentLog, atLocal } from './segments.js'
 import { StateStore } from './state-store.js'
 import { openEntry } from './tracking.js'
 
@@ -140,5 +141,24 @@ describe('answering "closed on another machine"', () => {
     const entry = session.state().entries[0]!
     expect(entry.timeId).toBeNull()
     expect(entry.seconds).toBe(1500)
+  })
+})
+
+describe('the boundary a correction must not set', () => {
+  it('is the end of the last measured segment, not the moment an amount was typed', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-grenze-'))
+    const segments = new SegmentLog(join(dir, 'segments.jsonl'))
+    const base = { repoPath: scope.repoPath, branch: scope.branch, projectId: 166, entryId: 'e1' }
+
+    segments.append({ ...base, from: atLocal(NINE), until: atLocal(NINE + 3600_000), seconds: 3600, reason: 'pause' })
+    // Typed an hour later: it says nothing about when any work happened.
+    segments.append({ ...base, until: atLocal(NINE + 7200_000), seconds: -900, reason: 'correction' })
+
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      { api: new FakeApi(), clock: fixedClock(NINE), store: new StateStore(join(dir, 'state.json')), journal: new Journal(join(dir, 'log.jsonl')), segments },
+    )
+
+    expect(session.lastSegmentEnd(context)).toBe(NINE + 3600_000)
   })
 })

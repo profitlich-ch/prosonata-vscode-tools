@@ -136,9 +136,10 @@ behaupten, wann sie angefallen sind. Im Log steht eine solche Korrektur deshalb
 ohne Anfangszeit.
 
 Jede Zeile zeigt vorher, was sie bewirkt: `7:13:09 → 0:40:00`. Weiter zurück als
-bis zum **Ende des letzten Segments** reicht keine Uhrzeit — ein
+bis zum **Ende des letzten Segments** reicht keine Korrektur — ein
 abgeschlossenes Segment sagt ja gerade, dass bis dahin alles richtig erfasst
-ist. Wird deshalb gekürzt, steht es in derselben Zeile: „erst ab 14:25 möglich".
+ist. Wird deshalb gekürzt, sagt dieselbe Zeile, was stattdessen geht und woran
+es liegt: „erst ab 14:25 → so weit reicht das letzte Segment".
 Unter null fällt ein Eintrag ebenfalls nie. Im Terminal:
 `prosonata adjust "bis 9:40"`.
 

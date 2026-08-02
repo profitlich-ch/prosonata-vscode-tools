@@ -273,14 +273,23 @@ export class Session {
   }
 
   /**
-   * The end of the last segment measured on this branch — the floor a shifted
-   * start must not fall below, because the minutes before it are already
-   * booked. Nothing measured yet means no floor.
+   * The end of the last segment **measured** on this branch — the floor a
+   * shifted start must not fall below, because the minutes before it are
+   * already booked. Nothing measured yet means no floor.
+   *
+   * Corrections are left out on purpose: their `until` is the moment somebody
+   * typed an amount, not the end of any work. Letting that count would block a
+   * later segment from reaching back over a stretch nobody ever measured.
    */
   lastSegmentEnd(context: RepoContext): number {
     const ends = this.segments
       .read()
-      .filter((segment) => segment.repoPath === context.scope.repoPath && segment.branch === context.scope.branch)
+      .filter(
+        (segment) =>
+          segment.reason !== 'correction' &&
+          segment.repoPath === context.scope.repoPath &&
+          segment.branch === context.scope.branch,
+      )
       .map((segment) => Date.parse(segment.until))
       .filter((value) => Number.isFinite(value))
 

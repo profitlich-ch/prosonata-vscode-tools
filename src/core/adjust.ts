@@ -119,16 +119,31 @@ export function noteFor(plan: Plan, adjustment: Adjustment): string | null {
   }
   if (plan.skipped < 60) return null
 
-  if (adjustment.kind === 'startAt' && plan.at !== undefined) {
-    const limit = new Date(plan.at).toTimeString().slice(0, 5)
-    return `erst ab ${limit} möglich — davor ist alles erfasst`
+  /*
+   * What is possible first, the reason second — and the reason names the
+   * segment, because that is the thing standing in the way.
+   */
+  if (plan.action === 'shift' && plan.at !== undefined) {
+    const limit = hour(plan.at)
+    if (adjustment.kind === 'startAt') return `erst ab ${limit} → so weit reicht das letzte Segment`
+    if (plan.delta === 0) return `nicht möglich → letztes Segment reicht bis ${limit}`
+
+    return plan.delta > 0
+      ? `nur +${formatAmount(plan.delta)} → letztes Segment reicht bis ${limit}`
+      : `nur −${formatAmount(-plan.delta)} → so lange läuft das Segment erst`
   }
+
   if (plan.action === 'stop' && plan.at !== undefined) {
-    const end = new Date(plan.at).toTimeString().slice(0, 5)
-    return `gebucht wird bis ${end} — davor lief kein Timer`
+    return `gebucht wird bis ${hour(plan.at)} → erst ab dann lief der Timer`
   }
-  if (plan.action === 'shift') return `${formatAmount(plan.skipped)} davon sind bereits erfasst`
-  return `${formatAmount(plan.skipped)} davon hat der Eintrag nicht`
+
+  // The segments of this computer, not the entry: a share measured elsewhere
+  // is visible in the entry but cannot be taken back from here.
+  return `nur ${plan.delta > 0 ? '+' : '−'}${formatAmount(Math.abs(plan.delta))} → mehr haben die Segmente nicht`
+}
+
+function hour(at: number): string {
+  return new Date(at).toTimeString().slice(0, 5)
 }
 
 /** `9:40` or `09:40` as epoch milliseconds on the day `now` falls on. */
@@ -204,6 +219,7 @@ export function readAdjustment(input: string, now: number): Adjustment[] {
 
 function formatAmount(seconds: number): string {
   const minutes = Math.round(seconds / 60)
+  if (minutes === 1) return '1 Minute'
   if (minutes < 60) return `${minutes} Minuten`
   return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')} Stunden`
 }

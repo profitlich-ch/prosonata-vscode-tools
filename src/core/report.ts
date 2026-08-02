@@ -7,9 +7,16 @@ import { workingTime, type TimeGrid } from './working-time.js'
  * for the same reason the rules do: one wording, one set of sums, tested once.
  */
 
-/** `1:23` — hours and minutes. Seconds would be noise over a day. */
+/**
+ * `1:23` — hours and minutes. Seconds would be noise over a day.
+ *
+ * The sign goes in front of the whole thing: a correction of a quarter of an
+ * hour is `−0:15`, not `-1:-15`, which is what dividing a negative number into
+ * hours and minutes gives you.
+ */
 export function hoursAndMinutes(seconds: number): string {
-  return `${Math.floor(seconds / 3600)}:${String(Math.floor((seconds % 3600) / 60)).padStart(2, '0')}`
+  const amount = Math.abs(seconds)
+  return `${seconds < 0 ? '−' : ''}${Math.floor(amount / 3600)}:${String(Math.floor((amount % 3600) / 60)).padStart(2, '0')}`
 }
 
 function timeOf(iso: string): string {

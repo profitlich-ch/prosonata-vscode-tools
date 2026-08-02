@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { renderReport } from './report.js'
+import { hoursAndMinutes, renderReport } from './report.js'
 import { SegmentLog, atLocal, branchesIn, byDay, type Segment } from './segments.js'
 
 /**
@@ -161,5 +161,21 @@ describe('a correction without a span', () => {
 
     expect(text).toContain('| — |')
     expect(text).toContain('Korrektur')
+  })
+})
+
+describe('a negative duration', () => {
+  it('carries its sign in front, not in every part', () => {
+    const { from, ...correction } = segment({ seconds: -900, reason: 'correction' })
+    const text = renderReport([correction], { branch: null, grid: { kind: 'exact' } })
+
+    expect(text).toContain('−0:15')
+    expect(text).not.toContain('-1:-15')
+  })
+
+  it('does the same for a day that ends up negative', () => {
+    expect(hoursAndMinutes(-4500)).toBe('−1:15')
+    expect(hoursAndMinutes(4500)).toBe('1:15')
+    expect(hoursAndMinutes(0)).toBe('0:00')
   })
 })

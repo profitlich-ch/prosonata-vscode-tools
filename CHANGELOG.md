@@ -4,6 +4,38 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] — 2026-08-02
+
+Nachlese zur 0.5.0: vier Fehler, die erst im Alltag auffielen, und ein
+einheitliches Vokabular für die Rückmeldungen.
+
+### Behoben
+
+- **Eine Korrektur setzte die Grenze fürs Zurückdrehen.** Ihr Zeitstempel ist
+  der Moment der Eingabe, nicht das Ende einer Messung — trotzdem galt er als
+  „bis hierhin ist alles erfasst". Wer um 18:05 eine Korrektur eintrug, konnte
+  den Beginn eines später gestarteten Segments nur bis 18:05 zurückschieben
+  statt bis zum Ende der letzten Messung um 18:04.
+- **Negative Zeiten trugen zwei Minuszeichen**: Im Log stand `-1:-15` statt
+  `−0:15`.
+- **Der Dialog hatte seine Rückmeldung vertauscht.** Ohne Eingabe stand dort
+  „nicht möglich", und beim Tippen einer Uhrzeit verschwand der Hinweis — denn
+  ein QuickPick filtert seine Zeilen nach dem getippten Text. Die Absage steht
+  jetzt im Titel, wo sie sichtbar bleibt; ohne Eingabe werden nur noch Beträge
+  angeboten.
+- **Die Grenze einer nachgetragenen Dauer nannte den falschen Behälter.** Sie
+  sprach vom Eintrag, meinte aber die auf diesem Computer gemessenen Segmente:
+  Hat ein anderer Rechner beigesteuert, zeigt der Eintrag mehr, als sich von
+  hier abziehen lässt.
+
+### Geändert
+
+- **Die Rückmeldungen sagen zuerst, was möglich ist**, und begründen es mit dem
+  Segment, das im Weg steht: `nur +1 Minute → letztes Segment reicht bis 18:04`
+  statt „14 Minuten davon sind bereits erfasst". Rückwärts steht das letzte
+  Segment im Weg, vorwärts das laufende — beides sagt nun dieselbe Zeile nicht
+  mehr gleich.
+
 ## [0.5.0] — 2026-08-02
 
 Die Zeit lässt sich vor- und zurückdrehen. Entstanden ist die Fassung aus vier
