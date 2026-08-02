@@ -8,17 +8,22 @@ import { Journal } from './journal.js'
 import { branchKey } from './marker.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
 import { send, type SendResult } from './sender.js'
+import { planAdjustment, type Adjustment, type Plan, type Situation } from './adjust.js'
 import { SegmentLog, atLocal, type Segment } from './segments.js'
 import { StateStore } from './state-store.js'
 import { sync } from './sync.js'
 import {
+  bookCorrection,
   commit,
   currentSeconds,
   keepFromRunning,
   openEntry,
   pause,
+  pauseAt,
+  queueWriteFor,
   resumeAfterAdding,
   resumeAsNew,
+  shiftStart,
   start,
   unwrittenSeconds,
 } from './tracking.js'
@@ -176,7 +181,7 @@ export class Session {
   pause(context: RepoContext): State {
     const startedAt = this.runningSince(context)
     const state = this.store.update((current) => pause(current, this.clock, context.scope))
-    if (startedAt !== null) this.recordSegment(context, startedAt, this.clock.now(), 'pause')
+    if (startedAt !== null) this.recordSegmentAt(context, startedAt, this.clock.now(), 'pause')
     return state
   }
 
@@ -192,8 +197,121 @@ export class Session {
     const now = this.clock.now()
     const state = this.store.update((current) => keepFromRunning(current, this.clock, context.scope, seconds))
     const kept = Math.min(seconds, Math.max(0, Math.floor((now - startedAt) / 1000)))
-    this.recordSegment(context, now - kept * 1000, now, 'trimmed', Math.floor((now - startedAt) / 1000))
+    this.recordSegmentAt(context, now - kept * 1000, now, 'trimmed', Math.floor((now - startedAt) / 1000))
     return state
+  }
+
+  /**
+   * Winds the clock forward or back by `seconds`, positive meaning "count more"
+   * (KONZEPT.md §3).
+   *
+   * While a timer runs its start moves — the measurement stays a measurement,
+   * and the segment reaches the log later with the corrected beginning. While
+   * nothing runs the entry is changed directly, and that needs a line of its
+   * own in the log; otherwise a day would add up differently there than in
+   * ProSonata.
+   *
+   * Returns what was really applied: the limits below can cut a wish short.
+   */
+  adjust(context: RepoContext, adjustment: Adjustment): Plan {
+    const runningSince = this.runningSince(context)
+    const plan = planAdjustment(adjustment, this.situation(context))
+    if (plan.action === 'impossible') return plan
+    if (plan.delta === 0 && plan.action !== 'stop') return plan
+
+    if (plan.action === 'stop' && runningSince !== null) {
+      const at = plan.at ?? this.clock.now()
+      this.store.update((state) => pauseAt(state, this.clock, context.scope, at).state)
+      // The true span, so the log does not claim work at the wrong hour.
+      this.recordSegmentAt(context, runningSince, at, 'pause')
+      return plan
+    }
+
+    if (plan.action === 'shift') {
+      this.store.update((state) => shiftStart(state, this.clock, context.scope, plan.delta, this.lastSegmentEnd(context)).state)
+      return plan
+    }
+
+    this.store.update((state) => bookCorrection(state, this.startOptionsFor(context), plan.delta).state)
+    // Without a beginning: an amount booked after the fact is not a measurement,
+    // and no clock times may be invented for it.
+    this.recordCorrection(context, plan.delta)
+    this.queueIfKnown(context)
+    return plan
+  }
+
+  /** A correction carries only its amount and the moment it was entered. */
+  private recordCorrection(context: RepoContext, seconds: number): void {
+    const entry = openEntry(this.state(), context.scope)
+    this.segments.append({
+      until: atLocal(this.clock.now()),
+      seconds,
+      repoPath: context.scope.repoPath,
+      branch: context.scope.branch,
+      projectId: context.projectId,
+      entryId: entry?.id ?? '-',
+      reason: 'correction',
+    })
+  }
+
+  /** A correction changes the sum without a segment ending; the write must follow. */
+  private queueIfKnown(context: RepoContext): void {
+    const entry = openEntry(this.state(), context.scope)
+    if (entry && entry.timeId !== null) {
+      this.store.update((state) => queueWriteFor(state, entry.id, this.clock.now()))
+    }
+  }
+
+  /** What an adjustment would do, without doing it — for showing it first. */
+  situation(context: RepoContext): Situation {
+    return {
+      now: this.clock.now(),
+      runningSince: this.runningSince(context),
+      lastSegmentEnd: this.lastSegmentEnd(context),
+      booked: openEntry(this.state(), context.scope)?.seconds ?? 0,
+    }
+  }
+
+  /**
+   * The end of the last segment measured on this branch — the floor a shifted
+   * start must not fall below, because the minutes before it are already
+   * booked. Nothing measured yet means no floor.
+   */
+  lastSegmentEnd(context: RepoContext): number {
+    const ends = this.segments
+      .read()
+      .filter((segment) => segment.repoPath === context.scope.repoPath && segment.branch === context.scope.branch)
+      .map((segment) => Date.parse(segment.until))
+      .filter((value) => Number.isFinite(value))
+
+    return ends.length === 0 ? 0 : Math.max(...ends)
+  }
+
+  /** The last commit on this branch, as the log saw it — an anchor to count from. */
+  lastCommitAt(context: RepoContext): number | null {
+    const commits = this.segments
+      .read()
+      .filter(
+        (segment) =>
+          segment.reason === 'commit' &&
+          segment.repoPath === context.scope.repoPath &&
+          segment.branch === context.scope.branch,
+      )
+      .map((segment) => Date.parse(segment.until))
+      .filter((value) => Number.isFinite(value))
+
+    return commits.length === 0 ? null : Math.max(...commits)
+  }
+
+  private startOptionsFor(context: RepoContext) {
+    return {
+      scope: context.scope,
+      key: context.key,
+      projectId: context.projectId,
+      categoryId: context.categoryId,
+      mode: context.mode,
+      newId: randomUUID,
+    }
   }
 
   /** When the running segment of this scope began, or null while paused. */
@@ -207,7 +325,7 @@ export class Session {
     return timer?.startedAt ?? null
   }
 
-  private recordSegment(
+  private recordSegmentAt(
     context: RepoContext,
     from: number,
     until: number,
@@ -291,7 +409,7 @@ export class Session {
       return outcome.state
     })
 
-    if (startedAt !== null && booked > 0) this.recordSegment(context, startedAt, this.clock.now(), 'commit')
+    if (startedAt !== null && booked > 0) this.recordSegmentAt(context, startedAt, this.clock.now(), 'commit')
     return { state, booked, hadTimer, closed, branchSwitched: switched }
   }
 

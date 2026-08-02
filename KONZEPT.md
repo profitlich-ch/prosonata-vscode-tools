@@ -353,6 +353,27 @@ Rein informierend. Gebucht wird nie automatisch.
   weiss nur, wer dabei war. Antworten: alles behalten, eine eigene Dauer, verwerfen. Nach
   „alles behalten" schweigt die Frage eine Stunde, sonst wäre sie nach zwei Tagen unsichtbar.
   Im Terminal dasselbe über `prosonata pause [h:mm]`.
+- **Zeit vor- und zurückdrehen.** Zwei Alltagsfehler, einer je Richtung: Der Timer lief durch
+  ein Telefonat, oder er lief nie, obwohl gearbeitet wurde. Beides erinnert ein Mensch als
+  **Uhrzeit** („um 9:40 klingelte das Telefon"), nicht als Differenz – deshalb wirken Anker
+  absolut. `bis 9:40` bucht das laufende Segment bis dahin und **hält an**; nur so stimmen im
+  Segmentprotokoll auch die Uhrzeiten, während ein verschobener Beginn die Dauer erhielte und
+  den Zeitpunkt erfände. `ab 9:40` verschiebt den **Beginn** des
+  laufenden Segments dorthin, sodass eine durchgehende Messung entsteht statt einer Messung
+  plus Nachtrag; ohne laufenden Timer wird die Zeit seither als eine Spanne ergänzt.
+
+  **Uhrzeiten setzen einen laufenden Timer voraus.** Sie ändern das laufende Segment; steht
+  der Timer, gibt es keines, auf das sie zeigen könnten. Ein fertiges Segment wird nicht
+  umgeschrieben – das Protokoll ist ein Archiv, und „alles nach 17:15 zählt nicht" sagt nicht,
+  welche der gebuchten Spannen schrumpfen soll. Was bleibt, ist das Nachtragen einer **Dauer**;
+  sie ist keine Messung und trägt deshalb im Protokoll keine Anfangszeit.
+
+  **Die Grenze ist das Ende des letzten Segments.** Ein abgeschlossenes Segment ist eine
+  Aussage: Bis hierhin ist alles richtig erfasst. Deshalb darf kein Anker dahinter greifen –
+  und deshalb braucht es auch keine Suche nach Lücken: Zwischen jenem Ende und jetzt liegt
+  nichts Gemessenes ausser dem laufenden Segment selbst. Wird ein Wunsch dadurch gekürzt,
+  sagt es die Zeile, bevor sie angeklickt wird. Gerechnet wird beides in einer reinen Funktion, die
+  beide Frontends zweimal brauchen: einmal, um die Wirkung zu zeigen, einmal, um sie zu tun.
 - **Beim Schliessen des letzten VS-Code-Fensters wird pausiert** (abschaltbar über
   `pauseOnWindowClose`). Anhalten ist die vorsichtige Richtung; ein Timer, der das Schliessen
   des Editors überlebt, ist der klassische Weg, eine Nacht zu verbuchen. Starten bleibt
@@ -753,8 +774,12 @@ Kein `end` – ein Timer kennt kein Beenden.
     Branch         feature/buchung
     Zeiteintrag    pro Branch
     Kategorie      Programmierung
-    Laufend        Buchungsmodul        2:14
+    Läuft          0:42:13 · 3:48:02 · Buchungsmodul
     Offen          Rabattstufen         seit 6 Tagen
+
+  Die Timer-Zeile nennt **beide** Zahlen: zuerst das laufende Segment, dann die Summe des
+  Branches. Sie beantworten Verschiedenes – „wie lange sitze ich an diesem Stück" und „was
+  wird abgerechnet" –, und nur die erste macht einen vergessenen Timer sichtbar.
   ```
 
   Klick auf eine Zeile öffnet den passenden QuickPick – Projekt wechseln, Zeitraster setzen,

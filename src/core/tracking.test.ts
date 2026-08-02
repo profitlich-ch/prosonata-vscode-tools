@@ -4,6 +4,7 @@ import { fixedClock } from './clock.js'
 import {
   applyCategory,
   applyProject,
+  bookCorrection,
   close,
   commit,
   currentSeconds,
@@ -15,6 +16,7 @@ import {
   resumeAfterAdding,
   resumeAsNew,
   setText,
+  shiftStart,
   start,
   unwrittenSeconds,
 } from './tracking.js'
@@ -496,5 +498,108 @@ describe('pausing an entry ProSonata knows', () => {
     state = pause(state, clock, scope)
 
     expect(state.pending).toHaveLength(0)
+  })
+})
+
+describe('winding the clock', () => {
+  it('moves the start back, so more counts', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(600)
+
+    const shift = shiftStart(state, clock, scope, 900, 0)
+    state = shift.state
+
+    expect(shift.seconds).toBe(900)
+    expect(currentSeconds(state, clock, scope)).toBe(1500)
+  })
+
+  it('moves the start forward, so less counts', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(3600)
+
+    state = shiftStart(state, clock, scope, -900, 0).state
+
+    expect(currentSeconds(state, clock, scope)).toBe(2700)
+  })
+
+  // Everything before the last segment is already booked; counting it again
+  // would invent time.
+  it('never reaches behind the end of the last segment', () => {
+    const clock = fixedClock(NINE)
+    const floor = clock.now()
+
+    // Ten minutes of break, then the timer starts again and runs for twenty.
+    clock.advance(600)
+    let state = startOn(emptyState(), clock)
+    clock.advance(1200)
+
+    const shift = shiftStart(state, clock, scope, 3600, floor)
+
+    // An hour was asked for, ten minutes were free.
+    expect(shift.seconds).toBe(600)
+    expect(currentSeconds(shift.state, clock, scope)).toBe(1800)
+  })
+
+  it('does not take time away when the floor lies after the start', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(600)
+
+    expect(shiftStart(state, clock, scope, 900, clock.now()).seconds).toBe(0)
+  })
+
+  it('never lets the start slide into the future', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(600)
+
+    const shift = shiftStart(state, clock, scope, -3600, 0)
+
+    expect(shift.seconds).toBe(-600)
+    expect(currentSeconds(shift.state, clock, scope)).toBe(0)
+  })
+})
+
+describe('a correction while nothing runs', () => {
+  const options = { scope, key: 'a3f9c1', projectId: 166, categoryId: 70, mode: 'branch' as const, newId }
+
+  it('adds to the open entry', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(600)
+    state = pause(state, clock, scope)
+
+    const shift = bookCorrection(state, options, 900)
+
+    expect(shift.seconds).toBe(900)
+    expect(openEntry(shift.state, scope)?.seconds).toBe(1500)
+  })
+
+  it('never takes an entry below zero', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(600)
+    state = pause(state, clock, scope)
+
+    const shift = bookCorrection(state, options, -3600)
+
+    expect(shift.seconds).toBe(-600)
+    expect(openEntry(shift.state, scope)?.seconds).toBe(0)
+  })
+
+  it('opens an entry when the branch has none yet', () => {
+    const shift = bookCorrection(emptyState(), options, 1800)
+
+    expect(openEntry(shift.state, scope)?.seconds).toBe(1800)
+  })
+
+  it('leaves an entry that waits for a decision alone', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    state.entries[0]!.awaitingDecision = true
+
+    expect(bookCorrection(state, options, 900).seconds).toBe(0)
   })
 })

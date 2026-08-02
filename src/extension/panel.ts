@@ -1,6 +1,6 @@
 import * as vscode from 'vscode'
 
-import { awaitingDecision, currentSeconds, openEntry, unwrittenSeconds } from '../core/tracking.js'
+import { awaitingDecision, currentSeconds, openEntry, runningSeconds, unwrittenSeconds } from '../core/tracking.js'
 import type { RepoProject } from '../core/repo-config.js'
 import type { RepoContext, Session } from '../core/session.js'
 import type { State } from '../core/types.js'
@@ -111,13 +111,22 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       ),
     ]
 
-    const seconds = currentSeconds(state, session.clock, context.scope)
+    /*
+     * Both numbers, in this order: the running segment first, then everything
+     * the branch has collected. They answer two different questions — "how long
+     * have I been at this stretch" and "what will be invoiced" — and only the
+     * first one shows a timer that was forgotten.
+     */
+    const running = runningSeconds(state, session.clock, context.scope)
+    const total = currentSeconds(state, session.clock, context.scope)
     rows.push(
       new PanelRow(
         timer?.startedAt ? 'Läuft' : 'Pausiert',
-        `${clock(seconds)}${entry?.text ? ` · ${entry.text}` : ''}`,
+        `${clock(running)} · ${clock(total)}${entry?.text ? ` · ${entry.text}` : ''}`,
         timer?.startedAt ? 'debug-pause' : 'play',
         { command: timer?.startedAt ? 'prosonata.pause' : 'prosonata.start', title: 'Starten oder pausieren' },
+        // Named so the inline action for correcting time can attach to it.
+        'timer',
       ),
     )
 

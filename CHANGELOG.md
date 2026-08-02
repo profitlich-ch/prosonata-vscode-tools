@@ -4,6 +4,52 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] — 2026-08-02
+
+Die Zeit lässt sich vor- und zurückdrehen. Entstanden ist die Fassung aus vier
+Rückfragen, und jede hat sie **einfacher** gemacht statt reicher: Erst zeigte
+sich, dass ein Anker keine Differenz ist, dann dass ein verschobener Beginn die
+Uhrzeiten erfindet, dann dass ein abgeschlossenes Segment alles davor für
+erledigt erklärt — womit eine Lückenrechnung überflüssig wurde —, und zuletzt,
+dass Uhrzeiten ohne laufendes Segment gar nichts bedeuten.
+
+### Hinzugefügt
+
+- **Die Zeit lässt sich vor- und zurückdrehen** — das Gegenstück zum vergessenen
+  Anhalten *und* zum vergessenen Starten, das KONZEPT.md §5 seit jeher
+  versprochen hat. Ein QuickPick, das beim Tippen zum Eingabefeld wird: ohne
+  Eingabe Schritte von ±5 und ±15 Minuten, mit Eingabe eine Dauer (`+25`,
+  `-1:30`) oder eine Uhrzeit. Jede Zeile zeigt vorher ihre Wirkung.
+- **Uhrzeiten wirken absolut, nicht als Differenz.** `bis 9:40` heisst „ich habe
+  um 9:40 aufgehört": Das laufende Segment wird bis dahin gebucht und der Timer
+  **angehalten**. `ab 9:40` heisst „ich arbeite seit 9:40": Der Beginn des
+  laufenden Segments wandert dorthin, sodass eine durchgehende Messung entsteht
+  statt einer Messung plus Nachtrag.
+- **Uhrzeiten setzen einen laufenden Timer voraus.** Sie ändern das laufende
+  Segment; steht der Timer, gibt es keines, auf das sie sich beziehen könnten —
+  und ein fertiges Segment wird nicht umgeschrieben, weil „alles nach 17:15
+  zählt nicht" nicht sagt, welche der gebuchten Spannen schrumpfen soll. Der
+  Dialog sagt das und verweist auf die Dauer.
+- **Eine nachgetragene Dauer trägt keine Uhrzeiten.** `+20` ohne laufenden Timer
+  ist eine Korrektur, keine Messung; im Protokoll steht sie deshalb ohne
+  Anfangszeit statt mit einer erfundenen Spanne.
+- **Zwei Grenzen, die nie überschritten werden**: Keine Korrektur reicht hinter
+  das **Ende des letzten Segments** zurück — ein abgeschlossenes Segment sagt
+  gerade, dass bis dahin alles richtig erfasst ist —, und kein Eintrag fällt
+  unter null. Wird ein Wunsch deshalb gekürzt, sagt es die Zeile, bevor man sie
+  anklickt: „erst ab 14:25 möglich — davor ist alles erfasst". Korrekturen bei
+  stehendem Timer stehen als eigene Zeile im Segmentprotokoll und sind die
+  einzigen, deren Dauer negativ sein darf.
+- **Erreichbar über das Stift-Symbol an der Timer-Zeile**, die Befehlspalette
+  und `prosonata adjust`.
+
+### Geändert
+
+- **Die Timer-Zeile im Panel nennt beide Zahlen**, das laufende Segment zuerst,
+  dahinter die Summe des Branches: `0:42:13 · 3:48:02`. Sie beantworten
+  Verschiedenes — „wie lange sitze ich an diesem Stück" und „was wird
+  abgerechnet" —, und nur die erste macht einen vergessenen Timer sichtbar.
+
 ## [0.4.1] — 2026-08-01
 
 ### Geändert

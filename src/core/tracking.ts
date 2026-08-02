@@ -285,6 +285,97 @@ export function runningSeconds(state: State, clock: Clock, scope: Scope): number
   return isRunning(timer) ? elapsed(timer.startedAt, clock.now()) : 0
 }
 
+/*
+ * Winding the clock forward and back (KONZEPT.md §3).
+ *
+ * Two everyday mistakes, one in each direction: the timer kept running through
+ * a phone call, or it was never started although the work happened. Both are
+ * corrections a person makes from memory — "at 9:40 the phone rang" — so the
+ * tool takes an answer instead of measuring something it cannot see.
+ *
+ * While a timer runs, the correction moves its **start**. It stays a
+ * measurement, and the segment is written later anyway, then with the corrected
+ * beginning — no separate line in the log, nothing to reconcile.
+ */
+
+export interface Shift {
+  state: State
+  /** What was really shifted; the limits below can cut a wish short. */
+  seconds: number
+}
+
+/**
+ * Moves the start of the running segment by `seconds`, positive meaning "I
+ * started earlier, count more".
+ *
+ * Two limits, both of them about not inventing time: the start must not slide
+ * before `floor` — the end of the previous segment, otherwise the same minutes
+ * would be counted twice — and never into the future.
+ */
+export function shiftStart(state: State, clock: Clock, scope: Scope, seconds: number, floor: number): Shift {
+  const next = structuredClone(state)
+  const timer = findTimerIn(next, scope)
+  if (!timer?.startedAt) return { state, seconds: 0 }
+
+  /*
+   * Each limit guards its own direction, and neither may push the start the
+   * other way: asking for more time must never take some away because the floor
+   * happens to lie after the current start, and asking for less must never add.
+   */
+  const wanted = timer.startedAt - seconds * 1000
+  const limited =
+    seconds > 0
+      ? Math.max(wanted, Math.min(floor, timer.startedAt))
+      : Math.min(wanted, clock.now())
+  if (limited === timer.startedAt) return { state, seconds: 0 }
+
+  const shifted = Math.round((timer.startedAt - limited) / 1000)
+  timer.startedAt = limited
+  return { state: next, seconds: shifted }
+}
+
+/**
+ * Adds or removes time while nothing is running — the timer was never started,
+ * or time was booked that was not worked. An entry cannot fall below zero, so a
+ * correction that would overshoot is cut to what is there.
+ *
+ * Unlike a shifted start this leaves no trace of its own in the state, which is
+ * why the caller writes a line into the segment log: without it the day would
+ * add up differently there than in ProSonata.
+ */
+export function bookCorrection(state: State, options: StartOptions, seconds: number): Shift {
+  const next = structuredClone(state)
+  const entry = openEntry(next, options.scope) ?? createEntry(next, options)
+  if (entry.awaitingDecision) return { state, seconds: 0 }
+
+  const applied = Math.max(seconds, -entry.seconds)
+  if (applied === 0) return { state, seconds: 0 }
+
+  entry.seconds += applied
+  return { state: next, seconds: applied }
+}
+
+/**
+ * Ends the running segment at a moment that has passed and stops the timer —
+ * "at 9:40 the phone rang and I never came back".
+ *
+ * Unlike a shifted start this keeps the clock times true: the segment really
+ * ran from its beginning until then, and that is what the log will say.
+ */
+export function pauseAt(state: State, clock: Clock, scope: Scope, at: number): Shift {
+  const next = structuredClone(state)
+  const timer = findTimerIn(next, scope)
+  if (!timer?.startedAt) return { state, seconds: 0 }
+
+  const until = Math.min(Math.max(at, timer.startedAt), clock.now())
+  const dropped = Math.round((clock.now() - until) / 1000)
+
+  bookSegment(next, timer.entryId, timer.startedAt, until)
+  timer.startedAt = null
+  if (findEntry(next, timer.entryId)?.timeId !== null) queueWrite(next, timer.entryId, clock.now(), false)
+  return { state: next, seconds: -dropped }
+}
+
 /**
  * Keeps part of the running segment and stops the timer (KONZEPT.md §3).
  *
@@ -420,6 +511,16 @@ export function applyProject(state: State, repoPath: string, projectId: number, 
     if (entry.timeId !== null) queueWrite(next, entry.id, at, false)
   }
   return changed ? next : state
+}
+
+/**
+ * Marks an entry for the next write from outside these rules — after a
+ * correction, where the sum changed without a segment ending.
+ */
+export function queueWriteFor(state: State, entryId: string, at: number): State {
+  const next = structuredClone(state)
+  queueWrite(next, entryId, at, false)
+  return next
 }
 
 function queueWrite(state: State, entryId: string, at: number, closing: boolean): void {

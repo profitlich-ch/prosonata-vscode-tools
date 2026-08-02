@@ -44,8 +44,8 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
     lines.push('| Von | Bis | Dauer | Branch | Ende |', '|---|---|---|---|---|')
     for (const segment of day.segments) {
       lines.push(
-        `| ${timeOf(segment.from)} | ${timeOf(segment.until)} | ${hoursAndMinutes(segment.seconds)} ` +
-          `| ${segment.branch} | ${describeReason(segment)} |`,
+        `| ${segment.from === undefined ? '—' : timeOf(segment.from)} | ${timeOf(segment.until)} ` +
+          `| ${hoursAndMinutes(segment.seconds)} | ${segment.branch} | ${describeReason(segment)} |`,
       )
     }
     lines.push('')
@@ -64,6 +64,7 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
 function describeReason(segment: Segment): string {
   if (segment.reason === 'commit') return 'Commit'
   if (segment.reason === 'pause') return 'Pause'
+  if (segment.reason === 'correction') return 'Korrektur'
   return segment.ranSeconds === undefined
     ? 'gekürzt'
     : `gekürzt von ${hoursAndMinutes(segment.ranSeconds)}`

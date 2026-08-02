@@ -118,12 +118,38 @@ zählt** — alles, eine eigene Dauer, oder nichts. Sie rät nicht: Ein Timer, d
 über Nacht lief, hat Wanduhrzeit gemessen, und was davon Arbeit war, weisst nur
 du. Im Terminal macht `prosonata pause 1:30` dasselbe.
 
+**Vor- und zurückdrehen** lässt sich die Zeit über das Stift-Symbol an der
+Timer-Zeile oder über «ProSonata: Zeit korrigieren». Getippt wird entweder eine
+Dauer oder eine Uhrzeit:
+
+| Eingabe | Bedeutung |
+|---|---|
+| `25` | bietet `+25` und `−25` an |
+| `-25`, `+1:30` | genau diese Richtung |
+| `ab 9:40` | ich arbeite seit 9:40 — der Beginn des laufenden Segments wandert dorthin |
+| `bis 9:40` | ich habe um 9:40 aufgehört — es wird bis dahin gebucht und der Timer angehalten |
+
+**Uhrzeiten setzen einen laufenden Timer voraus.** Sie ändern das laufende
+Segment; steht der Timer, gibt es keines, das sie meinen könnten. Nachtragen
+lässt sich dann über eine Dauer — `+20` bucht zwanzig Minuten, ohne zu
+behaupten, wann sie angefallen sind. Im Log steht eine solche Korrektur deshalb
+ohne Anfangszeit.
+
+Jede Zeile zeigt vorher, was sie bewirkt: `7:13:09 → 0:40:00`. Weiter zurück als
+bis zum **Ende des letzten Segments** reicht keine Uhrzeit — ein
+abgeschlossenes Segment sagt ja gerade, dass bis dahin alles richtig erfasst
+ist. Wird deshalb gekürzt, steht es in derselben Zeile: „erst ab 14:25 möglich".
+Unter null fällt ein Eintrag ebenfalls nie. Im Terminal:
+`prosonata adjust "bis 9:40"`.
+
 Beim Schliessen des letzten VS-Code-Fensters wird pausiert. Abschalten lässt
 sich das mit `"pauseOnWindowClose": false` in `~/.prosonata/config.json`.
 
 Deshalb zeigt die Statusleiste das **laufende Segment** und nicht die Summe des
 Branches: `14:22:07` fällt auf, `37:15:44` nach zwei Wochen auf einem Branch
-nicht. Der Tooltip nennt Branch, Gesamtsumme und was auf den Versand wartet.
+nicht. Der Tooltip nennt Branch, Gesamtsumme und was auf den Versand wartet. Im
+Panel stehen beide Zahlen nebeneinander, das laufende Segment zuerst:
+`0:42:13 · 3:48:02`.
 
 ## Der Log
 
@@ -158,6 +184,7 @@ prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
 prosonata text <Text>             Text des offenen Zeiteintrags ändern
 prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
 prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
+prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 ```
 
 Was ein Argument nimmt, fragt danach, wenn es weggelassen wird — mit Argument

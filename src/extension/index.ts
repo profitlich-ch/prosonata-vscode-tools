@@ -7,6 +7,7 @@ import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core
 import { describeRepo, fetchPrune, isMerged, remoteBranchGone, type GitRepo } from '../core/git.js'
 import { hookNeedsRepair, installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
+import { noteFor, planAdjustment, readAdjustment, type Adjustment } from '../core/adjust.js'
 import { describeBranch, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
@@ -77,6 +78,7 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.changeText', withContext(changeText))
   register(context, 'prosonata.resolveClosedElsewhere', withContext(askAboutClosedElsewhere))
   register(context, 'prosonata.log', withRepo(showLog))
+  register(context, 'prosonata.adjust', withContext(adjustTime))
 
   /*
    * The hook records absolute paths, which break when Node's version changes,
@@ -430,6 +432,110 @@ function groupedItems(categories: Category[], current: number | undefined): (vsc
     })
   }
   return items
+}
+
+/**
+ * Winding the clock forward or back (KONZEPT.md §3).
+ *
+ * One control for both: without typing it offers steps and, when nothing is
+ * running, the time since the last commit — the case KONZEPT.md §5 has been
+ * promising all along. Typing turns the same list into an input: a number
+ * becomes plus and minus, a clock time becomes "ab 9:40 dazuzählen" and "nur
+ * bis 9:40 zählen", each with the amount worked out.
+ */
+async function adjustTime(session: Session, context: RepoContext): Promise<void> {
+  const pick = vscode.window.createQuickPick<vscode.QuickPickItem & { adjustment?: Adjustment }>()
+  pick.title = 'ProSonata: Zeit korrigieren'
+  pick.placeholder = '±Minuten, ±h:mm, «ab 9:40» oder «bis 9:40»'
+  pick.items = standingOffers(session, context)
+  pick.onDidChangeValue((value) => {
+    const offers = readAdjustment(value, session.clock.now())
+    pick.items = offers.length === 0 ? standingOffers(session, context) : offers.map((offer) => describe(offer, session, context))
+  })
+
+  const chosen = await new Promise<Adjustment | undefined>((resolve) => {
+    pick.onDidAccept(() => resolve(pick.selectedItems[0]?.adjustment))
+    pick.onDidHide(() => resolve(undefined))
+    pick.show()
+  })
+  pick.dispose()
+  if (chosen === undefined) return
+
+  const before = currentSeconds(session.state(), session.clock, context.scope)
+  const plan = session.adjust(context, chosen)
+  reload()
+
+  const note = noteFor(plan, chosen)
+  if (plan.action === 'impossible' || (plan.delta === 0 && plan.action !== 'stop')) {
+    void vscode.window.showWarningMessage(
+      `ProSonata: nichts geändert${note === null ? '.' : ` — ${note}.`}`,
+    )
+    return
+  }
+
+  const after = currentSeconds(session.state(), session.clock, context.scope)
+  const stopped = plan.action === 'stop' && plan.at !== undefined ? `, angehalten um ${hourOf(plan.at)}` : ''
+  void vscode.window.setStatusBarMessage(`ProSonata: ${clock(before)} → ${clock(after)}${stopped}`, 4000)
+}
+
+/** `17:17` — the hour a plan settles on. */
+function hourOf(at: number): string {
+  return new Date(at).toTimeString().slice(0, 5)
+}
+
+/** The list before anything is typed: steps, and the anchor that fits the state. */
+function standingOffers(
+  session: Session,
+  context: RepoContext,
+): (vscode.QuickPickItem & { adjustment?: Adjustment })[] {
+  const offers: Adjustment[] = [-15, -5, 5, 15].map((minutes) => ({
+    kind: 'amount',
+    seconds: minutes * 60,
+    label: `${minutes > 0 ? '+' : '−'}${Math.abs(minutes)} Minuten`,
+  }))
+
+  /*
+   * Only with the timer stopped: while it runs, its segment already begins at
+   * the last commit, so counting from there would add nothing (tracking.ts).
+   */
+  const lastCommit = session.situation(context).runningSince === null ? session.lastCommitAt(context) : null
+  if (lastCommit !== null) {
+    offers.unshift({
+      kind: 'startAt',
+      at: lastCommit,
+      label: `ab dem letzten Commit zählen (${new Date(lastCommit).toTimeString().slice(0, 5)})`,
+    })
+  }
+
+  return offers.map((offer) => describe(offer, session, context))
+}
+
+/** Every line says what it will do before it is chosen. */
+function describe(
+  adjustment: Adjustment,
+  session: Session,
+  context: RepoContext,
+): vscode.QuickPickItem & { adjustment: Adjustment } {
+  const now = currentSeconds(session.state(), session.clock, context.scope)
+  const plan = planAdjustment(adjustment, session.situation(context))
+
+  /*
+   * For a stop, the hour that will be recorded — which is not always the hour
+   * that was typed: a timer that started later cannot end earlier than it began.
+   */
+  const stopped = plan.action === 'stop' && plan.at !== undefined ? ` · hält um ${hourOf(plan.at)} an` : ''
+
+  if (plan.action === 'impossible') {
+    return { label: 'ohne laufenden Timer nicht möglich', detail: noteFor(plan, adjustment) ?? '', adjustment }
+  }
+
+  return {
+    label: adjustment.label,
+    description: `${clock(now)} → ${clock(Math.max(0, now + plan.delta))}${stopped}`,
+    // Right in the line: why less will happen than the words promise.
+    detail: noteFor(plan, adjustment) ?? '',
+    adjustment,
+  }
 }
 
 /**

@@ -6,6 +6,7 @@ import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
+import { noteFor, readAdjustment } from '../core/adjust.js'
 import { describeBranch, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
@@ -47,6 +48,7 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata text <Text>             Text des offenen Zeiteintrags ändern
   prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
   prosonata log [Branch]            gemessene Segmente, ohne Branch die dieses
+  prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 
   prosonata post-commit             wird vom Hook gerufen, nicht zum Tippen gedacht
 
@@ -85,6 +87,8 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await resume(cwd, argument)
       case 'log':
         return log(cwd, argument)
+      case 'adjust':
+        return adjust(cwd, argument)
       case 'post-commit':
         return await postCommit(cwd)
       case 'help':
@@ -471,6 +475,50 @@ async function postCommit(cwd: string): Promise<number> {
     process.stderr.write(`prosonata: ${(error as Error).message}\n`)
     return 0
   }
+}
+
+/**
+ * Winds the clock forward or back (KONZEPT.md §3). Same words as in the editor:
+ * a signed amount, or `ab`/`bis` with a time of day.
+ */
+function adjust(cwd: string, argument: string): number {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const offers = readAdjustment(argument, session.clock.now())
+  if (offers.length === 0) {
+    process.stderr.write(`keine Korrektur: ${argument || '(nichts)'} — nimm "+25", "-1:30", "ab 9:40" oder "bis 9:40"\n`)
+    return 2
+  }
+  if (offers.length > 1) {
+    process.stderr.write(`${argument} ist zweideutig — nimm "ab ${argument}" oder "bis ${argument}"\n`)
+    return 2
+  }
+
+  const wanted = offers[0]!
+  const before = session.seconds(context)
+  const plan = session.adjust(context, wanted)
+  // The note explains why less happened — never more needed than when nothing did.
+  const note = noteFor(plan, wanted)
+  if (plan.action === 'impossible') {
+    process.stderr.write(`ohne laufenden Timer nicht möglich — ${note}\n`)
+    return 2
+  }
+  if (plan.delta === 0 && plan.action !== 'stop') {
+    process.stderr.write(`nichts geändert${note === null ? '' : ` — ${note}`}\n`)
+    return 1
+  }
+  if (plan.action === 'stop') {
+    const at = plan.at === undefined ? '' : ` um ${new Date(plan.at).toTimeString().slice(0, 5)}`
+    process.stdout.write(`Timer angehalten${at}\n`)
+  }
+  if (note !== null) process.stdout.write(`${note}\n`)
+
+  process.stdout.write(
+    `${wanted.label}: ${format(before)} → ${format(session.seconds(context))} auf ${context.scope.branch}\n`,
+  )
+  return 0
 }
 
 /**

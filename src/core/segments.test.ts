@@ -109,3 +109,57 @@ describe('the report', () => {
     )
   })
 })
+
+describe('a correction', () => {
+  it('is the one line whose seconds may be negative', () => {
+    const file = log()
+    file.append(segment({ seconds: -1500, reason: 'correction' }))
+    // Anything else negative is a bug and stays out.
+    file.append(segment({ seconds: -1500, reason: 'pause' }))
+
+    expect(file.read()).toHaveLength(1)
+    expect(file.read()[0]?.seconds).toBe(-1500)
+  })
+
+  it('lowers the day it belongs to', () => {
+    const day = byDay([segment({ seconds: 3600 }), segment({ seconds: -1500, reason: 'correction' })])[0]
+
+    expect(day?.seconds).toBe(2100)
+  })
+
+  it('is named in the report', () => {
+    const text = renderReport([segment({ seconds: -1500, reason: 'correction' })], {
+      branch: null,
+      grid: { kind: 'exact' },
+    })
+
+    expect(text).toContain('Korrektur')
+  })
+})
+
+describe('a correction without a span', () => {
+  it('is written and read back without a beginning', () => {
+    const file = log()
+    const { from, ...correction } = segment({ seconds: 1200, reason: 'correction' })
+    file.append(correction)
+
+    expect(file.read()[0]?.from).toBeUndefined()
+    expect(file.read()[0]?.seconds).toBe(1200)
+  })
+
+  it('lands on the day it was entered', () => {
+    const { from, ...correction } = segment({ seconds: -600, reason: 'correction' })
+    const days = byDay([segment({ seconds: 3600 }), correction])
+
+    expect(days).toHaveLength(1)
+    expect(days[0]?.seconds).toBe(3000)
+  })
+
+  it('shows a dash where a beginning would be', () => {
+    const { from, ...correction } = segment({ seconds: 1200, reason: 'correction' })
+    const text = renderReport([correction], { branch: null, grid: { kind: 'exact' } })
+
+    expect(text).toContain('| — |')
+    expect(text).toContain('Korrektur')
+  })
+})

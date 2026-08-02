@@ -18,16 +18,25 @@ import { dirname } from 'node:path'
  */
 
 export interface Segment {
-  /** Start and end of the measured span, local time with offset. */
-  from: string
+  /**
+   * Start of the measured span, local time with offset. Missing on a correction
+   * booked after the fact: that is an amount, not a measurement, and inventing
+   * a beginning for it would be a claim about hours nobody watched.
+   */
+  from?: string
+  /** End of the span, or — for a correction — the moment it was entered. */
   until: string
   seconds: number
   repoPath: string
   branch: string
   projectId: number
   entryId: string
-  /** What ended the segment. `trimmed` is one the user shortened by hand. */
-  reason: 'pause' | 'commit' | 'trimmed'
+  /**
+   * What ended the segment. `trimmed` is one the user shortened by hand,
+   * `correction` is time added or removed while nothing was running — the only
+   * kind whose `seconds` may be negative.
+   */
+  reason: 'pause' | 'commit' | 'trimmed' | 'correction'
   /** For `trimmed`: how long it really ran before the answer cut it. */
   ranSeconds?: number
 }
@@ -36,7 +45,9 @@ export class SegmentLog {
   constructor(private readonly file: string) {}
 
   append(segment: Segment): void {
-    if (segment.seconds <= 0 && segment.reason !== 'trimmed') return
+    // A correction may be negative, and a trimmed segment may be cut to zero.
+    if (segment.seconds === 0 && segment.reason !== 'trimmed') return
+    if (segment.seconds < 0 && segment.reason !== 'correction') return
 
     mkdirSync(dirname(this.file), { recursive: true })
     appendFileSync(this.file, `${JSON.stringify(segment)}\n`, { mode: 0o600 })
@@ -116,7 +127,8 @@ export function byDay(segments: Segment[]): Day[] {
   }
 
   return [...days.values()]
-    .map((day) => ({ ...day, segments: day.segments.sort((a, b) => a.from.localeCompare(b.from)) }))
+    // A correction has no beginning; it sorts by the moment it was entered.
+    .map((day) => ({ ...day, segments: day.segments.sort((a, b) => (a.from ?? a.until).localeCompare(b.from ?? b.until)) }))
     .sort((a, b) => b.date.localeCompare(a.date))
 }
 
