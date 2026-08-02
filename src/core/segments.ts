@@ -35,18 +35,26 @@ export interface Segment {
    * What ended the segment. `trimmed` is one the user shortened by hand,
    * `correction` is time added or removed while nothing was running — the only
    * kind whose `seconds` may be negative.
+   *
+   * `entry` is not a measurement at all: it marks a time entry being closed and
+   * carries what it became, so the log shows where one invoice line ends and the
+   * next begins. Its `seconds` are zero on purpose — the time is already in the
+   * segments above it, and counting it again would double every day it closes.
    */
-  reason: 'pause' | 'commit' | 'trimmed' | 'correction'
+  reason: 'pause' | 'commit' | 'trimmed' | 'correction' | 'entry'
   /** For `trimmed`: how long it really ran before the answer cut it. */
   ranSeconds?: number
+  /** For `entry`: the total the entry was closed with, foreign share included. */
+  bookedSeconds?: number
 }
 
 export class SegmentLog {
   constructor(private readonly file: string) {}
 
   append(segment: Segment): void {
-    // A correction may be negative, and a trimmed segment may be cut to zero.
-    if (segment.seconds === 0 && segment.reason !== 'trimmed') return
+    // A correction may be negative; a trimmed segment may be cut to zero, and a
+    // closing note carries no time of its own at all.
+    if (segment.seconds === 0 && segment.reason !== 'trimmed' && segment.reason !== 'entry') return
     if (segment.seconds < 0 && segment.reason !== 'correction') return
 
     mkdirSync(dirname(this.file), { recursive: true })

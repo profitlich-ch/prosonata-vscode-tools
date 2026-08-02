@@ -179,3 +179,93 @@ describe('a negative duration', () => {
     expect(hoursAndMinutes(0)).toBe('0:00')
   })
 })
+
+/*
+ * What the report says will be charged. Rounding happens per time entry — one
+ * written value per entry — so the report has to imitate that, or it understates
+ * the invoice as soon as a grid rounds up.
+ */
+describe('the billed total', () => {
+  const quarters = { kind: 'minutes' as const, minutes: 15 }
+  const of = (entryId: string, seconds: number) => segment({ entryId, seconds })
+
+  /*
+   * The numbers are chosen so the two ways of counting disagree — with 37 and 40
+   * minutes both give 1:30, and the test would pass either way.
+   */
+  it('rounds each entry on its own, not the sum', () => {
+    const text = renderReport([of('e1', 16 * 60), of('e2', 16 * 60)], { branch: null, grid: quarters })
+
+    // 0:30 apiece. The sum of 0:32 rounded in one go would be 0:45.
+    expect(text).toContain('abgerechnet 1:00 h')
+  })
+
+  it('grows with the number of entries, because the grid rounds up', () => {
+    const three = [of('e1', 20 * 60), of('e2', 20 * 60), of('e3', 20 * 60)]
+
+    // Three times twenty minutes: 0:30 each. Rounded in one go the hour would
+    // stay an hour — this is the half hour a busy day of commits costs.
+    expect(renderReport(three, { branch: null, grid: quarters })).toContain('abgerechnet 1:30 h')
+  })
+
+  it('counts several segments of one entry together', () => {
+    const text = renderReport([of('e1', 20 * 60), of('e1', 20 * 60)], { branch: null, grid: quarters })
+
+    // 0:40 in one entry becomes 0:45. Rounding each segment would give 1:00.
+    expect(text).toContain('abgerechnet 0:45 h')
+  })
+
+  // Saying the same number twice reads like a mistake.
+  it('is left out entirely when the grid changes nothing', () => {
+    const text = renderReport([of('e1', 15 * 60)], { branch: null, grid: quarters })
+
+    expect(text).toContain('**0:15 h** in 1 Segmenten.')
+    expect(text).not.toContain('abgerechnet')
+  })
+})
+
+/*
+ * Where one invoice line ends. Repeating the entry's text on every row would say
+ * the same thing ten times; a line under its segments says it once.
+ */
+describe('the line that closes an entry', () => {
+  // Without a beginning at all, not with an empty one: the line is no measurement.
+  const closing = (bookedSeconds: number): Segment => {
+    const line = segment({ reason: 'entry', seconds: 0, bookedSeconds, until: '2026-07-30T18:10:00+02:00' })
+    delete line.from
+    return line
+  }
+
+  it('shows what the entry became, and no times of its own', () => {
+    const text = renderReport([segment({ seconds: 3600 }), closing(4500)], { branch: null, grid: { kind: 'exact' } })
+
+    expect(text).toContain('| — | — | 1:15 | feature/buchung | **Zeiteintrag** |')
+  })
+
+  // The time is already in the segments above it. Counting it again would double
+  // every day an entry is closed on.
+  it('adds nothing to the day and is not counted as a segment', () => {
+    const text = renderReport([segment({ seconds: 3600 }), closing(4500)], { branch: null, grid: { kind: 'exact' } })
+
+    expect(text).toContain('**1:00 h** in 1 Segmenten.')
+    expect(text).toContain('## 2026-07-30 — 1:00 h')
+  })
+
+  it('survives a log that has none, since it is younger than the archive', () => {
+    expect(renderReport([segment()], { branch: null, grid: { kind: 'exact' } })).toContain('Commit')
+  })
+})
+
+describe('the branch column', () => {
+  it('is there when several branches are shown', () => {
+    expect(renderReport([segment()], { branch: null, grid: { kind: 'exact' } })).toContain('| Von | Bis | Dauer | Branch | Ende |')
+  })
+
+  // On a single branch it would repeat the heading on every row.
+  it('is gone when the report is about one branch', () => {
+    const text = renderReport([segment()], { branch: 'feature/buchung', grid: { kind: 'exact' } })
+
+    expect(text).toContain('| Von | Bis | Dauer | Ende |')
+    expect(text).not.toContain('feature/buchung |')
+  })
+})

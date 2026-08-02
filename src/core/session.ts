@@ -7,6 +7,7 @@ import { describeRepo, mainBranch, type GitRepo } from './git.js'
 import { Journal } from './journal.js'
 import { branchKey } from './marker.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
+import { billedTime } from './report.js'
 import { send, type SendResult } from './sender.js'
 import { planAdjustment, type Adjustment, type Plan, type Situation } from './adjust.js'
 import type { AttachPlan, Attachment } from './attach.js'
@@ -15,6 +16,7 @@ import { StateStore } from './state-store.js'
 import { sync } from './sync.js'
 import {
   bookCorrection,
+  close,
   commit,
   currentSeconds,
   keepFromRunning,
@@ -244,6 +246,39 @@ export class Session {
     return plan
   }
 
+  /**
+   * Closes an entry with its final text and notes it in the log (KONZEPT.md §7).
+   *
+   * Both front ends go through here, so the note cannot be forgotten in one of
+   * them. It is what makes the log readable: the segments above the line belong
+   * to that entry, and the next one starts below it — without repeating the same
+   * text on every row.
+   */
+  closeEntry(entryId: string, text: string): State {
+    const state = this.store.update((current) => close(current, entryId, text, this.clock.now(), randomUUID))
+    const entry = state.entries.find((candidate) => candidate.id === entryId)
+    if (entry?.state === 'closed') this.recordEntryClosed(entry)
+    return state
+  }
+
+  /**
+   * The line that ends an entry in the log. It carries no time of its own —
+   * that is already in the segments — but the total the entry was closed with,
+   * the share from another machine included. That total is the invoice line.
+   */
+  private recordEntryClosed(entry: TimeEntry): void {
+    this.segments.append({
+      until: atLocal(this.clock.now()),
+      seconds: 0,
+      bookedSeconds: entry.foreignSeconds + entry.seconds,
+      repoPath: entry.scope.repoPath,
+      branch: entry.scope.branch,
+      projectId: entry.projectId,
+      entryId: entry.id,
+      reason: 'entry',
+    })
+  }
+
   /** A correction carries only its amount and the moment it was entered. */
   private recordCorrection(context: RepoContext, seconds: number): void {
     const entry = openEntry(this.state(), context.scope)
@@ -344,8 +379,16 @@ export class Session {
     until: number,
     reason: Segment['reason'],
     ranSeconds?: number,
+    /**
+     * The entry this time was booked into. Needed after a commit: it closed its
+     * entry and opened the successor, so asking for the *open* one now would
+     * hang the segment on the entry that comes after the work.
+     */
+    bookedInto?: string,
   ): void {
-    const entry = openEntry(this.state(), context.scope) ?? this.state().entries.find((candidate) => candidate.key === context.key)
+    const entry = bookedInto
+      ? this.state().entries.find((candidate) => candidate.id === bookedInto)
+      : openEntry(this.state(), context.scope) ?? this.state().entries.find((candidate) => candidate.key === context.key)
     this.segments.append({
       from: atLocal(from),
       until: atLocal(until),
@@ -370,6 +413,8 @@ export class Session {
     let booked = 0
     let hadTimer = false
     let closed = false
+    /** Where the time went — the entry that was closed, or the one still open. */
+    let bookedInto: string | undefined
 
     const switched = this.reconcileBranchSwitch(context)
     const startedAt = this.runningSince(context)
@@ -390,6 +435,7 @@ export class Session {
       booked = outcome.booked
       hadTimer = outcome.hadTimer
       closed = outcome.closed !== null
+      bookedInto = outcome.closed?.id ?? openEntry(outcome.state, context.scope)?.id
 
       if (outcome.closed) {
         this.journal.append({
@@ -422,7 +468,13 @@ export class Session {
       return outcome.state
     })
 
-    if (startedAt !== null && booked > 0) this.recordSegmentAt(context, startedAt, this.clock.now(), 'commit')
+    if (startedAt !== null && booked > 0) {
+      this.recordSegmentAt(context, startedAt, this.clock.now(), 'commit', undefined, bookedInto)
+    }
+    // On the main branch every commit closes an entry, so the log gets its
+    // closing line here rather than only where somebody closes one by hand.
+    const finished = state.entries.find((entry) => entry.id === bookedInto && entry.state === 'closed')
+    if (finished) this.recordEntryClosed(finished)
     return { state, booked, hadTimer, closed, branchSwitched: switched }
   }
 
@@ -483,16 +535,19 @@ export class Session {
     if (remote.isInvoiced) return { kind: 'invoiced' }
 
     const held = Math.round(remote.hours * 3600)
+    const grid = this.gridFor(context.scope.repoPath)
+    // Shown as hours and minutes, sent as decimal hours: the two notations are
+    // for different readers, and only one of them is a person.
     const plan: AttachPlan = {
       seconds,
       text: remote.detail,
       date: remote.date,
-      before: workingTime(held, this.gridFor(context.scope.repoPath)),
-      after: workingTime(held + seconds, this.gridFor(context.scope.repoPath)),
+      before: billedTime(held, grid),
+      after: billedTime(held + seconds, grid),
     }
     if (!(await confirm(plan))) return { kind: 'cancelled' }
 
-    await this.api.updateEntry(target.timeId, { workingTime: plan.after })
+    await this.api.updateEntry(target.timeId, { workingTime: workingTime(held + seconds, grid) })
     this.journal.append({ kind: 'sent', entryId: target.id, timeId: target.timeId })
     this.store.update((state) => moveToClosed(state, open.id, target.id, seconds))
     return { kind: 'done', plan }

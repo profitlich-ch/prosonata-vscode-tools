@@ -32,6 +32,11 @@ const context = {
   categoryId: 70,
 } as unknown as RepoContext
 
+/*
+ * Every path a session writes to belongs in the temp directory — including the
+ * segment log. Left out, it falls back to `~/.prosonata/segments.jsonl`, and a
+ * test that pauses a timer would append to the machine's real archive.
+ */
 function sessionWith(api: FakeApi) {
   const dir = mkdtempSync(join(tmpdir(), 'prosonata-session-'))
   const config: Config = { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' }
@@ -40,6 +45,7 @@ function sessionWith(api: FakeApi) {
     clock: fixedClock(NINE),
     store: new StateStore(join(dir, 'state.json')),
     journal: new Journal(join(dir, 'log.jsonl')),
+    segments: new SegmentLog(join(dir, 'segments.jsonl')),
   })
 }
 
@@ -256,8 +262,8 @@ describe('adding follow-up time to the entry a commit closed', () => {
 
     const result = await session.attachToLastClosed(main, async () => true)
 
-    expect(result.kind === 'done' && result.plan.before).toBe('2.25')
-    expect(result.kind === 'done' && result.plan.after).toBe('2.25')
+    expect(result.kind === 'done' && result.plan.before).toBe('2:15')
+    expect(result.kind === 'done' && result.plan.after).toBe('2:15')
   })
 
   // A quarter-hour grid turns five minutes into a quarter hour. The number the
@@ -267,7 +273,7 @@ describe('adding follow-up time to the entry a commit closed', () => {
 
     const result = await session.attachToLastClosed(main, async () => true)
 
-    expect(result.kind === 'done' && result.plan.after).toBe('2.25')
+    expect(result.kind === 'done' && result.plan.after).toBe('2:15')
   })
 
   it('writes nothing when the answer is no', async () => {
@@ -391,5 +397,116 @@ describe('the span an entry is written with', () => {
     clock.advance(3 * 3600)
 
     expect(session.spanFor(entry)).toEqual({ start: '08:12', end: '12:00' })
+  })
+})
+
+/**
+ * Discarding a running segment: committed, forgot to stop, did no more work.
+ * Nothing is booked — but the log has to keep what was thrown away.
+ */
+describe('throwing the running segment away', () => {
+  it('books nothing, stops the timer, and says so in the log', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-discard-'))
+    const clock = fixedClock(NINE)
+    const segments = new SegmentLog(join(dir, 'segments.jsonl'))
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      {
+        api: new FakeApi(),
+        clock,
+        store: new StateStore(join(dir, 'state.json')),
+        journal: new Journal(join(dir, 'log.jsonl')),
+        segments,
+      },
+    )
+
+    await session.start(context)
+    clock.advance(2 * 3600)
+    session.keepFromRunning(context, 0)
+
+    expect(openEntry(session.state(), scope)?.seconds).toBe(0)
+    expect(session.state().timers[0]?.startedAt).toBeNull()
+
+    // The one place where measured time disappears on purpose, so it must not
+    // disappear silently as well.
+    const line = segments.read().at(-1)
+    expect(line?.reason).toBe('trimmed')
+    expect(line?.seconds).toBe(0)
+    expect(line?.ranSeconds).toBe(2 * 3600)
+  })
+})
+
+/**
+ * Which entry a segment belongs to. On the main branch a commit closes its entry
+ * and opens the successor in the same step — so the log has to be told where the
+ * time went, or every commit's segment would hang on the entry that comes after
+ * the work (KONZEPT.md §7).
+ */
+describe('the entry a segment is filed under', () => {
+  const main = { ...context, scope: { repoPath: '/work/shop', branch: 'main' }, mode: 'commit' } as RepoContext
+
+  function loggingSession() {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-filing-'))
+    const clock = fixedClock(NINE)
+    const segments = new SegmentLog(join(dir, 'segments.jsonl'))
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      {
+        api: new FakeApi(),
+        clock,
+        store: new StateStore(join(dir, 'state.json')),
+        journal: new Journal(join(dir, 'log.jsonl')),
+        segments,
+      },
+    )
+    return { session, segments, clock }
+  }
+
+  it('is the one the commit closed, not the one it opened', async () => {
+    const { session, segments, clock } = loggingSession()
+
+    await session.start(main)
+    clock.advance(3600)
+    const outcome = session.commit(main, { text: 'Kirby Update', fromTrailer: false, sha: 'deadbee' })
+
+    const closed = outcome.state.entries.find((entry) => entry.state === 'closed')!
+    const successor = outcome.state.entries.find((entry) => entry.state === 'open')!
+    const measured = segments.read().find((segment) => segment.reason === 'commit')
+
+    expect(measured?.entryId).toBe(closed.id)
+    expect(measured?.entryId).not.toBe(successor.id)
+  })
+
+  /*
+   * The closing line: it says where one invoice line ends, so the entry's text
+   * need not stand on every row. It carries the total, not time of its own.
+   */
+  it('gets a closing line when a commit finishes an entry', async () => {
+    const { session, segments, clock } = loggingSession()
+
+    await session.start(main)
+    clock.advance(3600)
+    session.commit(main, { text: 'Kirby Update', fromTrailer: false, sha: 'deadbee' })
+
+    const line = segments.read().at(-1)
+    expect(line?.reason).toBe('entry')
+    expect(line?.seconds).toBe(0)
+    expect(line?.bookedSeconds).toBe(3600)
+    expect(line?.from).toBeUndefined()
+  })
+
+  it('gets one when somebody closes an entry by hand', async () => {
+    const { session, segments, clock } = loggingSession()
+
+    await session.start(context)
+    clock.advance(1800)
+    session.pause(context)
+    const entry = openEntry(session.state(), scope)!
+    session.closeEntry(entry.id, 'Buchungsmodul, fertig')
+
+    const line = segments.read().at(-1)
+    expect(line?.reason).toBe('entry')
+    expect(line?.bookedSeconds).toBe(1800)
+    expect(session.state().entries.find((candidate) => candidate.id === entry.id)?.state).toBe('closed')
   })
 })

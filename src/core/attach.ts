@@ -18,7 +18,11 @@ export interface AttachPlan {
   text: string
   /** Its date — the day the time lands on, which may not be today. */
   date: string
-  /** Hours before and after, already rounded to the grid that will be written. */
+  /**
+   * What ProSonata holds before and after, as hours and minutes — `2:00`, not
+   * `2.00`. Already rounded to the grid that will be written, so the second
+   * number is what the customer pays.
+   */
   before: string
   after: string
 }

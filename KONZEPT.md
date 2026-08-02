@@ -203,6 +203,14 @@ Es beantwortet zwei Fragen, die sonst niemand beantworten kann:
 - **Was war auf einem Branch, den es nicht mehr gibt?** Die Branch-Liste der Ansicht stammt
   aus dem Protokoll, nicht aus Git. Gelöschte Branches behalten damit ihre Stunden.
 
+Wird ein Zeiteintrag **abgeschlossen**, bekommt er eine eigene Zeile: ohne Zeiten, mit der
+Summe, mit der er geschlossen wurde, und dem Vermerk *Zeiteintrag*. Sie trennt im Protokoll eine
+Rechnungsposition von der nächsten – alles darüber gehört zu ihr. Der Text des Eintrags steht
+dabei bewusst **nicht** in jeder Segmentzeile: Das wäre auf jeder Zeile dieselbe Wiederholung,
+während eine Abschlusszeile es einmal sagt. Ihre `seconds` sind null, denn die Zeit steht bereits
+in den Segmenten darüber; zählte sie mit, verdoppelte sich jeder Tag, an dem etwas abgeschlossen
+wird.
+
 Besonders festgehalten wird die **Kürzung**: mit der behaltenen Spanne *und* der tatsächlich
 gelaufenen Dauer. Es ist die einzige Stelle, an der gemessene Zeit absichtlich verschwindet –
 sie darf nicht zusätzlich unbemerkt verschwinden.
@@ -241,7 +249,16 @@ Datum*).
 
 Gerundet wird **einmal**: beim Schreiben, auf die Gesamtsumme des Zeiteintrags. Segmente bleiben
 sekundengenau – rundete jedes für sich, summierten sich die Fehler. Gerundet wird **aufwärts**
-(`Math.ceil`): Bei einem Raster von 15 Minuten werden aus 2:05 h gebuchte 2.25 h.
+(`Math.ceil`): Bei einem Raster von 15 Minuten werden aus 2:05 h gebuchte 2.25 h – angezeigt
+wird dieser Wert aber als `2:15 h`. Dezimalstunden sind das Format der API, nicht das des Lesers;
+`billedTime()` in [report.ts](src/core/report.ts) ist die einzige Stelle, die umrechnet.
+
+Weil je Eintrag gerundet wird, **wächst die Rundung mit der Zahl der Einträge**: Drei Commits mit
+je zwanzig Minuten werden zu dreimal einer halben Stunde, also 1:30 h statt einer Stunde. Im
+Modus *pro Branch* dagegen wird dieselbe Arbeit einmal gerundet. Der Bericht muss das nachbilden
+(`billedSeconds()` gruppiert nach `entryId`) – rechnete er aus der Gesamtsumme, zeigte er
+weniger an, als in Rechnung gestellt wird. Gezeigt wird die Zahl nur, wenn das Raster sie
+tatsächlich verändert; sonst stünde dieselbe Zahl zweimal.
 
 Das Raster gehört zum **Repository**, denn die Abmachung, wie gerundet wird, gehört zum Kunden.
 Hat ein Repository keines, gilt die Vorgabe aus `config.json`; die ist nur dort zu ändern und
@@ -276,7 +293,7 @@ Mensch, einmal, für einen Eintrag. Drei Grenzen bleiben:
   sonst eine leere Hülle zurück; dann ist Abschliessen der richtige Weg.
 
 Gezeigt wird vorher, was tatsächlich geschrieben wird – **nach** dem Raster, das aufrundet: Fünf
-Minuten machen bei Viertelstunden-Raster aus 2.00 h nicht 2.08 h, sondern 2.25 h.
+Minuten machen bei Viertelstunden-Raster aus 2:00 h nicht 2:05 h, sondern 2:15 h.
 
 ### Offene Zeiteinträge: `[LAUFEND:kennung]`
 

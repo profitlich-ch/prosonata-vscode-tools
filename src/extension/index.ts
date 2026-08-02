@@ -17,7 +17,6 @@ import {
   applyCategory,
   applyProject,
   awaitingDecision,
-  close,
   currentSeconds,
   openEntry,
   runningSeconds,
@@ -86,6 +85,7 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.attachToLast', withContext(attachToLast))
   register(context, 'prosonata.log', withRepo(showLog))
   register(context, 'prosonata.adjust', withContext(adjustTime))
+  register(context, 'prosonata.discard', withContext((s, c) => discardRunning(s, c, true)))
 
   /*
    * The hook records absolute paths, which break when Node's version changes,
@@ -451,7 +451,7 @@ function groupedItems(categories: Category[], current: number | undefined): (vsc
  * bis 9:40 zählen", each with the amount worked out.
  */
 async function adjustTime(session: Session, context: RepoContext): Promise<void> {
-  const pick = vscode.window.createQuickPick<vscode.QuickPickItem & { adjustment?: Adjustment }>()
+  const pick = vscode.window.createQuickPick<Offer>()
   pick.title = 'ProSonata: Zeit korrigieren'
   pick.placeholder = '±Minuten, ±h:mm, «ab 9:40» oder «bis 9:40»'
   pick.items = standingOffers(session, context)
@@ -474,12 +474,18 @@ async function adjustTime(session: Session, context: RepoContext): Promise<void>
       : possible.map((offer) => describe(offer, session, context))
   })
 
-  const chosen = await new Promise<Adjustment | undefined>((resolve) => {
-    pick.onDidAccept(() => resolve(pick.selectedItems[0]?.adjustment))
+  const picked = await new Promise<Offer | undefined>((resolve) => {
+    pick.onDidAccept(() => resolve(pick.selectedItems[0]))
     pick.onDidHide(() => resolve(undefined))
     pick.show()
   })
   pick.dispose()
+  if (!picked) return
+
+  // The line names the amount, so it is its own confirmation.
+  if (picked.discard) return discardRunning(session, context, false)
+
+  const chosen = picked.adjustment
   if (chosen === undefined) return
 
   const before = currentSeconds(session.state(), session.clock, context.scope)
@@ -499,26 +505,71 @@ async function adjustTime(session: Session, context: RepoContext): Promise<void>
   void vscode.window.setStatusBarMessage(`ProSonata: ${clock(before)} → ${clock(after)}${stopped}`, 4000)
 }
 
+/**
+ * Throws the running segment away: nothing is booked, the timer stops
+ * (KONZEPT.md §3). The case is "committed, forgot to stop, did no more work" —
+ * what was measured there is wall time, not work.
+ *
+ * The log keeps a line with the discarded duration. This is the one place where
+ * measured time disappears on purpose, so it must not disappear silently too.
+ */
+async function discardRunning(session: Session, context: RepoContext, confirm: boolean): Promise<void> {
+  const running = runningSeconds(session.state(), session.clock, context.scope)
+  if (running <= 0) {
+    void vscode.window.showInformationMessage('ProSonata: es läuft gerade kein Timer.')
+    return
+  }
+
+  if (confirm) {
+    const answer = await vscode.window.showWarningMessage(
+      'Laufendes Segment verwerfen?',
+      { modal: true, detail: `${clock(running)} werden nicht gebucht, der Timer hält an. Im Log bleibt die verworfene Dauer stehen.` },
+      'Verwerfen',
+    )
+    if (answer !== 'Verwerfen') return
+  }
+
+  session.keepFromRunning(context, 0)
+  reload()
+  void vscode.window.setStatusBarMessage(`ProSonata: ${clock(running)} verworfen, Timer angehalten`, 4000)
+}
+
 /** `17:17` — the hour a plan settles on. */
 function hourOf(at: number): string {
   return new Date(at).toTimeString().slice(0, 5)
 }
 
+type Offer = vscode.QuickPickItem & { adjustment?: Adjustment; discard?: boolean }
+
 /**
  * The list before anything is typed. Only amounts: they work in either state,
  * while a time of day needs a running segment to refer to.
+ *
+ * Discarding stands at the top while a timer runs — it is the outer end of the
+ * same movement, "wind back all of it", and the case it serves (a commit made,
+ * the stopping forgotten) is common enough to deserve the first line rather
+ * than a duration one has to work out.
  */
-function standingOffers(
-  session: Session,
-  context: RepoContext,
-): (vscode.QuickPickItem & { adjustment?: Adjustment })[] {
+function standingOffers(session: Session, context: RepoContext): Offer[] {
   const offers: Adjustment[] = [-15, -5, 5, 15].map((minutes) => ({
     kind: 'amount',
     seconds: minutes * 60,
     label: `${minutes > 0 ? '+' : '−'}${Math.abs(minutes)} Minuten`,
   }))
 
-  return offers.map((offer) => describe(offer, session, context))
+  const lines = offers.map((offer) => describe(offer, session, context))
+  const running = runningSeconds(session.state(), session.clock, context.scope)
+  if (running <= 0) return lines
+
+  return [
+    {
+      label: 'Laufendes Segment verwerfen',
+      description: clock(running),
+      detail: 'der Timer hält an, gebucht wird nichts',
+      discard: true,
+    },
+    ...lines,
+  ]
 }
 
 /** Every line says what it will do before it is chosen. */
@@ -654,7 +705,7 @@ async function toggleMode(session: Session, context: RepoContext): Promise<void>
       value: entry.text,
     })
     if (text === undefined) return
-    session.store.update((state) => close(state, entry.id, text, session.clock.now(), randomUUID))
+    session.closeEntry(entry.id, text)
   }
 
   setMode(context.repo.root, context.key, next)
@@ -695,7 +746,7 @@ async function closeEntry(session: Session, context: RepoContext, entryId?: stri
   })
   if (text === undefined) return
 
-  session.store.update((current) => close(current, entry.id, text, session.clock.now(), randomUUID))
+  session.closeEntry(entry.id, text)
   await session.flush(true)
 }
 

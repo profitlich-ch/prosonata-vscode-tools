@@ -4,6 +4,53 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] — 2026-08-02
+
+### Geändert
+
+- **Was ProSonata speichert, wird als Stunden:Minuten angezeigt** — `1:16 h`
+  statt `1.27 h`. Dezimalstunden sind das Format der API; gelesen wird eine
+  Viertelstunde als `:15`. Betrifft den Log, das Panel, `prosonata status` und
+  die Rückfrage beim Zuschlagen. Gesendet wird unverändert dezimal.
+- **Der Bericht rundet je Zeiteintrag**, wie ProSonata es tut, statt die
+  Gesamtsumme in einem Zug — sonst zeigte er weniger an, als in Rechnung gestellt
+  wird. Bei aufrundendem Raster wächst die Differenz mit der Zahl der Einträge:
+  drei Commits von je zwanzig Minuten sind 1:30 h, nicht eine Stunde. Gezeigt
+  wird die Zahl nur noch, wenn das Raster sie verändert.
+- **Die Branch-Spalte entfällt**, wenn der Bericht einen einzelnen Branch zeigt.
+- **Der Hinweis im Log, dass nur dieser Rechner aufzeichnet, steht jetzt zuoberst**,
+  direkt unter der Überschrift statt am Ende — wer nicht weiss, was fehlt, liest
+  jede Summe darunter falsch. Bei leerem Log ist er zugleich die wahrscheinlichste
+  Erklärung.
+
+### Hinzugefügt
+
+- **Der Log zeigt, wo ein Zeiteintrag endet.** Beim Abschliessen entsteht eine
+  eigene Zeile ohne Zeiten, mit der Summe und dem Vermerk *Zeiteintrag* — alles
+  darüber gehört zu ihr. Auf `main` heisst das: nach jedem Commit eine
+  Trennlinie. Der Text des Eintrags steht bewusst nicht in jeder Segmentzeile.
+- **Ein laufendes Segment lässt sich ganz verwerfen** — der Fall «committet,
+  Anhalten vergessen, danach nicht mehr gearbeitet». Die Zeile steht zuoberst im
+  Korrektur-Dialog und nennt den Betrag, ist damit zugleich die Rückfrage; dazu
+  ein Befehl in der Palette und `prosonata discard` im Terminal. Möglich war das
+  bisher nur über `prosonata pause 0`, das nirgends dokumentiert war, oder über
+  den Knopf **Verwerfen**, der erst nach sechs Stunden Laufzeit erscheint.
+  Gebucht wird nichts, der Timer hält an, und im Log bleibt die verworfene Dauer
+  stehen.
+
+### Behoben
+
+- **Segmente eines Commits hingen am falschen Zeiteintrag.** Der Commit schliesst
+  seinen Eintrag und öffnet den Nachfolger; protokolliert wurde danach, und
+  gefragt wurde nach dem *offenen* Eintrag — also nach dem Nachfolger. Betroffen
+  war allein der Querverweis im Protokoll, nicht die gebuchte Zeit und nichts in
+  ProSonata. Aufgefallen ist es erst, als die Zuordnung zum ersten Mal gelesen
+  wurde.
+- **Tests konnten in das echte Segmentprotokoll schreiben.** Eine Session ohne
+  eigenes Protokoll fällt auf `~/.prosonata/segments.jsonl` zurück; ein Test, der
+  einen Timer pausiert, hätte dort angehängt. Der Test-Aufbau reicht jetzt immer
+  ein eigenes mit. (Gemessen: passiert war es noch nicht.)
+
 ## [0.7.0] — 2026-08-02
 
 Der Statusanzeiger zieht aus einem geliehenen API-Feld in die eigene Marke — und
@@ -43,8 +90,8 @@ die Felder sagen endlich, was sie in ProSonata bedeuten.
   Seitenleiste zeigt dafür **Nicht gebucht**, im Terminal `prosonata attach`.
   Geschrieben wird nur die neue Gesamtsumme — Text und Datum des Eintrags
   bleiben unberührt.
-- **Die Bestätigung nennt die Zahlen, die wirklich hinausgehen**: `2.00 h wird
-  2.25 h`. Das Zeitraster rundet auf, fünf Minuten kosten bei
+- **Die Bestätigung nennt die Zahlen, die wirklich hinausgehen**: `2:00 h wird
+  2:15 h`. Das Zeitraster rundet auf, fünf Minuten kosten bei
   Viertelstunden-Raster also eine Viertelstunde — das gehört vor den Klick, nicht
   in eine Meldung danach.
 - **Fakturierte Einträge werden abgelehnt**, und die Ausgangszahl kommt aus

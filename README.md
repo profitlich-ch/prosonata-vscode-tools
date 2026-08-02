@@ -53,7 +53,7 @@ Auch das Projekt lässt sich später korrigieren. Weil ein Wechsel fast immer ei
 
 Zusätzlich kannst du das Zeitraster wählen und ob Zeiteinträge an Branches oder an Commits gebunden werden. Das Zeitraster wirkt auf alle noch offenen Zeiteinträge, sobald diese das nächste Mal geschrieben werden. Der Wechsel auf «ein Eintrag pro Commit» dagegen schliesst den offenen Branch-Eintrag und fragt vorher nach seinem endgültigen Text.
 
-Das **Zeitraster gilt allein für den Zeiteintrag**, der nach ProSonata geht — nie für die Segmente. Gemessen und im Log gezeigt wird sekundengenau; gerundet wird erst beim Schreiben, und zwar die Gesamtsumme des Eintrags, nicht jedes Segment für sich. So summieren sich keine Rundungen auf. Gerundet wird **aufwärts**, auf die nächste Stufe: Bei einem Raster von 15 Minuten werden aus gemessenen 2:05 h gebuchte 2.25 h.
+Das **Zeitraster gilt allein für den Zeiteintrag**, der nach ProSonata geht — nie für die Segmente. Gemessen und im Log gezeigt wird sekundengenau; gerundet wird erst beim Schreiben, und zwar die Gesamtsumme des Eintrags, nicht jedes Segment für sich. So summieren sich keine Rundungen auf. Gerundet wird **aufwärts**, auf die nächste Stufe: Bei einem Raster von 15 Minuten werden aus gemessenen 2:05 h gebuchte 2:15 h. Gezeigt wird diese Zahl überall als Stunden:Minuten; in ProSonata selbst steht sie als Dezimalstunde (2.25), weil die API es so speichert.
 
 Wählt ein Repository kein eigenes Raster, gilt die Vorgabe aus `~/.prosonata/config.json` (`"grid"`). Sie steht auf `exakt` und lässt sich nur dort ändern — wer grundsätzlich viertelstündlich abrechnet, setzt sie einmal und muss es nicht in jedem Repository wiederholen.
 
@@ -135,6 +135,12 @@ zählt** — alles, eine eigene Dauer, oder nichts. Sie rät nicht: Ein Timer, d
 über Nacht lief, hat Wanduhrzeit gemessen, und was davon Arbeit war, weisst nur
 du. Im Terminal macht `prosonata pause 1:30` dasselbe.
 
+Ohne auf diese Frage zu warten, lässt sich ein laufendes Segment jederzeit **ganz
+verwerfen** — der Fall «committet, Anhalten vergessen, danach nicht mehr
+gearbeitet». Die Zeile steht zuoberst im Korrektur-Dialog und nennt den Betrag;
+im Terminal heisst sie `prosonata discard`. Gebucht wird nichts, der Timer hält
+an, und im Log bleibt die verworfene Dauer als `gekürzt von …` stehen.
+
 **Vor- und zurückdrehen** lässt sich die Zeit über das Stift-Symbol an der
 Timer-Zeile oder über «ProSonata: Zeit korrigieren». Getippt wird entweder eine
 Dauer oder eine Uhrzeit:
@@ -181,7 +187,7 @@ abgeschlossenen Eintrag dieses Branches, und zwar als reine Summe — Text und
 Datum dort bleiben, wie sie sind. Bestätigt wird vorher, mit den Zahlen:
 
     5 Minuten an «Kirby Update, Startseite Linkfarbe» (2026-08-02)
-    2.00 h wird 2.25 h
+    2:00 h wird 2:15 h
 
 Die zweite Zeile ist der Grund für die Rückfrage: Das Zeitraster rundet **auf**,
 eine Viertelstunde als Raster macht aus fünf Minuten also eine Viertelstunde.
@@ -195,6 +201,12 @@ Segmente als gesetzte Vorschau, nach Tagen gruppiert, mit einer Branch-Auswahl
 davor. Bearbeiten lässt sie sich nicht: Das Protokoll ist ein Archiv, und was
 abgerechnet wird, steht im Zeiteintrag. Korrigiert wird deshalb über die
 Zeitkorrektur, nicht im Text.
+
+Wird ein Zeiteintrag abgeschlossen, steht dort eine eigene Zeile — ohne Zeiten,
+mit seiner Summe und dem Vermerk **Zeiteintrag**. Alles darüber gehört zu ihm;
+so siehst du, welche Segmente in welche Rechnungsposition geflossen sind, ohne
+dass der Text auf jeder Zeile wiederholt wird. Zeigst du einen einzelnen Branch,
+entfällt die Branch-Spalte.
 
 Die Branch-Liste stammt aus dem Protokoll unter `~/.prosonata/segments.jsonl`,
 nicht aus Git — **gelöschte Branches behalten damit ihre Stunden**. Das

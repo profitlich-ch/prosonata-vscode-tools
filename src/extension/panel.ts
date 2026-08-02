@@ -4,8 +4,7 @@ import { awaitingDecision, currentSeconds, lastClosedEntry, openEntry, runningSe
 import type { RepoProject } from '../core/repo-config.js'
 import type { RepoContext, Session } from '../core/session.js'
 import type { State } from '../core/types.js'
-import { hoursAndMinutes } from '../core/report.js'
-import { workingTime } from '../core/working-time.js'
+import { billedTime, hoursAndMinutes } from '../core/report.js'
 
 /**
  * The panel in the side bar (KONZEPT.md §8). A TreeDataProvider, not a webview:
@@ -153,7 +152,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       rows.push(
         new PanelRow(
           open.scope.branch === context.scope.branch ? 'Offener Eintrag' : `Offen · ${open.scope.branch}`,
-          `${open.text} · ${workingTime(open.foreignSeconds + open.seconds, grid)} h`,
+          `${open.text} · ${billedTime(open.foreignSeconds + open.seconds, grid)} h`,
           'circle-outline',
           { command: 'prosonata.closeEntry', title: 'Eintrag abschliessen', arguments: [open.id] },
           'openEntry',

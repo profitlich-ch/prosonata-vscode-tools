@@ -9,14 +9,13 @@ import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } f
 import { noteFor, readAdjustment } from '../core/adjust.js'
 import { describeAttachment, describePlan } from '../core/attach.js'
 import { describeRunningElsewhere } from '../core/sync.js'
-import { describeBranch, renderReport } from '../core/report.js'
+import { billedTime, describeBranch, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
 import {
   applyCategory,
   applyProject,
   awaitingDecision,
-  close,
   openEntry,
   runningSeconds,
   setText,
@@ -48,6 +47,7 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata mode [branch|commit]    ein Eintrag pro Branch oder pro Commit
   prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
   prosonata text <Text>             Text des offenen Zeiteintrags ändern
+  prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
   prosonata attach                  Zeit seit dem letzten Commit dem Eintrag jenes Commits zuschlagen
   prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
   prosonata log [Branch]            gemessene Segmente, ohne Branch die dieses
@@ -86,6 +86,8 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await closeEntry(cwd, argument)
       case 'text':
         return await changeText(cwd, argument)
+      case 'discard':
+        return discard(cwd)
       case 'attach':
         return await attach(cwd)
       case 'resume':
@@ -254,7 +256,7 @@ async function chooseMode(cwd: string, argument: string): Promise<number> {
     const entry = openEntry(session.state(), context.scope)
     if (entry && entry.text !== '') {
       const text = (await ask(`Endgültiger Text für den offenen Eintrag [${entry.text}]: `)) || entry.text
-      session.store.update((state) => close(state, entry.id, text, session.clock.now(), randomUUID))
+      session.closeEntry(entry.id, text)
     }
   }
 
@@ -281,9 +283,32 @@ async function closeEntry(cwd: string, argument: string): Promise<number> {
     return 1
   }
 
-  session.store.update((state) => close(state, entry.id, text, session.clock.now(), randomUUID))
+  session.closeEntry(entry.id, text)
   process.stdout.write(`abgeschlossen: ${text}\n`)
   return report(await session.flush(true))
+}
+
+/**
+ * Throws the running segment away — nothing booked, timer stopped. For the case
+ * "committed, forgot to stop, did no more work": what was measured is wall time.
+ *
+ * The log keeps the discarded duration; measured time that disappears on purpose
+ * must not disappear silently as well (KONZEPT.md §3).
+ */
+function discard(cwd: string): number {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const running = runningSeconds(session.state(), session.clock, context.scope)
+  if (running <= 0) {
+    process.stderr.write('es läuft gerade kein Timer\n')
+    return 2
+  }
+
+  session.keepFromRunning(context, 0)
+  process.stdout.write(`${format(running)} verworfen — pausiert, ${format(session.seconds(context))} auf ${context.scope.branch}\n`)
+  return 0
 }
 
 /**
@@ -421,7 +446,7 @@ async function status(cwd: string): Promise<number> {
   process.stdout.write(`${nameOfProject(context)} — ${context.scope.branch} (${context.mode === 'branch' ? 'ein Eintrag pro Branch' : 'ein Eintrag pro Commit'})\n`)
   process.stdout.write(`  ${timer?.startedAt ? 'läuft' : 'pausiert'}  ${format(session.seconds(context))}\n`)
   if (entry) {
-    process.stdout.write(`  offener Eintrag  ${entry.text || '(noch kein Text)'}  ${workingTime(entry.foreignSeconds + entry.seconds, context.config.grid ?? session.config.grid)} h\n`)
+    process.stdout.write(`  offener Eintrag  ${entry.text || '(noch kein Text)'}  ${billedTime(entry.foreignSeconds + entry.seconds, context.config.grid ?? session.config.grid)} h\n`)
   }
   const running = runningSeconds(state, session.clock, context.scope)
   if (running >= session.config.longRunWarningSeconds) {
