@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.10.0] — 2026-08-03
+
 Die Kennung überlebt den Abschluss. Das ändert sichtbar, was in ProSonata steht —
 und macht möglich, was bisher am fehlenden Bezug scheiterte.
 
