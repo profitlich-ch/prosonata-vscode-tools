@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
-import { branchKey, buildMarker, readKey, readRunningSince, searchTerm, stripMarker, withMarker } from './marker.js'
+import {
+  branchKey,
+  buildMarker,
+  identityTerm,
+  isMarkedOpen,
+  readKey,
+  readRunningSince,
+  searchTerm,
+  stripMarker,
+  withIdentity,
+  withMarker,
+} from './marker.js'
 import { localDate } from './clock.js'
 import { EXACT, parseWorkingTime, toHours, workingTime } from './working-time.js'
 
@@ -147,5 +158,46 @@ describe('the local date', () => {
     // 23:30 local on 30 July is still 30 July, even where UTC has moved on.
     expect(localDate(new Date(2026, 6, 30, 23, 30))).toBe('2026-07-30')
     expect(localDate(new Date(2026, 0, 1, 0, 5))).toBe('2026-01-01')
+  })
+})
+
+/**
+ * What a closed entry keeps (KONZEPT.md §3). The word carries the state, the key
+ * carries the identity — and only the identity has a job left once the entry is
+ * finished: being found again.
+ */
+describe('the mark of a closed entry', () => {
+  it('is the key alone', () => {
+    expect(withIdentity('Buchungsmodul, fertig', 'a3f9c1')).toBe('[a3f9c1] Buchungsmodul, fertig')
+    expect(withIdentity('', 'a3f9c1')).toBe('[a3f9c1]')
+  })
+
+  it('still gives up its key', () => {
+    expect(readKey('[a3f9c1] Buchungsmodul, fertig')).toBe('a3f9c1')
+  })
+
+  // The one signal that says "unfinished". Before the key survived a close, the
+  // absence of the whole marker said it — now only the word does.
+  it('is not marked open, while an open one is', () => {
+    expect(isMarkedOpen('[a3f9c1] fertig')).toBe(false)
+    expect(isMarkedOpen('[LAUFEND:a3f9c1] läuft')).toBe(true)
+    expect(isMarkedOpen('[LAUFEND:a3f9c1][260803-08:12] läuft')).toBe(true)
+    expect(isMarkedOpen('Buchungsmodul')).toBe(false)
+  })
+
+  it('is stripped like any other, so an adopted text stays clean', () => {
+    expect(stripMarker('[a3f9c1] Buchungsmodul, fertig')).toBe('Buchungsmodul, fertig')
+  })
+
+  it('carries no time of its own', () => {
+    expect(readRunningSince('[a3f9c1] fertig')).toBeNull()
+  })
+
+  // Six hex characters could sit inside an ordinary word; the closing bracket
+  // is what makes the search term specific.
+  it('is found by a term that both forms contain', () => {
+    expect(withIdentity('fertig', 'a3f9c1')).toContain(identityTerm('a3f9c1'))
+    expect(withMarker('läuft', 'a3f9c1')).toContain(identityTerm('a3f9c1'))
+    expect(identityTerm('a3f9c1')).toBe('a3f9c1]')
   })
 })

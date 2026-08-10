@@ -97,6 +97,12 @@ export interface Api {
   getEntry(timeId: number): Promise<RemoteEntry | null>
   /** Open entries of a project whose `detail` contains the branch key. */
   findByKey(projectId: number, key: string, markerWord: string): Promise<RemoteEntry[]>
+  /**
+   * Entries whose `detail` contains this text. Measured: the filter matches
+   * substrings, so a marker fragment finds exactly its entries — open ones by
+   * the word, any of a branch by the bare key.
+   */
+  findByDetail(projectId: number, term: string): Promise<RemoteEntry[]>
   createEntry(draft: EntryDraft): Promise<RemoteEntry>
   updateEntry(timeId: number, patch: Partial<EntryDraft>): Promise<RemoteEntry>
   deleteEntry(timeId: number): Promise<void>
@@ -175,10 +181,13 @@ export class HttpApi implements Api {
    * hours of one landing in the time sheet of the other (KONZEPT.md §3).
    */
   async findByKey(projectId: number, key: string, markerWord: string): Promise<RemoteEntry[]> {
-    const term = encodeURIComponent(searchTerm(key, markerWord))
+    return this.findByDetail(projectId, searchTerm(key, markerWord))
+  }
+
+  async findByDetail(projectId: number, term: string): Promise<RemoteEntry[]> {
     const rows = await this.request<Record<string, unknown>[]>(
       'GET',
-      `/projecttimes?projectID=${projectId}&isInvoiced=0&userID=myself&detail=${term}&perPage=100`,
+      `/projecttimes?projectID=${projectId}&isInvoiced=0&userID=myself&detail=${encodeURIComponent(term)}&perPage=100`,
     )
     return (rows ?? []).map(toEntry)
   }

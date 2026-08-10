@@ -264,6 +264,37 @@ export function moveToClosed(state: State, openId: string, closedId: string, sec
 }
 
 /**
+ * Takes measured seconds off an entry because they went somewhere else. Used
+ * when the target of a follow-up lives only in ProSonata, so there is nothing
+ * local to credit.
+ */
+export function takeFromOpen(state: State, entryId: string, seconds: number): State {
+  const next = structuredClone(state)
+  const entry = findEntry(next, entryId)
+  if (!entry || seconds <= 0) return state
+
+  entry.seconds = Math.max(0, entry.seconds - seconds)
+  return next
+}
+
+/**
+ * Lets go of the ProSonata entry this one had — it was deleted over there. What
+ * accrues from now on belongs to a new one, so every trace of the old must go:
+ * a pending write would otherwise try to reach an entry that no longer exists.
+ */
+export function forgetRemote(state: State, entryId: string): State {
+  const next = structuredClone(state)
+  const entry = findEntry(next, entryId)
+  if (!entry) return state
+
+  entry.timeId = null
+  entry.lastWritten = null
+  entry.foreignSeconds = 0
+  next.pending = next.pending.filter((write) => write.entryId !== entryId)
+  return next
+}
+
+/**
  * Changes the text of an entry that is still open (KONZEPT.md §8). A typo in a
  * trailer would otherwise only be correctable by another commit.
  *

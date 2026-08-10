@@ -45,6 +45,8 @@ Fürs Update dasselbe noch einmal, nach `git pull`.
 
 **Nutze einen persönlichen Benutzer-Key, keine App-Integration**, damit die Zeiteinträge mit deinem User verknüpft sind.
 
+Denselben Befehl später erneut aufrufen, um **Key oder Basis-URL zu wechseln** — etwa wenn der Key abläuft. Die Basis-URL steht dann schon da, und ein leer gelassenes Key-Feld behält den bisherigen. Alle übrigen Einstellungen in `config.json` bleiben unberührt.
+
 ## Einstellungen pro Repository
 
 Klicke **ProSonata: Projekt für dieses Repository wählen** — es verknüpft das Repository mit einem Projekt und installiert den `post-commit`-Hook. Neben dem Projekt steht danach sein Budget, etwa «15,25 von 20 h». Geholt wird es beim Öffnen des Fensters und jedes Mal, wenn ein abgeschlossener Zeiteintrag in ProSonata angekommen ist — nicht laufend.
@@ -98,12 +100,23 @@ erinnert die Seitenleiste mit der Zeile **Ohne Text** daran, dass die
 Rechnungszeile noch fehlt. Abschliessen lässt sich ein Eintrag ohne Text nicht:
 Er stünde endgültig namenlos beim Kunden.
 
-Solange ein Eintrag offen ist, trägt er eine Markierung:
-`[LAUFEND:a3f9c1][260802-08:12] …`. Sie macht einen unfertigen Eintrag in
+Jeder Zeiteintrag trägt eine Markierung. Sie macht einen unfertigen Eintrag in
 ProSonata sichtbar — die API hat kein Statusfeld — und sie trägt die Identität
-des Branches, sodass es möglich ist, auf weiteren Computern am selben Branch zu arbeiten.
-Die zweite Klammer steht nur, solange ein Timer läuft, und nennt Tag und Uhrzeit
-seines Starts; beim Abschliessen verschwindet die ganze Markierung.
+des Branches, sodass auf weiteren Computern am selben Branch gearbeitet werden
+kann:
+
+| Zustand | Markierung |
+|---|---|
+| Timer läuft | `[LAUFEND:a3f9c1][260802-08:12] Text` |
+| pausiert | `[LAUFEND:a3f9c1] Text` |
+| abgeschlossen | `[a3f9c1] Text` |
+
+Beim Abschliessen fällt also das **Wort** weg, nicht die Klammer: Auf einem
+fertigen Eintrag wäre «LAUFEND» falsch, die Kennung dagegen wird weiter
+gebraucht. Ohne sie ist ein abgeschlossener Eintrag in ProSonata anonym, und
+weder das Zuschlagen noch eine Wiederherstellung fänden ihn wieder. Die sieben
+technischen Zeichen auf der Rechnungszeile sind dafür der bewusste Preis —
+solange, bis ProSonata ein eigenes Feld für solche Angaben hat.
 
 In den Feldern **Start** und **Ende** steht dafür die Spanne des Arbeitstages —
 Beginn des ersten und Ende des jüngsten Segments. Erstreckt sich ein Eintrag über
@@ -194,7 +207,9 @@ Datum dort bleiben, wie sie sind. Bestätigt wird vorher, mit den Zahlen:
 Die zweite Zeile ist der Grund für die Rückfrage: Das Zeitraster rundet **auf**,
 eine Viertelstunde als Raster macht aus fünf Minuten also eine Viertelstunde.
 Ein bereits **fakturierter** Eintrag wird abgelehnt — das geht nur noch in
-ProSonata selbst.
+ProSonata selbst. Steht der offene Eintrag schon dort, verschwindet er beim
+Zuschlagen: Seine Zeit ist ja umgezogen. Nur wenn ein anderer Computer in ihn
+gemessen hat, bleibt er stehen und das Zuschlagen wird abgelehnt.
 
 ## Der Log
 

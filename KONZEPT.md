@@ -296,8 +296,14 @@ Mensch, einmal, für einen Eintrag. Drei Grenzen bleiben:
 - Ein **fakturierter** Eintrag wird abgelehnt (`isInvoiced`), auch auf Wunsch.
 - Die Ausgangszahl kommt aus **ProSonata**, nicht aus dem lokalen Zustand – dort kann von Hand
   korrigiert worden sein, und geschrieben wird eine Summe.
-- Der offene Eintrag muss ProSonata noch **unbekannt** sein. Ist er schon angelegt, bliebe dort
-  sonst eine leere Hülle zurück; dann ist Abschliessen der richtige Weg.
+- Ist der offene Eintrag ProSonata bereits bekannt – seit dem Platzhalter der Regelfall –, wird
+  seine **leere Hülle gelöscht**, nachdem die Zeit sicher auf dem anderen Eintrag steht. In
+  dieser Reihenfolge, denn eine Unterbrechung dazwischen kostet eine Löschung, nie eine Stunde.
+  Trägt er einen **fremden Anteil**, bleibt die Absage: Löschen zerstörte die Stunden des
+  anderen Rechners, und die kennt hier niemand.
+- Findet sich lokal kein Ziel, wird in ProSonata gesucht – über die Kennung, die der Marker
+  nach dem Abschluss behält. Damit trägt das Zuschlagen auch über einen Verlust von
+  `state.json` hinweg.
 
 Gezeigt wird vorher, was tatsächlich geschrieben wird – **nach** dem Raster, das aufrundet: Fünf
 Minuten machen bei Viertelstunden-Raster aus 2:00 h nicht 2:05 h, sondern 2:15 h.
@@ -337,8 +343,20 @@ auffindbar.
 Der Branchname selbst erscheint dadurch nicht in ProSonata (Abschnitt 5). Das Wort `LAUFEND`
 ist konfigurierbar.
 
-**Beim Abschluss fällt der ganze Marker weg**, samt Klammern und Leerzeichen. Auf der Rechnung
-steht nur der Text.
+**Beim Abschluss fällt das Wort weg, nicht die Klammer**: Aus `[LAUFEND:a3f9c1] Text` wird
+`[a3f9c1] Text`. Das Wort trägt den Zustand – auf einem fertigen Eintrag wäre `LAUFEND` eine
+Lüge –, der Schlüssel trägt die Identität, und die soll den Abschluss überleben.
+
+Ohne sie ist ein geschlossener Eintrag in ProSonata **anonym**, und genau daran hängen drei
+Einschränkungen: Das Zuschlagen muss sich auf `state.json` verlassen, die Wiederherstellung
+findet nur offene Einträge, und ein zurückgerollter Commit lässt sich seinem Eintrag nicht mehr
+zuordnen. Der Preis sind sieben technische Zeichen auf einer Rechnungszeile; er wird bewusst
+gezahlt, bis ProSonatas eigenes Kommentarfeld existiert. Dann ziehen Kennung und Zeitklammer
+dorthin um, und gelesen wird übergangsweise weiter aus dem Text.
+
+Gesucht wird entsprechend zweifach: `LAUFEND:kennung` findet die **offenen** Einträge eines
+Branches, `kennung]` findet **alle**. Die schliessende Klammer gehört zum zweiten Begriff, weil
+der Filter Teilstrings sucht und sechs Hexzeichen sonst mitten in einem Wort stünden.
 
 Zwei Fallstricke:
 
@@ -347,8 +365,9 @@ Zwei Fallstricke:
   neuen Zeiteintrag an, statt zu raten.
 - Ein umbenannter Branch ergibt eine neue Kennung und damit einen neuen Zeiteintrag.
 
-Auf dem Hauptbranch gibt es keine offenen Zeiteinträge: jeder Commit schliesst seinen ab. Dort
-steht deshalb nie ein Marker.
+Auch auf dem Hauptbranch gibt es offene Zeiteinträge – nicht dauerhaft, aber solange ein Timer
+läuft und der nächste Commit auf sich warten lässt. Sie tragen dann den Marker mit `LAUFEND`
+und dem Platzhalter als Text; der Commit schliesst sie und lässt die Kennung stehen.
 
 ### Mehrere Rechner
 
@@ -1055,13 +1074,13 @@ liegen in [bruno/](bruno/).
   gespeichert, mitten im Wort abgeschnitten – **ohne Fehler und ohne Meldung**. Die Antwort
   auf den POST spiegelt dabei den gesendeten Wert zurück; erst ein erneutes Lesen zeigt die
   Kürzung.
-  Die Dokumentation nennt 200 Zeichen, das eigene Konto hat 800 – ProSonata erhöht das auf
-  Anfrage. Die Grenze ist also **kontoabhängig und aus der Antwort nicht ablesbar**.
-  Daraus folgt: **Die Extension muss die Länge selbst prüfen**, vor dem Senden warnen und
-  den Text unverändert lassen. Auf eine Ablehnung durch die API ist kein Verlass – ein
-  abgeschnittener Satz auf einer Kundenrechnung entstünde sonst unbemerkt. Die
-  anzunehmende Grenze ist konfigurierbar, Default 200 wie dokumentiert.
-  Der Marker `[LAUFEND:kennung]` verbraucht 15 Zeichen davon, mit der Zeitklammer 29.
+  Die Dokumentation nannte 200 Zeichen; **der Hersteller hat 800 als feste Feldlänge
+  zugesagt**, und das ist der Default. Aus der Antwort ablesbar ist die Grenze weiterhin nicht.
+  Daraus folgt unverändert: **Die Extension muss die Länge selbst prüfen**, vor dem Senden
+  warnen und den Text unverändert lassen. Auf eine Ablehnung durch die API ist kein Verlass –
+  ein abgeschnittener Satz auf einer Kundenrechnung entstünde sonst unbemerkt. Die
+  anzunehmende Grenze bleibt konfigurierbar, für Konten mit anderen Zusagen.
+  Der Marker verbraucht davon 15 Zeichen, mit der Zeitklammer 29, nach dem Abschluss 8.
 - `timeViaApi` markiert per API erzeugte Einträge (nur lesend) – **kein** Statusfeld für
   „offen/fertig" vorhanden. Deshalb der Marker im Text.
 - Rechte: Benutzer bis Stufe »Zeiterfasser 1« sehen und bearbeiten **nur ihre eigenen**
@@ -1151,7 +1170,7 @@ Zwei Dinge gelten deshalb **unabhängig** von einer Veröffentlichung, allein we
   andere abschaltbar sein. Der Modus-Umschalter ist dafür der wichtigste Hebel: wer lieber
   pro Commit abrechnet, stellt ihn um, statt das Werkzeug zu meiden.
   Die **`detail`-Grenze** muss konfigurierbar sein, weil ProSonata sie je Konto anhebt und
-  die API sie nicht verrät – Default 200 wie dokumentiert, im eigenen Konto 800.
+  die API sie nicht verrät – Default 800, vom Hersteller zugesagt.
 - **Englisch** für Code, Bezeichner und Kommentare. **Deutsch für alles Sichtbare**: Namen
   der Befehle, Panel, Dialoge, Meldungen der CLI, README und Changelog. ProSonata ist ein
   deutsches Produkt, seine Fachbegriffe sind es auch; eine englische Oberfläche darüber wäre

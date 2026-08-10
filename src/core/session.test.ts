@@ -240,6 +240,71 @@ describe('adding follow-up time to the entry a commit closed', () => {
     expect(api.entries.get(remote.timeID)?.hours).toBeCloseTo(3 + 5 / 60, 2)
   })
 
+  /*
+   * Since the placeholder, the open entry usually stands in ProSonata already —
+   * a running timer is enough. Its husk has to go, or the move would leave an
+   * empty line on the customer's project.
+   */
+  it('deletes the husk of the open entry it emptied', async () => {
+    const { api, session } = await afterCommit()
+    const open = openEntry(session.state(), main.scope)!
+    const husk = await api.createEntry({
+      projectID: 166,
+      category: 70,
+      date: '2026-07-30',
+      detail: '[LAUFEND:a3f9c1] (in Arbeit)',
+      workingTime: '0.08',
+    })
+    session.store.update((state) => {
+      state.entries.find((entry) => entry.id === open.id)!.timeId = husk.timeID
+      return state
+    })
+
+    const result = await session.attachToLastClosed(main, async () => true)
+
+    expect(result.kind).toBe('done')
+    expect(api.entries.has(husk.timeID)).toBe(false)
+    // And locally it lets go of the id, so the next time creates a fresh entry.
+    expect(openEntry(session.state(), main.scope)?.timeId).toBeNull()
+  })
+
+  // A share measured elsewhere is not ours to delete, and nobody here knows
+  // what those hours were.
+  it('refuses when another machine has measured into the open entry', async () => {
+    const { api, session } = await afterCommit()
+    const open = openEntry(session.state(), main.scope)!
+    session.store.update((state) => {
+      const entry = state.entries.find((candidate) => candidate.id === open.id)!
+      entry.timeId = 9999
+      entry.foreignSeconds = 3600
+      return state
+    })
+    api.calls.length = 0
+
+    const result = await session.attachToLastClosed(main, async () => true)
+
+    expect(result.kind).toBe('known')
+    expect(api.calls.some((call) => call.startsWith('deleteEntry'))).toBe(false)
+  })
+
+  /*
+   * Without a local target the key in the closed entry's marker is what finds it
+   * — the whole reason the mark survives a close.
+   */
+  it('finds the target in ProSonata when the local state knows none', async () => {
+    const { api, session, remote } = await afterCommit()
+    session.store.update((state) => {
+      state.entries = state.entries.filter((entry) => entry.state !== 'closed')
+      return state
+    })
+    api.entries.get(remote.timeID)!.detail = '[a3f9c1] Kirby Update, Linkfarbe'
+
+    const result = await session.attachToLastClosed(main, async () => true)
+
+    expect(result.kind).toBe('done')
+    expect(api.entries.get(remote.timeID)?.hours).toBeCloseTo(2 + 5 / 60, 2)
+  })
+
   it('refuses an invoiced entry without asking anybody', async () => {
     const { api, session, remote } = await afterCommit({ invoiced: true })
 

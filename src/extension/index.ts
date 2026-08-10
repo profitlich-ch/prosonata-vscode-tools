@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import * as vscode from 'vscode'
 
 import { inProsonataOrder, type Category, type Project } from '../core/api.js'
-import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
+import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { describeRepo, fetchPrune, isMerged, remoteBranchGone, type GitRepo } from '../core/git.js'
 import { hookNeedsRepair, installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
@@ -272,24 +272,31 @@ function withContext(action: (session: Session, context: RepoContext) => Promise
  * SecretStorage, which the hook could not read (KONZEPT.md §7).
  */
 async function setUpAccount(): Promise<void> {
+  const known = readIfPresent()
   const baseUrl = await vscode.window.showInputBox({
     title: 'ProSonata: Basis-URL',
     prompt: 'Bis und mit /api/v1',
     placeHolder: 'https://<subdomain>.prosonata.software/api/v1',
-    value: readIfPresent()?.baseUrl ?? '',
+    value: known?.baseUrl ?? '',
     ignoreFocusOut: true,
   })
   if (baseUrl === undefined) return
 
   const apiKey = await vscode.window.showInputBox({
     title: 'ProSonata: persönlicher API-Key',
-    prompt: 'Ein Benutzer-Key, keine App-Integration — eine Integration ist kein Benutzer',
+    prompt: known
+      ? 'Leer lassen behält den bisherigen Key'
+      : 'Ein Benutzer-Key, keine App-Integration — eine Integration ist kein Benutzer',
     password: true,
     ignoreFocusOut: true,
   })
   if (apiKey === undefined) return
+  if (apiKey.trim() === '' && !known) {
+    void vscode.window.showWarningMessage('ProSonata: ohne API-Key lässt sich nichts einrichten.')
+    return
+  }
 
-  writeConfig({ ...DEFAULTS, baseUrl: baseUrl.trim(), apiKey: apiKey.trim() })
+  writeConfig(configWith(known, { baseUrl: baseUrl.trim(), apiKey: apiKey.trim() || known!.apiKey }))
   session = null
   reload()
   void vscode.window.showInformationMessage(

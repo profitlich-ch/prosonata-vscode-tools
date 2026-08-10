@@ -2,7 +2,7 @@ import { ApiError, type Api, type EntryDraft } from './api.js'
 import type { Clock } from './clock.js'
 import type { Config } from './config.js'
 import type { Journal } from './journal.js'
-import { readKey, stripMarker, withMarker } from './marker.js'
+import { isMarkedOpen, stripMarker, withIdentity, withMarker } from './marker.js'
 import { findEntry, parkClosedElsewhere } from './tracking.js'
 import type { State, TimeEntry } from './types.js'
 import { workingTime, type TimeGrid } from './working-time.js'
@@ -147,7 +147,9 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
  * tells a running timer from one forgotten last week (KONZEPT.md §2).
  */
 export function detailFor(entry: TimeEntry, config: Config, runningSince: number | null = null): string {
-  if (entry.state !== 'open') return stripMarker(entry.text, config.markerWord)
+  // Closed: the word goes, the key stays. It is what makes the entry findable
+  // later — for follow-up time, for a lost state, for a rolled-back commit.
+  if (entry.state !== 'open') return withIdentity(stripMarker(entry.text, config.markerWord), entry.key)
   // The placeholder lives on the wire, never in the entry: locally it stays
   // text-less, so the panel keeps asking for a text and nothing mistakes the
   // stand-in for the line a customer will read.
@@ -215,7 +217,7 @@ async function writeEntry(
    * it on another machine. Writing now would put the marker back and overwrite
    * the final text — the entry belongs to whoever closed it (KONZEPT.md §3).
    */
-  if (entry.state === 'open' && readKey(remote.detail, config.markerWord) === null) {
+  if (entry.state === 'open' && !isMarkedOpen(remote.detail, config.markerWord)) {
     return Math.round(remote.hours * 3600)
   }
 

@@ -5,7 +5,7 @@ import { localDate, systemClock, type Clock } from './clock.js'
 import { paths, readConfig, type Config } from './config.js'
 import { describeRepo, mainBranch, type GitRepo } from './git.js'
 import { Journal } from './journal.js'
-import { branchKey } from './marker.js'
+import { branchKey, identityTerm, isMarkedOpen } from './marker.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
 import { billedTime } from './report.js'
 import { send, type SendResult } from './sender.js'
@@ -18,6 +18,7 @@ import {
   bookCorrection,
   close,
   commit,
+  forgetRemote,
   currentSeconds,
   keepFromRunning,
   lastClosedEntry,
@@ -31,6 +32,7 @@ import {
   settle,
   shiftStart,
   start,
+  takeFromOpen,
   unwrittenSeconds,
 } from './tracking.js'
 import type { EntryMode, Scope, State, TimeEntry } from './types.js'
@@ -509,12 +511,19 @@ export class Session {
     const open = openEntry(this.state(), context.scope)
     const seconds = open ? unwrittenSeconds(open) : 0
     if (!open || seconds <= 0) return { kind: 'nothing' }
-    if (open.timeId !== null) return { kind: 'known' }
+    /*
+     * The open entry usually stands in ProSonata by now — since the placeholder,
+     * a running timer is enough. Its husk is deleted after the move, which is
+     * ours to do. A **foreign** share is not: deleting would destroy hours
+     * measured on another machine, and nobody here knows what they were.
+     */
+    if (open.timeId !== null && open.foreignSeconds > 0) return { kind: 'known' }
 
-    const target = lastClosedEntry(this.state(), context.scope)
-    if (!target || target.timeId === null) return { kind: 'noTarget' }
+    const local = lastClosedEntry(this.state(), context.scope)
+    const timeId = local?.timeId ?? (await this.lastClosedInProsonata(context))
+    if (timeId === null) return { kind: 'noTarget' }
 
-    const remote = await this.api.getEntry(target.timeId)
+    const remote = await this.api.getEntry(timeId)
     if (!remote) return { kind: 'gone' }
     if (remote.isInvoiced) return { kind: 'invoiced' }
 
@@ -531,10 +540,34 @@ export class Session {
     }
     if (!(await confirm(plan))) return { kind: 'cancelled' }
 
-    await this.api.updateEntry(target.timeId, { workingTime: workingTime(held + seconds, grid) })
-    this.journal.append({ kind: 'sent', entryId: target.id, timeId: target.timeId })
-    this.store.update((state) => moveToClosed(state, open.id, target.id, seconds))
+    await this.api.updateEntry(timeId, { workingTime: workingTime(held + seconds, grid) })
+    // The husk goes only after the time is safely on the other entry: an
+    // interruption in between costs a deletion, never an hour.
+    if (open.timeId !== null) await this.api.deleteEntry(open.timeId)
+
+    this.journal.append({ kind: 'sent', entryId: local?.id ?? open.id, timeId })
+    this.store.update((state) => {
+      const moved = local ? moveToClosed(state, open.id, local.id, seconds) : takeFromOpen(state, open.id, seconds)
+      return open.timeId === null ? moved : forgetRemote(moved, open.id)
+    })
     return { kind: 'done', plan }
+  }
+
+  /**
+   * The last entry of this branch that ProSonata holds as finished — found by
+   * the key the marker keeps after a close (KONZEPT.md §3). Needed when the
+   * local state knows none: after a lost `state.json`, or on a machine that has
+   * never seen this branch.
+   *
+   * Finished means: the marker carries no word any more. The newest is the one
+   * with the highest `timeID`, since ProSonata hands them out in order.
+   */
+  private async lastClosedInProsonata(context: RepoContext): Promise<number | null> {
+    const found = await this.api.findByDetail(context.projectId, identityTerm(context.key))
+    const closed = found.filter((entry) => !isMarkedOpen(entry.detail, this.config.markerWord))
+    if (closed.length === 0) return null
+
+    return closed.reduce((newest, entry) => (entry.timeID > newest ? entry.timeID : newest), 0)
   }
 
   /** Set by the last sync: somebody is measuring on this branch elsewhere. */

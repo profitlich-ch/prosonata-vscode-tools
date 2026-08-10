@@ -46,9 +46,17 @@ export class FakeApi implements Api {
 
   async findByKey(projectId: number, key: string, markerWord: string): Promise<RemoteEntry[]> {
     this.record(`findByKey ${projectId} ${key}`)
-    const term = searchTerm(key, markerWord)
-    // A substring match, as measured against the account — and `userID=myself`,
-    // which is why entries of other people never show up here.
+    return this.matching(projectId, searchTerm(key, markerWord))
+  }
+
+  async findByDetail(projectId: number, term: string): Promise<RemoteEntry[]> {
+    this.record(`findByDetail ${projectId} ${term}`)
+    return this.matching(projectId, term)
+  }
+
+  // A substring match, as measured against the account — and `userID=myself`,
+  // which is why entries of other people never show up here.
+  private matching(projectId: number, term: string): RemoteEntry[] {
     return [...this.entries.values()].filter(
       (entry) =>
         entry.projectID === projectId && !entry.isInvoiced && entry.detail.includes(term) && !this.foreign.has(entry.timeID),

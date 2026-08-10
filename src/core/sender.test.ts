@@ -8,6 +8,7 @@ import { fixedClock } from './clock.js'
 import { DEFAULTS, type Config } from './config.js'
 import { FakeApi } from './fake-api.js'
 import { Journal } from './journal.js'
+import { isMarkedOpen, readKey } from './marker.js'
 import { adoptForeignShare, dueWrites, send, type SendDeps } from './sender.js'
 import { emptyState, type State, type TimeEntry } from './types.js'
 
@@ -94,12 +95,28 @@ describe('the first write', () => {
 })
 
 describe('a closed entry', () => {
-  it('goes out without the marker', async () => {
+  /*
+   * The word goes, the key stays: `LAUFEND` on a finished entry would be a lie,
+   * while the key is what makes it findable again — for follow-up time, for a
+   * lost state, for a rolled-back commit.
+   */
+  it('keeps its key and loses the word', async () => {
     const { api, deps } = setup()
     const closed = entry({ state: 'closed', text: 'Buchungsmodul, fertig' })
+
     await send(stateWith(closed), deps, true)
 
-    expect([...api.entries.values()][0]?.detail).toBe('Buchungsmodul, fertig')
+    expect([...api.entries.values()][0]?.detail).toBe('[a3f9c1] Buchungsmodul, fertig')
+  })
+
+  it('is told from an open one by the word, not by the bracket', async () => {
+    const { api, deps } = setup()
+
+    await send(stateWith(entry({ state: 'closed', text: 'fertig' })), deps, true)
+    const detail = [...api.entries.values()][0]!.detail
+
+    expect(isMarkedOpen(detail)).toBe(false)
+    expect(readKey(detail)).toBe('a3f9c1')
   })
 })
 

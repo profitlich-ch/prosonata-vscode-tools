@@ -4,6 +4,50 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Die Kennung überlebt den Abschluss. Das ändert sichtbar, was in ProSonata steht —
+und macht möglich, was bisher am fehlenden Bezug scheiterte.
+
+### Geändert
+
+- **Ein abgeschlossener Zeiteintrag behält seine Kennung**: aus
+  `[LAUFEND:a3f9c1] Text` wird `[a3f9c1] Text` statt nur `Text`. Das Wort trägt
+  den Zustand — auf einem fertigen Eintrag wäre «LAUFEND» eine Lüge —, der
+  Schlüssel die Identität. Ohne ihn ist ein geschlossener Eintrag anonym, und
+  genau daran hingen drei Einschränkungen: Zuschlagen ging nur über
+  `state.json`, die Wiederherstellung fand nur offene Einträge, und ein
+  zurückgerollter Commit war seinem Eintrag nicht mehr zuzuordnen. Sieben
+  technische Zeichen auf der Rechnungszeile sind der bewusst gezahlte Preis, bis
+  ProSonata ein eigenes Feld dafür hat.
+- **«Anderswo abgeschlossen» erkennt das Wort, nicht die Klammer.** Bisher galt
+  ein fehlender Marker als Signal; jetzt bleibt die Kennung stehen, also
+  entscheidet das Wort.
+- **`detailLimit` steht auf 800** statt 200 — vom Hersteller als feste Feldlänge
+  zugesagt. Die eigene Längenprüfung bleibt: ProSonata kürzt stillschweigend und
+  spiegelt in der Antwort sogar den ungekürzten Text zurück.
+
+### Hinzugefügt
+
+- **Das Zuschlagen findet sein Ziel auch in ProSonata**, wenn der lokale Zustand
+  keines kennt — über die Kennung im Marker. Damit trägt es über einen Verlust
+  von `state.json` hinweg.
+- **Die leere Hülle wird aufgeräumt.** Seit dem Platzhalter steht der offene
+  Eintrag meist schon in ProSonata; beim Zuschlagen wurde deshalb abgelehnt.
+  Jetzt wird er gelöscht, nachdem die Zeit sicher auf dem anderen Eintrag steht.
+  Hat ein anderer Computer in ihn gemessen, bleibt die Absage bestehen.
+
+### Behoben
+
+- **Konto einrichten setzte alle übrigen Einstellungen zurück.** Wer den
+  API-Key wechselte, verlor `grid`, `pauseOnWindowClose`, `placeholderText` und
+  jeden anderen von Hand gesetzten Wert — geschrieben wurde `{ ...DEFAULTS,
+  baseUrl, apiKey }`. Jetzt überlebt alles, was nicht zum Konto gehört.
+- **`prosonata init` verweigerte die Arbeit auf einem eingerichteten Rechner**
+  und meldete nur «Konto bereits eingerichtet». Ein Key wird aber ersetzt: Er
+  läuft ab, wird gedreht, die Subdomain zieht um. Der Befehl fragt jetzt beides
+  mit dem bisherigen Wert als Vorgabe; leer gelassen bleibt es, wie es war.
+
 ## [0.9.0] — 2026-08-03
 
 ### Hinzugefügt

@@ -23,8 +23,10 @@ export interface Config {
   /** Word inside the marker of an open entry. */
   markerWord: string
   /**
-   * Characters `detail` may have. ProSonata truncates silently beyond it and
-   * raises the limit per account without telling the API, so we check ourselves.
+   * Characters `detail` may have. 800, confirmed by ProSonata as the field's
+   * fixed length. Checked here all the same: the API truncates silently beyond
+   * it — and even echoes the uncut text back — so only our own check keeps a
+   * half sentence off an invoice.
    */
   detailLimit: number
   /** Trailer key that carries the invoice text. */
@@ -47,7 +49,7 @@ export interface Config {
 
 export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
   markerWord: DEFAULT_MARKER_WORD,
-  detailLimit: 200,
+  detailLimit: 800,
   trailerKey: 'Prosonata',
   placeholderText: '(in Arbeit)',
   grid: { kind: 'exact' },
@@ -82,6 +84,17 @@ export function readConfig(file = paths.config()): Config {
   if (!raw.baseUrl || !raw.apiKey) throw new MissingConfig(file)
 
   return { ...DEFAULTS, ...raw, baseUrl: trimSlash(raw.baseUrl), apiKey: raw.apiKey }
+}
+
+/**
+ * The configuration after account data was entered again — a new key, a moved
+ * subdomain. Everything else survives: `grid`, `pauseOnWindowClose` and the
+ * other hand-edited values live in the same file, and re-entering a key is no
+ * reason to lose them. Missing keys come from the defaults, so a file written
+ * by an older version stays readable.
+ */
+export function configWith(previous: Config | null, account: { baseUrl: string; apiKey: string }): Config {
+  return { ...DEFAULTS, ...(previous ?? {}), ...account }
 }
 
 export function writeConfig(config: Config, file = paths.config()): void {

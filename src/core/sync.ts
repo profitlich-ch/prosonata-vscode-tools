@@ -1,7 +1,7 @@
 import type { Api } from './api.js'
 import type { Config } from './config.js'
 import { localDate } from './clock.js'
-import { readKey, readRunningSince, stripMarker } from './marker.js'
+import { isMarkedOpen, readKey, readRunningSince, stripMarker } from './marker.js'
 import { openEntry, parkClosedElsewhere } from './tracking.js'
 import type { Scope, State, TimeEntry } from './types.js'
 
@@ -56,7 +56,7 @@ export async function sync(state: State, api: Api, config: Config, options: Sync
   // An entry we already know: check whether it is still open over there.
   if (local?.timeId != null) {
     const remote = await api.getEntry(local.timeId)
-    if (remote && readKey(remote.detail, config.markerWord) === null) {
+    if (remote && !isMarkedOpen(remote.detail, config.markerWord)) {
       // The marker is gone: somebody closed it. Nothing is written to it any
       // more — the time measured here waits for an answer (KONZEPT.md §3).
       return {

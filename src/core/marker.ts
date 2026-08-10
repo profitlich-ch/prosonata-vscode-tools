@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto'
 
 /**
- * The marker of an open entry: `[LAUFEND:a3f9c1][260802-08:12] Text`
- * (KONZEPT.md §3).
+ * The marker of an entry: `[LAUFEND:a3f9c1][260802-08:12] Text` while it is
+ * open, `[a3f9c1] Text` once it is closed (KONZEPT.md §3).
  *
  * It does three jobs. It makes an unfinished entry visible in ProSonata — the
  * API has no status field — it carries the branch identity so another machine
@@ -18,6 +18,17 @@ import { createHash } from 'node:crypto'
  * `^\[LAUFEND:([0-9a-f]+)\]` and would no longer recognise a marker with the
  * time inside it — it would conclude the entry was closed elsewhere and park
  * running hours. Beside it, its pattern still matches.
+ *
+ * **The word carries the state, the key carries the identity.** Closing drops
+ * the word, not the bracket: `LAUFEND` on a finished entry would be a lie, while
+ * the key has to survive. Without it a closed entry is anonymous over there, and
+ * everything that wants to find it again — adding follow-up time, recovering a
+ * lost state, matching a rolled-back commit — has to fall back on `state.json`.
+ *
+ * The price is a technical mark on an invoice line, seven characters, and it is
+ * paid on purpose until ProSonata's own comment field exists. Then the same two
+ * pieces move there, and reading falls back to the text for what was written
+ * before.
  *
  * Measured against the account: square brackets survive unchanged, and the
  * `detail` filter matches substrings, so the marker is searchable.
@@ -41,6 +52,14 @@ export function buildMarker(key: string, word = DEFAULT_MARKER_WORD, runningSinc
   return `[${word}:${key}]${runningSince == null ? '' : buildSince(runningSince)}`
 }
 
+/**
+ * The mark a closed entry keeps: the key alone. It says nothing about a state —
+ * that is the point, the entry has none any more — and remains findable.
+ */
+export function withIdentity(text: string, key: string): string {
+  return text ? `[${key}] ${text}` : `[${key}]`
+}
+
 /** Prefixes the text with the marker. An empty text yields the marker alone. */
 export function withMarker(
   text: string,
@@ -58,10 +77,23 @@ export function stripMarker(detail: string, word = DEFAULT_MARKER_WORD): string 
   return match ? detail.slice(match[0].length).trimStart() : detail
 }
 
-/** The key of a leading marker, or null if there is none. */
+/** The key of a leading marker, open or closed, or null if there is none. */
 export function readKey(detail: string, word = DEFAULT_MARKER_WORD): string | null {
   const match = markerPattern(word).exec(detail)
-  return match?.[1] ?? null
+  return match?.[2] ?? null
+}
+
+/**
+ * Whether the marker still carries the word — the one signal that says an entry
+ * is unfinished.
+ *
+ * This is what tells "closed on another machine" apart from "still running
+ * there". Before the key survived a close, the absence of the whole marker said
+ * it; now the key stays and only the word goes, so the question has to be asked
+ * about the word.
+ */
+export function isMarkedOpen(detail: string, word = DEFAULT_MARKER_WORD): boolean {
+  return markerPattern(word).exec(detail)?.[1] !== undefined
 }
 
 /**
@@ -74,7 +106,7 @@ export function readKey(detail: string, word = DEFAULT_MARKER_WORD): string | nu
  */
 export function readRunningSince(detail: string, word = DEFAULT_MARKER_WORD): number | null {
   const match = markerPattern(word).exec(detail)
-  const stamp = match?.[2]
+  const stamp = match?.[3]
   if (!stamp) return null
 
   const at = new Date(
@@ -99,12 +131,25 @@ export function searchTerm(key: string, word = DEFAULT_MARKER_WORD): string {
 }
 
 /**
- * The whole marker: key bracket, optionally the time bracket. Optional because
- * a paused entry has none — and because markers written before it existed have
- * to stay readable.
+ * What finds **any** entry of this branch, open or closed. The closing bracket
+ * belongs to it: without it, six hex characters could turn up inside an ordinary
+ * word, and the filter searches substrings.
+ */
+export function identityTerm(key: string): string {
+  return `${key}]`
+}
+
+/**
+ * The whole marker: the key bracket — with the word while open, without it once
+ * closed — and optionally the time bracket. Both optional parts are optional for
+ * the same reason: a paused entry has no time, a finished one has no word, and
+ * markers written before either existed have to stay readable.
  */
 function markerPattern(word: string): RegExp {
-  return new RegExp(`^\\[${escapeRegExp(word)}:([0-9a-f]+)\\](?:\\[(\\d{6}-\\d{2}:\\d{2})\\])?\\s*`, 'i')
+  return new RegExp(
+    `^\\[(?:(${escapeRegExp(word)}):)?([0-9a-f]+)\\](?:\\[(\\d{6}-\\d{2}:\\d{2})\\])?\\s*`,
+    'i',
+  )
 }
 
 function escapeRegExp(value: string): string {

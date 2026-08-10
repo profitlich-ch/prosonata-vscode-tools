@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { createInterface } from 'node:readline/promises'
 
 import { inProsonataOrder, type Project } from '../core/api.js'
-import { DEFAULTS, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
+import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
@@ -117,17 +117,35 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
   }
 }
 
+/**
+ * Account and repository. Runs again on a configured machine, because a key
+ * gets replaced — expired, rotated, moved to another subdomain. Anything left
+ * empty stays as it is, and every setting beside the account survives.
+ */
 async function init(cwd: string): Promise<number> {
-  try {
-    process.stdout.write(`Konto bereits eingerichtet: ${readConfig().baseUrl}\n`)
-  } catch {
-    const baseUrl = await ask('Basis-URL (https://<subdomain>.prosonata.software/api/v1): ')
-    const apiKey = await ask('Persönlicher API-Key: ')
-    writeConfig({ ...DEFAULTS, baseUrl, apiKey })
-    process.stdout.write(`nach ${paths.config()} geschrieben, Modus 0600\n`)
+  const known = knownConfig()
+  const baseUrl =
+    (await ask(`Basis-URL${known ? ` [${known.baseUrl}]` : ' (https://<subdomain>.prosonata.software/api/v1)'}: `)) ||
+    known?.baseUrl ||
+    ''
+  const apiKey = (await ask(`Persönlicher API-Key${known ? ' [unverändert lassen: leer]' : ''}: `)) || known?.apiKey || ''
+
+  if (baseUrl === '' || apiKey === '') {
+    process.stderr.write('Basis-URL und API-Key werden beide gebraucht — nichts geändert\n')
+    return 2
   }
 
+  writeConfig(configWith(known, { baseUrl, apiKey }))
+  process.stdout.write(`nach ${paths.config()} geschrieben, Modus 0600\n`)
   return await chooseProject(cwd)
+}
+
+function knownConfig() {
+  try {
+    return readConfig()
+  } catch {
+    return null
+  }
 }
 
 /**
