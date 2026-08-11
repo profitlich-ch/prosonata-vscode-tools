@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.11.0] — 2026-08-11
+
 ### Geändert
 
 - **Die Zeile *Offener Eintrag* nennt den fremden Anteil**, sobald ein zweiter
