@@ -6,6 +6,15 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Geändert
+
+- **Die Zeile *Offener Eintrag* nennt den fremden Anteil**, sobald ein zweiter
+  Computer beigesteuert hat: `Buchungsmodul · 4:00 h (1:00 h anderswo)`. Bisher
+  standen dort zwei verschiedene Summen untereinander — die Timer-Zeile zählt,
+  was **hier** gemessen wurde, diese Zeile den ganzen Eintrag —, ohne dass etwas
+  den Unterschied erklärte. Beide Zahlen waren richtig und sahen zusammen nach
+  einem Fehler aus.
+
 ## [0.10.0] — 2026-08-03
 
 Die Kennung überlebt den Abschluss. Das ändert sichtbar, was in ProSonata steht —

@@ -28,8 +28,10 @@ bleiben Handarbeit, alles danach geschieht von selbst.
 Daraus folgen die tragenden Entscheidungen:
 
 **Der Timer läuft lokal, ProSonata bekommt nur Zeiteinträge.**
-Eine Timer-API existiert bei ProSonata, ist aber öffentlich nicht verfügbar (Stand jetzt).
-Die lokale Emulation ist semantisch identisch und wird später ggf. dahinter ausgetauscht.
+Eine Timer-API ist **nicht vorgesehen**, vom Hersteller bestätigt: Timer liegen dort historisch
+bedingt serialisiert in einem Feld beim Benutzer, nicht in einer eigenen Tabelle, und wären über
+eine Schnittstelle nur schwer abzubilden. Die lokale Emulation ist damit keine Übergangslösung,
+sondern der Dauerzustand – semantisch identisch, und ohne fremde Abhängigkeit.
 
 **Zeit und Text sind entkoppelt.**
 Der Timer misst. Der Commit beschreibt.
@@ -392,6 +394,39 @@ das:
    Stunden überschreiben. Jeder Rechner merkt sich deshalb den **fremden Anteil** und schreibt
    `fremd + eigen`. Gelesen wird im GET, der wegen `isInvoiced` ohnehin vor jedem PUT fällig
    ist. Der geschriebene Wert hängt nicht vom gelesenen ab und bleibt damit idempotent.
+
+Woher ein Rechner den fremden Anteil **kennt**, beantwortet `lastWritten` – die Summe, die er
+zuletzt selbst geschrieben hat. Steht drüben mehr, war jemand anders am Werk, und die Differenz
+ist dessen Anteil:
+
+```text
+Büro    misst 3:00 → schreibt 3.00     lastWritten 3:00, fremd 0:00, eigen 3:00
+Zuhause kennt den Eintrag nicht        → sync: fremd 3:00, eigen 0:00
+Zuhause misst 1:00 → liest 3.00        3:00 − 3:00 = 0 → fremd bleibt
+                    → schreibt 4.00    lastWritten 4:00
+Büro    misst 0:30 → liest 4.00        4:00 − 3:00 = 1:00 → fremd 1:00
+                    → schreibt 4.30    (fremd 1:00 + eigen 3:30)
+```
+
+Ohne `lastWritten` liesse sich „drüben gewachsen" nicht von „das haben wir selbst geschrieben"
+unterscheiden. Und **schlicht lesen, addieren, schreiben** wäre keine Lösung: Das ist ein
+Read-Modify-Write. Bricht die Verbindung nach dem Schreiben ab, addiert der nächste Versuch ein
+zweites Mal. Hier hängt der geschriebene Wert nur vom lokalen Zustand ab und ist deshalb beliebig
+oft wiederholbar.
+
+**Wo der fremde Anteil sichtbar ist: nirgends.** Er steht ausschliesslich in `state.json`:
+
+| Ansicht | Was sie zeigt |
+|---|---|
+| Zeiteintrag in ProSonata | **eine** Zahl, die Gesamtsumme – das Datenmodell dort kennt keine Aufteilung |
+| Segmentprotokoll und Bericht | nur die Segmente **dieses** Rechners |
+| Panel, Zeile *Läuft/Pausiert* | nur dieser Rechner: eigene Sekunden plus laufendes Segment |
+| Panel, Zeile *Offener Eintrag* | die **Gesamtsumme**, `fremd + eigen` |
+
+Die beiden Panel-Zeilen gehen deshalb auseinander, sobald ein zweiter Rechner beteiligt ist –
+`0:00:00 · 3:00:00` über `Buchungsmodul · 4:00 h`. Beide Zahlen stimmen; sie beantworten
+Verschiedenes: „was habe ich hier gemessen" und „was steht auf der Rechnungszeile". Gesagt wird
+das bisher nirgends, und ohne Erklärung sieht es nach einem Fehler aus.
 
 Vorausgesetzt ist, dass immer nur **ein Rechner derselben Person zur Zeit** am selben Branch
 arbeitet – Büro tagsüber, zu Hause abends. Zwei Personen stören einander nicht, sie haben je
@@ -794,7 +829,7 @@ Ein laufender Timer trägt:
 ```
 id            lokale UUID (nicht auf eine ProSonata-ID warten)
 origin        "local" | "remote"      – heute konstant "local"
-remoteTimerId null                    – reserviert für die Timer-API
+remoteTimerId null                    – ungenutzt; eine Timer-API ist nicht vorgesehen
 repoPath, branch
 startedAt     Zeitstempel des laufenden Segments, null solange pausiert
 entryId       lokaler Zeiteintrag, in den die Zeit fliesst
@@ -818,6 +853,10 @@ lastWritten     zuletzt geschriebener Gesamtwert – daran erkennt der
                 Rechner, dass ein anderer dazugeschrieben hat
 timeID          ProSonata-ID, null vor dem ersten POST
 state           "open" | "closed"
+awaitingDecision  gesetzt, wenn ein anderer Rechner den Eintrag abgeschlossen
+                  hat: nichts wird geschrieben, bis jemand antwortet
+remoteFinalSeconds  was ProSonata in jenem Moment hielt – daraus ergibt sich,
+                    was von der hiesigen Zeit noch nicht drüben steht
 ```
 
 Die Statusleiste rendert eine **Liste** laufender Timer, kein Singleton – parallele Timer sind
@@ -844,14 +883,15 @@ etwa wenn `core` eigenständig veröffentlicht werden soll.
 
 **Alle Schreibzugriffe auf ProSonata laufen durch ein einziges Modul in `core`.** Es kennt drei
 Vorgänge – Zeiteintrag schreiben, abschliessen, löschen – und ist heute als POST, PUT und
-DELETE auf `projecttimes` implementiert. Kommt die Timer-API, wird dieses eine Modul
-ausgetauscht; alles darüber bleibt unberührt.
+DELETE auf `projecttimes` implementiert. Käme je eine andere Schnittstelle, wäre dieses eine
+Modul auszutauschen; alles darüber bliebe unberührt.
 
 Eine `sync()`-Funktion gleicht den lokalen Zustand mit ProSonata ab: sie sucht offene
 Zeiteinträge zur Kennung des aktuellen Branches, übernimmt gefundene `timeID`s und aktualisiert
 den fremden Anteil (Abschnitt 3). Aufgerufen wird sie vor jedem Schreibzugriff, beim ersten
-Segment auf einem unbekannten Branch und bei Rückkehr nach langer Abwesenheit. Kommt die
-Timer-API, ist sie auch die Stelle, an der fremde Timer sichtbar würden.
+Segment auf einem unbekannten Branch und bei Rückkehr nach langer Abwesenheit. Dass auf einem
+anderen Rechner gemessen wird, erkennt sie an der Zeitklammer im Marker – eine Timer-API gibt
+es nicht.
 
 **Kein DDEV, kein PHP, keine Datenbank, kein Webserver.** Ein Node-Prozess und ein paar
 JSON-Dateien.
@@ -1237,20 +1277,46 @@ Nicht erneut vorschlagen:
 
 ## 12. Offene Punkte
 
-1. **Timer-API.** Anfrage an ProSonata ist gestellt, Antwort steht aus. Gefragt ist nach
-   Endpunkten für Start/Pause/Beenden und danach, ob der Stop-Endpunkt eine korrigierte
-   Endzeit entgegennimmt. Parallele Timer und Pause/Resume sind laut UI vorhanden. Bis zur
-   Antwort ändert sich nichts – die Emulation bleibt.
-2. **Wenn die Timer-API kommt, ist alles aus Abschnitt 9 erneut zu prüfen.** Die gemessenen
-   Eigenschaften – Ersetzen statt Addieren, Typen der Felder, stillschweigendes Kürzen –
-   gelten für `projecttimes`. Für Timer-Endpunkte muss nichts davon gelten.
-3. **Erkennung geschlossener Pull Requests über die GitHub-API** – zurückgestellt, nicht
+1. **`api-comments`: ein Feld für Maschinendaten.** Der Hersteller hält es für vorstellbar –
+   möglich allerdings nur mit einem regulären Programm-Update samt Datenbank-Änderung. Heute
+   stehen diese Daten am Anfang des `detail` und damit auf der Rechnungszeile (Abschnitt 3).
+
+   Vorgeschlagener Inhalt, ein JSON-Objekt:
+
+   ```json
+   {"profitlich.prosonata-vscode-tools":{"v":1,"key":"a0a05e","running":"2026-05-06T12:02"}}
+   ```
+
+   - **Der äussere Schlüssel ist die Kennung der Extension** – `publisher.name` aus der
+     `package.json`. Nicht der GitHub-Pfad: Der benennt den Ort, an dem der Code heute liegt,
+     und das ist die unbeständigste Eigenschaft überhaupt – eine Umbenennung oder ein Umzug
+     machte die Kennung falsch, während sie in tausend Zeiteinträgen steht. Die
+     Extension-Kennung dagegen ist im Marketplace registriert und steht ohnehin schon in der
+     `package.json`, kann also nicht auseinanderlaufen. Als **Schlüssel**, nicht als Wert,
+     damit mehrere Anbindungen dasselbe Feld nutzen können, ohne einander zu überschreiben.
+   - `v` ist die Formatversion – ein Zeichen, das später erlaubt, das Format zu ändern, ohne
+     alte Einträge falsch zu lesen.
+   - `key` ist die Branch-Kennung, `running` der Beginn der laufenden Messung. Beim Pausieren
+     entfällt `running`, beim Abschliessen bleibt nur `key`.
+
+   Damit es trägt, braucht das Feld drei Eigenschaften, und die gehören dem Hersteller vor dem
+   Bau gesagt: **filterbar im GET** wie `detail` (Teilstring genügt) – sonst müssten Listen
+   geholt und lokal durchsucht werden, bei 50 Aufrufen je Viertelstunde keine Option;
+   **unverändert bei einem PUT mit Teilrumpf**, weil regelmässig nur `workingTime` geschrieben
+   wird; und **nicht sichtbar auf Auswertungen und Rechnungen**.
+
+   Der Umstieg wäre dann ein Ortswechsel, keine Neuerfindung: Gelesen wird das Feld, ersatzweise
+   der Text; geschrieben nur noch das Feld. Was dabei **verloren ginge**, ist die dritte Aufgabe
+   des Markers – dass ein vergessener Abschluss beim Fakturieren auffällt. Entweder bleibt dafür
+   ein kurzes `[LAUFEND]` ohne Kennung im Text, oder man verzichtet bewusst darauf und verlässt
+   sich auf die Ansichten des Werkzeugs.
+2. **Erkennung geschlossener Pull Requests über die GitHub-API** – zurückgestellt, nicht
    verworfen. Wäre eindeutig statt indirekt, bindet das Werkzeug aber an einen Hoster und
    braucht einen Token. Hervorholen, falls das Prune-Signal (Abschnitt 3) in der Praxis nicht
    trägt – etwa weil Branches nach dem Merge nicht gelöscht werden.
-4. **Schwellwerte der Warnungen** (Abschnitt 3) und des Signals „Zeiteintrag ruht" – aus der
+3. **Schwellwerte der Warnungen** (Abschnitt 3) und des Signals „Zeiteintrag ruht" – aus der
    Praxis festzulegen, nicht vorab zu erfinden.
-5. **Gleichzeitiges Buchen von zwei Rechnern derselben Person auf denselben Branch** ist nicht
+4. **Gleichzeitiges Buchen von zwei Rechnern derselben Person auf denselben Branch** ist nicht
    abgedeckt. Die Regel „fremd + eigen" setzt voraus, dass immer nur einer schreibt. Laufen
    zwei Timer parallel, überholen sich die Schreibzugriffe und der Wert ist zeitweise zu
    niedrig. Bekannte Grenze, kein Fehler – erst lösen, wenn der Fall eintritt. Zwei

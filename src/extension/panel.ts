@@ -3,7 +3,7 @@ import * as vscode from 'vscode'
 import { awaitingDecision, currentSeconds, lastClosedEntry, openEntry, runningSeconds, unwrittenSeconds } from '../core/tracking.js'
 import type { RepoProject } from '../core/repo-config.js'
 import type { RepoContext, Session } from '../core/session.js'
-import type { State } from '../core/types.js'
+import type { State, TimeEntry } from '../core/types.js'
 import { billedTime, hoursAndMinutes } from '../core/report.js'
 
 /**
@@ -177,7 +177,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       rows.push(
         new PanelRow(
           open.scope.branch === context.scope.branch ? 'Offener Eintrag' : `Offen · ${open.scope.branch}`,
-          `${open.text} · ${billedTime(open.foreignSeconds + open.seconds, grid)} h`,
+          `${open.text} · ${billedTime(open.foreignSeconds + open.seconds, grid)} h${elsewhere(open)}`,
           'circle-outline',
           { command: 'prosonata.closeEntry', title: 'Eintrag abschliessen', arguments: [open.id] },
           'openEntry',
@@ -205,6 +205,17 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
 
     return rows
   }
+}
+
+/**
+ * What another machine contributed, named only when there is any.
+ *
+ * Without it the panel contradicts itself: the timer row counts what was
+ * measured **here**, this row the whole entry — two different sums under each
+ * other, both right, and nothing saying why (KONZEPT.md §3).
+ */
+function elsewhere(entry: TimeEntry): string {
+  return entry.foreignSeconds > 0 ? ` (${hoursAndMinutes(entry.foreignSeconds)} h anderswo)` : ''
 }
 
 function describeProject(project: RepoProject | undefined, projectId: number, budget?: Budget): string {
