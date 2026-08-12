@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.11.1] — 2026-08-11
+
 ### Behoben
 
 - **Offene Zeiteinträge fremder Projekte standen in jedem Panel.** Die Liste
