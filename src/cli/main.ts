@@ -16,6 +16,7 @@ import {
   applyCategory,
   applyProject,
   awaitingDecision,
+  findTimer,
   openEntry,
   runningSeconds,
   setText,
@@ -459,7 +460,9 @@ async function status(cwd: string): Promise<number> {
 
   const state = session.state()
   const entry = openEntry(state, context.scope)
-  const timer = state.timers.find((candidate) => candidate.scope.branch === context.scope.branch)
+  // By scope, not by branch name alone: `main` exists in every repository, and
+  // the line would report a timer running somewhere else entirely.
+  const timer = findTimer(state, context.scope)
 
   process.stdout.write(`${nameOfProject(context)} — ${context.scope.branch} (${context.mode === 'branch' ? 'ein Eintrag pro Branch' : 'ein Eintrag pro Commit'})\n`)
   process.stdout.write(`  ${timer?.startedAt ? 'läuft' : 'pausiert'}  ${format(session.seconds(context))}\n`)

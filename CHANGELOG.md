@@ -6,6 +6,18 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Offene Zeiteinträge fremder Projekte standen in jedem Panel.** Die Liste
+  filterte nur auf «offen», nicht auf das Arbeitsverzeichnis — ein offener
+  Branch-Eintrag aus einem anderen Repository erschien überall, beschriftet als
+  `Offen · <branch>`, was sich wie ein Branch des gerade geöffneten Projekts
+  liest. Ein Klick darauf öffnete den Abschluss-Dialog für den fremden Eintrag.
+- **`prosonata status` meldete fremde Timer.** Gesucht wurde nach Branchnamen
+  allein; da `main` in jedem Repository existiert, stand dort «läuft», sobald
+  irgendwo sonst ein `main`-Timer lief. Die Dauer daneben war korrekt — nur die
+  Aussage darüber nicht.
+
 ## [0.11.0] — 2026-08-11
 
 ### Geändert

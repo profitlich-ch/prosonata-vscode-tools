@@ -190,6 +190,20 @@ export function parkClosedElsewhere(state: State, entryId: string, remoteSeconds
   return next
 }
 
+/**
+ * The open entries of one working directory, across all its branches — what a
+ * panel may show beside the branch one is on.
+ *
+ * Filtered by path, not by repository identity: an entry carries `scope.repoPath`
+ * and `key`, and `key` is a hash of root commit and branch name, so the
+ * repository cannot be read back out of it. That matches the scope anyway, which
+ * is working directory plus branch (KONZEPT.md §5) — two clones of one
+ * repository are two workplaces.
+ */
+export function openEntriesIn(state: State, repoPath: string): TimeEntry[] {
+  return state.entries.filter((entry) => entry.state === 'open' && entry.scope.repoPath === repoPath)
+}
+
 /** Every entry waiting for that answer, so a front end can ask. */
 export function awaitingDecision(state: State, scope?: Scope): TimeEntry[] {
   return state.entries.filter(

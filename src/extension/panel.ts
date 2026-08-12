@@ -1,6 +1,14 @@
 import * as vscode from 'vscode'
 
-import { awaitingDecision, currentSeconds, lastClosedEntry, openEntry, runningSeconds, unwrittenSeconds } from '../core/tracking.js'
+import {
+  awaitingDecision,
+  currentSeconds,
+  lastClosedEntry,
+  openEntriesIn,
+  openEntry,
+  runningSeconds,
+  unwrittenSeconds,
+} from '../core/tracking.js'
 import type { RepoProject } from '../core/repo-config.js'
 import type { RepoContext, Session } from '../core/session.js'
 import type { State, TimeEntry } from '../core/types.js'
@@ -173,7 +181,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       )
     }
 
-    for (const open of state.entries.filter((candidate) => candidate.state === 'open' && candidate.text !== '')) {
+    // Only this working directory: an open entry of another project is none of
+    // this panel's business, and the label `Offen · <branch>` would read like a
+    // branch of the repository one is looking at.
+    for (const open of openEntriesIn(state, context.scope.repoPath).filter((candidate) => candidate.text !== '')) {
       rows.push(
         new PanelRow(
           open.scope.branch === context.scope.branch ? 'Offener Eintrag' : `Offen · ${open.scope.branch}`,

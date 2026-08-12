@@ -10,6 +10,7 @@ import {
   currentSeconds,
   keepFromRunning,
   lastClosedEntry,
+  openEntriesIn,
   moveToClosed,
   openEntry,
   runningSeconds,
@@ -698,5 +699,45 @@ describe('closing without a text', () => {
     // With a text it closes — the successor the timer gets is not this entry.
     const closed = close(state, entry.id, 'Buchungsmodul', at(10), newId)
     expect(closed.entries.find((candidate) => candidate.id === entry.id)?.state).toBe('closed')
+  })
+})
+
+/*
+ * What a panel may show: the open entries of the working directory one is in.
+ * Without the path, an entry of another project turns up in every repository —
+ * labelled `Offen · <branch>`, which reads like a branch of the one on screen.
+ */
+describe('the open entries of a working directory', () => {
+  const other: Scope = { repoPath: '/work/shop', branch: 'fix/login' }
+  const elsewhere: Scope = { repoPath: '/work/website', branch: 'main' }
+
+  function withEntries(): State {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock, scope)
+    state = startOn(state, clock, other)
+    state = startOn(state, clock, elsewhere)
+    return state
+  }
+
+  it('gathers every branch of that directory', () => {
+    const found = openEntriesIn(withEntries(), '/work/shop').map((entry) => entry.scope.branch)
+
+    expect(found.sort()).toEqual(['feature/buchung', 'fix/login'])
+  })
+
+  it('leaves another repository alone', () => {
+    expect(openEntriesIn(withEntries(), '/work/website').map((entry) => entry.scope.branch)).toEqual(['main'])
+  })
+
+  // Geprüft wird die Kennung, nicht der Branch: Das Abschliessen legt für den
+  // laufenden Timer sofort einen Nachfolger auf demselben Branch an.
+  it('passes over what is closed', () => {
+    const state = withEntries()
+    const entry = openEntry(state, scope)!
+
+    const after = close(state, entry.id, 'Buchungsmodul, fertig', at(10), newId)
+
+    expect(openEntriesIn(after, '/work/shop').map((candidate) => candidate.id)).not.toContain(entry.id)
+    expect(openEntriesIn(after, '/work/shop')).toHaveLength(2)
   })
 })
