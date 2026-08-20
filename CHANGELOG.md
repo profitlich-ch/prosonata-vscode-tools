@@ -6,6 +6,16 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Jeder Commit auf dem Hauptbranch legte einen Zeiteintrag mit 0,00 h an,
+  wenn kein Timer lief.** Der Eintrag trug das Commit-Subject als Text und ging
+  an ProSonata — auf die Rechnung des Kunden. Es blieb auch nicht bei einem:
+  Weil ein Abschluss den Nachfolger anlegt, den der nächste Commit vorfindet,
+  entstand pro Commit eine weitere leere Zeile. Zeit ging dabei nie verloren,
+  aber wer während einer Pause mehrfach committete, fand hinterher eine Reihe
+  von Nullzeilen vor, die von Hand zu löschen sind.
+
 ## [0.11.1] — 2026-08-11
 
 ### Behoben

@@ -168,6 +168,68 @@ describe('a commit without a running timer', () => {
     expect(result.booked).toBe(0)
     expect(result.state.entries).toHaveLength(0)
   })
+
+  /*
+   * On the main branch a closed entry leaves a successor behind, and the timer
+   * that made it may since have been paused. Every later commit then found that
+   * successor, closed it with the commit subject and sent 0,00 h to ProSonata —
+   * once per commit, because closing opened the next successor in turn.
+   */
+  it('leaves the empty successor alone instead of closing it at 0 h', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock, main)
+    clock.advance(1800)
+    state = commitOn(state, main, at(9, 30), 'fix: Tippfehler').state
+    state = pause(state, clock, main)
+
+    const successor = openEntry(state, main)!
+    const result = commitOn(state, main, at(10, 0), 'QS: Stand nachgetragen')
+
+    expect(result.closed).toBeNull()
+    expect(openEntry(result.state, main)?.id).toBe(successor.id)
+    expect(result.state.entries.filter((entry) => entry.state === 'closed')).toHaveLength(1)
+    expect(result.state.pending.filter((write) => write.entryId === successor.id)).toHaveLength(0)
+  })
+
+  it('repeats that for every following commit, so no chain of empty entries grows', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock, main)
+    clock.advance(1800)
+    state = commitOn(state, main, at(9, 30), 'fix: Tippfehler').state
+    state = pause(state, clock, main)
+
+    for (const [index, text] of ['QS: A1', 'QS: A2', 'QS: A3', 'QS: A4'].entries()) {
+      state = commitOn(state, main, at(10, index), text).state
+    }
+
+    // The one real entry, plus the single successor waiting for time.
+    expect(state.entries).toHaveLength(2)
+  })
+
+  it('still closes what was measured before the timer was paused', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock, main)
+    clock.advance(900)
+    state = pause(state, clock, main)
+
+    const result = commitOn(state, main, at(9, 20), 'Kartendaten abgesichert')
+
+    expect(result.hadTimer).toBe(false)
+    expect(result.closed?.seconds).toBe(900)
+    expect(result.closed?.text).toBe('Kartendaten abgesichert')
+  })
+
+  it('leaves the placeholder of a branch entry untouched', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    state = pause(state, clock, scope)
+
+    const entry = openEntry(state, scope)!
+    const result = commitOn(state, scope, at(9, 30), 'Buchungsmodul', true)
+
+    expect(openEntry(result.state, scope)?.id).toBe(entry.id)
+    expect(result.state.pending.some((write) => write.entryId === entry.id)).toBe(true)
+  })
 })
 
 describe('pausing', () => {

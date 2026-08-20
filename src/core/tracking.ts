@@ -146,6 +146,24 @@ export function commit(
     })
   }
 
+  /*
+   * Nothing measured, and the entry holds nothing either — this commit has no
+   * time to record. Closing it anyway would put a 0,00 h line on a customer's
+   * invoice, and it would not stop at one: closing creates the successor that
+   * the next commit finds, so every further commit adds another empty line.
+   *
+   * Asked of the entry, not of `hadTimer`: whoever measures, pauses and only
+   * then commits has real seconds sitting in the entry, and this commit is what
+   * closes them.
+   *
+   * Only in `commit` mode. On a branch an entry without time is on purpose —
+   * the placeholder is what makes it findable from a second machine before the
+   * first commit (KONZEPT.md §3).
+   */
+  if (options.mode === 'commit' && booked === 0 && entry.seconds === 0 && entry.foreignSeconds === 0) {
+    return { state, booked: 0, closed: null, hadTimer }
+  }
+
   if (options.mode === 'commit') {
     entry.text = options.text
     entry.sha = options.sha
