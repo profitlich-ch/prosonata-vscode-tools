@@ -8,6 +8,13 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ### Behoben
 
+- **Zeitkorrekturen ab einer Stunde liessen sich nicht eintippen.** `+65` wurde
+  richtig als 65 Minuten gelesen, die Zeile danach aber von der Auswahlliste
+  ausgeblendet: Sie vergleicht das Getippte mit der Beschriftung, und die lautet
+  `+1:05 Stunden` — darin kommt keine `65` vor. Sichtbar blieb nur, was
+  zufällig zur Beschriftung passte, also `+59` und `+1:05`. Betroffen war jede
+  Eingabe ab sechzig Minuten, in beide Richtungen; im Terminal ging `+65`
+  immer.
 - **Jeder Commit auf dem Hauptbranch legte einen Zeiteintrag mit 0,00 h an,
   wenn kein Timer lief.** Der Eintrag trug das Commit-Subject als Text und ging
   an ProSonata — auf die Rechnung des Kunden. Es blieb auch nicht bei einem:

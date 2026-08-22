@@ -494,10 +494,10 @@ async function adjustTime(session: Session, context: RepoContext): Promise<void>
     const possible = offers.filter((offer) => planAdjustment(offer, session.situation(context)).action !== 'impossible')
 
     /*
-     * A QuickPick filters its items against what was typed, so a line whose
-     * label does not contain "17:15" disappears the moment it is typed. The
-     * refusal therefore belongs in the title, which stays visible — not in a
-     * line that cannot be shown anyway.
+     * A QuickPick filters its items against what was typed. The lines opt out
+     * of that with `alwaysShow`, because a label is the canonical form and
+     * rarely contains the typed characters. A refusal has no line to sit on at
+     * all, so it belongs in the title, which stays visible either way.
      */
     pick.title =
       offers.length > 0 && possible.length === 0
@@ -600,6 +600,9 @@ function standingOffers(session: Session, context: RepoContext): Offer[] {
       label: 'Laufendes Segment verwerfen',
       description: clock(running),
       detail: 'der Timer hält an, gebucht wird nichts',
+      // For the same reason as in `describe`: this list is also shown while
+      // something unreadable is being typed, and then it must stay whole.
+      alwaysShow: true,
       discard: true,
     },
     ...lines,
@@ -626,6 +629,14 @@ function describe(
     description: `${clock(now)} → ${clock(Math.max(0, now + plan.delta))}${stopped}`,
     // Right in the line: why less will happen than the words promise.
     detail: noteFor(plan, adjustment) ?? '',
+    /*
+     * Without this the QuickPick filters the line away again. It matches what
+     * was typed against the label, and the label is the canonical form: `+65`
+     * becomes `+1:05 Stunden`, which contains no `65` at all. Everything from an
+     * hour upwards therefore vanished the moment it was typed — the amount was
+     * read correctly and then hidden, so only `+59` and `+1:05` appeared to work.
+     */
+    alwaysShow: true,
     adjustment,
   }
 }
