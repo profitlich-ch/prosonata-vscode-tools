@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.11.2] — 2026-08-28
+
 ### Behoben
 
 - **Zeitkorrekturen ab einer Stunde liessen sich nicht eintippen.** `+65` wurde
