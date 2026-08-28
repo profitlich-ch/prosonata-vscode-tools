@@ -862,6 +862,48 @@ remoteFinalSeconds  was ProSonata in jenem Moment hielt – daraus ergibt sich,
 Die Statusleiste rendert eine **Liste** laufender Timer, kein Singleton – parallele Timer sind
 der Normalfall, und später können fremde Timer von anderen Geräten dazukommen.
 
+**Die Rechnerkennung** steht daneben, auf oberster Ebene des Zustands – sechs Hexzeichen wie die
+Branch-Kennung, einmal zufällig gezogen und danach unverändert *(noch nicht gebaut)*:
+
+```json
+{ "formatVersion": 1, "version": 47, "machine": "a3f9c1", "timers": [...] }
+```
+
+Sie beschriftet das Fach dieses Rechners in `api-comments` (Abschnitt 12) und hat genau eine
+Anforderung: auf diesem Rechner immer dieselbe zu sein. Etwas Sprechendes muss sie nicht sein,
+denn niemand liest sie; und weil `userID=myself` die Einträge ohnehin einer Person zuordnet,
+zählen nur Kollisionen unter den eigenen Rechnern – bei sechs Hexzeichen und einer Handvoll
+Geräte kein Thema.
+
+Dass sie in `state.json` liegt und nicht in `config.json`, entscheidet der Fall, in dem sie
+unvorhergesehen wechselt. Der Rechner legte dann ein neues Fach an, während das alte stehen
+bliebe – und schriebe sein `seconds` vollständig hinein, obwohl dieselben Stunden im alten Fach
+schon stehen. Die Summe zählte sie doppelt, still, in genau der Zahl, die auf der Rechnung
+landet.
+
+Dagegen hilft nicht, die Kennung besonders haltbar zu machen, sondern sie an **dieselbe
+Lebensdauer** zu binden wie den Zähler, den sie beschriftet. In `state.json` stirbt sie zusammen
+mit `seconds`: Ist die Datei weg, ist beides weg, der Rechner beginnt bei null und übernimmt beim
+nächsten Abgleich alle vorhandenen Fächer als fremd – darunter sein eigenes altes. Die Summe
+stimmt, ohne dass jemand eingreifen muss. Das trägt auch durch die Wiederherstellung aus dem
+Journal, denn dort steht ausschliesslich, was **noch nicht** übertragen ist: Das alte Fach hält
+das Übertragene, das neue bekommt den Rest, und die beiden überschneiden sich nicht.
+
+In `config.json` wäre die Kennung langlebiger als der Zähler. Die Kombination „Kennung überlebt,
+`seconds` nicht" ist harmlos; die umgekehrte zählt doppelt. Die Ablage, die den gefährlichen Fall
+ausschliesst, ist die richtige.
+
+Verworfen wurden drei Alternativen. Der **gehashte Hostname** braucht keine Ablage und ist nach
+jedem Verlust reproduzierbar – aber macOS benennt Rechner beim Netzbeitritt selbsttätig um, und
+in Firmennetzen sind Namen doppelt vergeben; beides führt in genau den Fall „Kennung wechselt,
+Zähler bleibt". Die **Maschinen-UUID des Betriebssystems** wäre stabil, kostet aber drei
+plattformabhängige Codepfade für etwas, das eine gezogene Zufallszahl in einer Zeile leistet.
+**`vscode.env.machineId`** scheidet aus, weil der `post-commit`-Hook ohne VS Code läuft
+(Abschnitt 8) und trotzdem schreibt – alle drei Einstiegspunkte müssen dieselbe Kennung
+berechnen können. Ein **sprechender Name** vom Benutzer wäre in ProSonata lesbarer, kostet aber
+eine Frage bei der Einrichtung, die unbeantwortet bleiben kann; falls später gewünscht, passt er
+additiv daneben, ohne die Identität anzutasten.
+
 ---
 
 ## 8. Architektur
@@ -1277,14 +1319,16 @@ Nicht erneut vorschlagen:
 
 ## 12. Offene Punkte
 
-1. **`api-comments`: ein Feld für Maschinendaten.** Der Hersteller hält es für vorstellbar –
-   möglich allerdings nur mit einem regulären Programm-Update samt Datenbank-Änderung. Heute
-   stehen diese Daten am Anfang des `detail` und damit auf der Rechnungszeile (Abschnitt 3).
+1. **`api-comments`: ein Feld für Maschinendaten.** Der Hersteller hat es **zugesagt**, mit
+   **800 Zeichen** wie bei `detail`; es kommt mit einem regulären Programm-Update samt
+   Datenbank-Änderung. Heute stehen diese Daten am Anfang des `detail` und damit auf der
+   Rechnungszeile (Abschnitt 3). *(Noch nicht gebaut – wartet auf das Feld.)*
 
-   Vorgeschlagener Inhalt, ein JSON-Objekt:
+   Vorgesehener Inhalt, ein JSON-Objekt:
 
    ```json
-   {"profitlich.prosonata-vscode-tools":{"v":1,"key":"a0a05e","running":"2026-05-06T12:02"}}
+   {"profitlich.prosonata-vscode-tools":{"v":1,"key":"a0a05e","open":true,
+    "running":"2026-05-06T12:02","m":{"a3f9c1":10800,"7b2e04":3600}}}
    ```
 
    - **Der äussere Schlüssel ist die Kennung der Extension** – `publisher.name` aus der
@@ -1296,20 +1340,65 @@ Nicht erneut vorschlagen:
      damit mehrere Anbindungen dasselbe Feld nutzen können, ohne einander zu überschreiben.
    - `v` ist die Formatversion – ein Zeichen, das später erlaubt, das Format zu ändern, ohne
      alte Einträge falsch zu lesen.
-   - `key` ist die Branch-Kennung, `running` der Beginn der laufenden Messung. Beim Pausieren
-     entfällt `running`, beim Abschliessen bleibt nur `key`.
+   - `key` ist die Branch-Kennung, `running` der Beginn der laufenden Messung; beim Pausieren
+     entfällt `running`.
+   - **`open` sagt den Zustand, und zwar ausdrücklich.** Ihn aus der Abwesenheit von `running`
+     zu lesen, ginge nicht: Ein pausierter und ein abgeschlossener Eintrag sähen gleich aus.
+     Genau diese Unterscheidung trägt heute das Wort `LAUFEND`, und an ihr hängt der
+     Mehrrechner-Abschluss – fehlt sie, parkt der zweite Rechner entweder nie oder dauernd
+     (Abschnitt 3).
+   - **`m` sind die Fächer: je Rechner die Sekunden, die er beigetragen hat.** Siehe unten.
 
-   Damit es trägt, braucht das Feld drei Eigenschaften, und die gehören dem Hersteller vor dem
-   Bau gesagt: **filterbar im GET** wie `detail` (Teilstring genügt) – sonst müssten Listen
-   geholt und lokal durchsucht werden, bei 50 Aufrufen je Viertelstunde keine Option;
-   **unverändert bei einem PUT mit Teilrumpf**, weil regelmässig nur `workingTime` geschrieben
-   wird; und **nicht sichtbar auf Auswertungen und Rechnungen**.
+   Damit es trägt, braucht das Feld fünf Eigenschaften, und die gehören dem Hersteller vor dem
+   Bau gesagt:
 
-   Der Umstieg wäre dann ein Ortswechsel, keine Neuerfindung: Gelesen wird das Feld, ersatzweise
-   der Text; geschrieben nur noch das Feld. Was dabei **verloren ginge**, ist die dritte Aufgabe
-   des Markers – dass ein vergessener Abschluss beim Fakturieren auffällt. Entweder bleibt dafür
-   ein kurzes `[LAUFEND]` ohne Kennung im Text, oder man verzichtet bewusst darauf und verlässt
-   sich auf die Ansichten des Werkzeugs.
+   - **Filterbar im GET** wie `detail`, als **Teilstring**. Ohne das müssten Listen geholt und
+     lokal durchsucht werden, bei 50 Aufrufen je Viertelstunde keine Option. Es sind **zwei**
+     Suchen, nicht eine: `"key":"a0a05e"` findet alle Einträge des Branches, zusammen mit
+     `"open":true` die offenen (Abschnitt 3). Die heutige Krücke, die schliessende Klammer an
+     den Suchbegriff zu hängen, entfällt dabei – im JSON ist der Treffer von selbst eindeutig.
+   - **Unverändert gespeichert, Zeichen für Zeichen.** Das gibt es bei `detail` gratis und bei
+     einem JSON-Feld nicht: Liegt die Spalte als echter JSON-Typ in der Datenbank, normalisiert
+     diese beim Speichern – Leerzeichen fallen weg, Schlüssel werden umsortiert. Dann steht dort
+     nicht mehr die Zeichenkette, die geschickt wurde, und die Teilstringsuche findet nichts,
+     obwohl der Wert da ist. Erbeten ist deshalb **`TEXT`/`VARCHAR`, durchgereicht**; ein
+     JSON-Typ hätte für uns keinen Nutzen, das Objekt wird auf unserer Seite gebaut und gelesen.
+     Zieht der Hersteller ihn vor, bräuchte es stattdessen einen Pfad-Filter
+     (`apiComments.key=a0a05e`) – auch gangbar, aber eine andere Zusage.
+   - **Kombinierbar mit den übrigen Filtern**, insbesondere mit `userID=myself`. Dieser Filter
+     hält zwei Personen am selben Branch auseinander; wirkt der neue alternativ statt zusätzlich,
+     sieht jede die Stunden der anderen.
+   - **Unverändert bei einem PUT mit Teilrumpf**, weil regelmässig nur `workingTime` geschrieben
+     wird – und beim Zuschlagen zu einem anderswo abgeschlossenen Eintrag ausschliesslich das.
+     Zu prüfen ist das durch erneutes Lesen: Antworten belegen nicht, was gespeichert wurde
+     (Abschnitt 9).
+   - **Nicht sichtbar auf Auswertungen und Rechnungen.**
+
+   Nebenbei muss der Suchbegriff die URL-Kodierung überstehen: `"key":"a0a05e"` wird zu
+   `%22key%22%3A%22a0a05e%22`. Beim heutigen `LAUFEND:a0a05e` kam die Frage nie auf.
+
+   Der Umstieg ist dann ein Ortswechsel, keine Neuerfindung: Gelesen wird das Feld, ersatzweise
+   der Text; geschrieben nur noch das Feld. Ein kurzes **`[LAUFEND]` ohne Kennung bleibt im
+   Text** – es ist das Einzige, was einen vergessenen Abschluss beim Fakturieren auffallen
+   lässt, und kostet neun Zeichen statt neunundzwanzig. Die beiden Kanäle bedienen dann
+   verschiedene Leser und hängen nicht mehr voneinander ab: `open` im Feld trägt den Zustand
+   für die Maschine, `[LAUFEND]` im Text den Hinweis für den Menschen. Damit fällt auch der
+   erste Fallstrick aus Abschnitt 3 weg – wer den Text von Hand ändert, zerstört die
+   Verknüpfung nicht mehr, denn sie steht in einem Feld, das niemand von Hand anfasst.
+
+   **Die Fächer lösen den vierten Punkt dieser Liste.** Statt den fremden Anteil aus
+   `lastWritten` zu erschliessen, steht er lesbar da: fremd ist die Summe aller Fächer ausser
+   dem eigenen, `workingTime` die Summe aller. Jeder Rechner schreibt nur sein eigenes Fach und
+   bleibt damit idempotent – der geschriebene Wert hängt weiterhin allein vom lokalen Zustand ab,
+   plus den fremden Fächern aus dem GET, der wegen `isInvoiced` ohnehin fällig ist. `lastWritten`
+   und `foreignSeconds` entfallen als fortgeschriebener Zustand. Und anders als heute heilt ein
+   verlorener Schreibzugriff sich selbst: Überschreibt A gerade das Fach von B mit einem
+   veralteten Wert, setzt B es beim nächsten Schreiben aus seiner eigenen Wahrheit wieder
+   gerade. Woher ein Rechner seine Fachkennung nimmt, steht in Abschnitt 7.
+
+   Bei 800 Zeichen kostet ein Fach fünfzehn; die Länge ist keine Grösse, über die nachzudenken
+   wäre. **Aufgeräumt werden Fächer nie**, auch die von Rechnern nicht, die es nicht mehr gibt:
+   Die Stunden darin sind echt und gehören zur Summe.
 2. **Erkennung geschlossener Pull Requests über die GitHub-API** – zurückgestellt, nicht
    verworfen. Wäre eindeutig statt indirekt, bindet das Werkzeug aber an einen Hoster und
    braucht einen Token. Hervorholen, falls das Prune-Signal (Abschnitt 3) in der Praxis nicht
@@ -1319,9 +1408,11 @@ Nicht erneut vorschlagen:
 4. **Gleichzeitiges Buchen von zwei Rechnern derselben Person auf denselben Branch** ist nicht
    abgedeckt. Die Regel „fremd + eigen" setzt voraus, dass immer nur einer schreibt. Laufen
    zwei Timer parallel, überholen sich die Schreibzugriffe und der Wert ist zeitweise zu
-   niedrig. Bekannte Grenze, kein Fehler – erst lösen, wenn der Fall eintritt. Zwei
-   **Personen** am selben Branch sind dagegen abgedeckt: Die Suche filtert auf
-   `userID=myself`, jede führt ihren eigenen Zeiteintrag (Abschnitt 3).
+   niedrig. Bekannte Grenze, kein Fehler. **Gelöst wird sie von den Fächern in `api-comments`**
+   (Punkt 1), und zwar als Nebenwirkung: Wo jeder Rechner nur sein eigenes Fach schreibt, gibt
+   es nichts mehr zu überholen. Bis dahin bleibt es bei der Voraussetzung. Zwei **Personen** am
+   selben Branch sind dagegen schon heute abgedeckt: Die Suche filtert auf `userID=myself`, jede
+   führt ihren eigenen Zeiteintrag (Abschnitt 3).
 
 ---
 
@@ -1338,6 +1429,7 @@ Zuschlagen, Segmentprotokoll samt Bericht und der Abgleich über mehrere Rechner
 | Abschlussvorschlag aus „lokaler Branch gelöscht" und „Zeiteintrag ruht" | 3, *Abschluss* |
 | Zusammenführen zurückgerollter, bereits gesendeter Zeiteinträge | 3, *Zurückgerollte Commits* |
 | Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
+| Umzug der Maschinendaten nach `api-comments`, samt Rechnerfächern | 7 und 12 |
 
 Gebaut sind dagegen die beiden wichtigsten Abschlusssignale: gemergter Branch und
 verschwundene Remote-Ref.
