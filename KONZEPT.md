@@ -762,6 +762,36 @@ Zeitplan.
 **`formatVersion`** steht daneben, damit spätere Änderungen am Aufbau migrierbar sind. Eine
 veröffentlichte Extension trifft auf Zustände, die ältere Fassungen geschrieben haben.
 
+### Der Compare-and-Swap schützt die Datei, nicht den API-Aufruf
+
+Das ist die Lücke, die 36 doppelte Zeiteinträge erzeugt hat, und sie liegt genau dort, wo man
+sich sicher fühlt.
+
+Ein Schreibvorgang nach ProSonata besteht aus drei Schritten: Zustand lesen, HTTP, Zustand
+schreiben. Der CAS sichert den dritten Schritt – aber **zwischen dem ersten und dem dritten liegt
+ein Netzaufruf**, und in diesem Fenster können Hook, CLI und Extension dasselbe tun. Zwei
+Prozesse lesen `timeId: null`, beide legen an, und in ProSonata stehen zwei Rechnungspositionen.
+
+Die Idempotenz-Begründung aus Abschnitt 3 trägt hier nicht: Sie gilt für den **`PUT` mit
+absoluter Summe**, der beliebig oft wiederholbar ist. Ein **`POST` erzeugt**; ihn zu wiederholen
+heisst, ein zweites Ding zu erschaffen.
+
+Zwei Regeln folgen daraus, und beide sind verbindlich für jeden Code, der schreibt:
+
+- **Zusammenführen statt ersetzen.** Wer nach dem Netzaufruf zurückschreibt, muss das Ergebnis auf
+  den **jetzt** gültigen Zustand anwenden – Identität übernehmen, Zähler als **Differenz**
+  addieren. Ein `store.update(() => schnappschuss)` gibt einen Stand von *vor* dem Aufruf zurück
+  und macht den CAS wirkungslos: Er liest gewissenhaft neu und wirft das Gelesene weg. So gingen
+  vorgemerkte Schreibvorgänge verloren.
+- **Das Anlegen wird beansprucht.** Vor dem `POST` trägt der Eintrag `creating` mit einem
+  Zeitstempel; wer einen fremden, frischen Anspruch vorfindet, überspringt den Eintrag und
+  schickt ihn in der nächsten Runde. Das kostet eine Verzögerung, doppeltes Anlegen kostet eine
+  Rechnungszeile.
+
+**Eine Pacht, keine Sperre** – aus demselben Grund, aus dem oben die Sperrdatei verworfen wurde:
+Sie läuft von selbst ab, ein abgestürzter Prozess hinterlässt keine Leiche. Und sie hält einen
+einzelnen Eintrag auf, nicht alle.
+
 ### Journal
 
 **`log.jsonl` ist append-only**, damit dort gar keine konkurrierenden Updates entstehen.
@@ -977,6 +1007,10 @@ Fremdnutzern `ps aux` brechen. Ein kurzer Alias ist optional.
 Befehle: `init`, `start`, `pause`, `status`, `send`, `project`, `category`, `grid`, `mode`,
 `close`, `text`, `discard`, `attach`, `resume`, `log`, `adjust` – die verbindliche Liste steht
 in `prosonata help`. Kein `end` – ein Timer kennt kein Beenden.
+
+Damit ist die CLI zugleich die Schnittstelle für einen **Coding-Agenten**: Wer Shell-Zugriff hat,
+kann all das bereits, ohne dass etwas anzubinden wäre. Was ein Agent davon tun sollte und was
+nicht, steht in [docs/ki-anbindung.md](docs/ki-anbindung.md).
 
 ### Extension
 
@@ -1413,6 +1447,13 @@ Nicht erneut vorschlagen:
    es nichts mehr zu überholen. Bis dahin bleibt es bei der Voraussetzung. Zwei **Personen** am
    selben Branch sind dagegen schon heute abgedeckt: Die Suche filtert auf `userID=myself`, jede
    führt ihren eigenen Zeiteintrag (Abschnitt 3).
+5. **Bedienung durch einen Coding-Agenten** – ausgearbeitet in
+   [docs/ki-anbindung.md](docs/ki-anbindung.md), nichts davon gebaut. Die Trennlinie liegt dabei
+   nicht zwischen „mit KI" und „ohne", sondern zwischen einem Hook, der beim Sitzungsende
+   deterministisch `prosonata pause` ruft, und einem Modell, das beurteilt, wie viel Zeit zählt.
+   Das erste ist eine Zeile Konfiguration, das zweite schreibt Kundenrechnungen. Vorgesehen sind
+   deshalb nur das Anhalten am Sitzungsende und der vorgeschlagene Rechnungstext – buchen soll
+   das Modell nicht.
 
 ---
 

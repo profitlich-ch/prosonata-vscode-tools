@@ -6,6 +6,29 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Zeiteinträge wurden doppelt in ProSonata angelegt**, einzelne sogar
+  dreifach. Zwischen „Zustand lesen" und „Zustand schreiben" liegt ein
+  HTTP-Aufruf, und in diesem Fenster legten Extension, `post-commit`-Hook und
+  CLI denselben Eintrag mehrfach an — jeder für sich sah `keine timeID`. Weil
+  aus jedem Zeiteintrag eine Rechnungsposition wird, standen die Doppel auf
+  Kundenrechnungen. Das Anlegen wird jetzt vorher beansprucht; wer einen
+  fremden Anspruch vorfindet, wartet eine Runde.
+- **Vorgemerkte Schreibvorgänge gingen verloren.** Nach dem Senden wurde der
+  ganze Zustand durch einen Schnappschuss von *vor* dem Netzaufruf ersetzt —
+  damit verschwand, was ein anderer Prozess inzwischen gebucht oder vorgemerkt
+  hatte. Jetzt wird zusammengeführt statt ersetzt: Zähler als Differenz,
+  Identität als Wert.
+- **Ein gesendeter Eintrag konnte Uhrzeiten ohne Zeit tragen.** Die Spanne
+  `workingTimeStart`/`-End` rechnete das laufende Segment mit, die Summe nicht,
+  weil es vor dem Senden nie gebucht wurde. In ProSonata stand dann eine
+  Position mit Anfang und Ende, aber 0,00 h.
+- **Die Rückfrage zu einem lang gelaufenen Timer erschien mehrfach.** Der
+  Arbeitstakt lief alle 30 Sekunden weiter, während der Dialog auf eine Antwort
+  wartete. Wurde die zweite Meldung zuerst beantwortet, verschwand die Antwort
+  auf die erste wortlos.
+
 ## [0.11.2] — 2026-08-28
 
 ### Behoben

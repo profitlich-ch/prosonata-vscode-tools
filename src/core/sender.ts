@@ -54,6 +54,17 @@ export interface SendDeps {
    * claim an attendance that never happened, so the fields are cleared instead.
    */
   spanFor?: (entry: TimeEntry) => { start: string; end: string } | null
+  /**
+   * Claims the right to create this entry in ProSonata, and returns how to give
+   * it back — or null when another actor holds a fresh claim, in which case the
+   * entry waits for the next round rather than being created twice.
+   *
+   * A `POST` is not repeatable the way a `PUT` with an absolute sum is: two
+   * actors that both see `timeId: null` produce two entries, and in ProSonata
+   * two invoice lines. Left out, nothing is claimed — for a single run with no
+   * second writer, and for the tests.
+   */
+  claimCreate?: (entryId: string) => (() => void) | null
 }
 
 /** Entry ids whose write is due now. */
@@ -116,6 +127,18 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       continue
     }
 
+    /*
+     * An entry ProSonata does not know yet has to be created, and a create is
+     * the one call that cannot be repeated. Claim it first; if somebody else is
+     * creating it right now, leave it pending and try again next round — that
+     * costs a delay, while creating it twice costs an invoice line.
+     */
+    let release: (() => void) | null = null
+    if (entry.timeId === null && deps.claimCreate) {
+      release = deps.claimCreate(entryId)
+      if (release === null) continue
+    }
+
     try {
       const closedElsewhere = await writeEntry(entry, detail, deps.spanFor?.(entry) ?? null, deps)
       if (closedElsewhere !== null) {
@@ -134,10 +157,58 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       if (!(error instanceof ApiError) || !error.transient) {
         journal.append({ kind: 'note', entryId, message: (error as Error).message })
       }
+    } finally {
+      // Also after a failure: the claim is a lease on the call, not on the
+      // outcome. Holding it would only delay the retry.
+      release?.()
     }
   }
 
   return { state: next, result }
+}
+
+/**
+ * Folds the outcome of a send onto the state as it stands *now* (KONZEPT.md §7).
+ *
+ * Between reading the state and writing it back lies an HTTP round-trip, and in
+ * that window the hook, the CLI or another window may have booked time or queued
+ * a write. Replacing the state with the snapshot `send` worked on would throw
+ * exactly that away — which is how queued writes went missing.
+ *
+ * So identity is taken over, but anything that accumulates is applied as a
+ * **difference**: `after − before` added to what stands now. The invoiced branch
+ * resets `seconds` to the remainder, and taking that as a value would delete
+ * seconds booked in the meantime; as a difference it stays right either way.
+ */
+export function applySend(current: State, before: State, after: State, result: SendResult): State {
+  const next = structuredClone(current)
+
+  for (const entryId of [...result.sent, ...result.awaitingDecision]) {
+    const was = findEntry(before, entryId)
+    const now = findEntry(after, entryId)
+    const mine = findEntry(next, entryId)
+    if (!was || !now || !mine) continue
+
+    /*
+     * Only claim the id when nobody moved it under us. If it differs, another
+     * actor wrote first — then theirs is the one the state already points at,
+     * and overwriting it would strand their entry instead of ours. With the
+     * creation claim in place this cannot normally happen; it is the backstop.
+     */
+    if (mine.timeId === was.timeId) {
+      mine.timeId = now.timeId
+      mine.lastWritten = now.lastWritten
+    }
+
+    mine.seconds += now.seconds - was.seconds
+    mine.foreignSeconds += now.foreignSeconds - was.foreignSeconds
+    if (now.awaitingDecision !== undefined) mine.awaitingDecision = now.awaitingDecision
+    if (now.remoteFinalSeconds !== undefined) mine.remoteFinalSeconds = now.remoteFinalSeconds
+
+    next.pending = next.pending.filter((write) => write.entryId !== entryId)
+  }
+
+  return next
 }
 
 /**

@@ -9,7 +9,7 @@ import { DEFAULTS, type Config } from './config.js'
 import { FakeApi } from './fake-api.js'
 import { Journal } from './journal.js'
 import { isMarkedOpen, readKey } from './marker.js'
-import { adoptForeignShare, dueWrites, send, type SendDeps } from './sender.js'
+import { adoptForeignShare, applySend, dueWrites, send, type SendDeps } from './sender.js'
 import { emptyState, type State, type TimeEntry } from './types.js'
 
 const NINE = new Date(2026, 6, 30, 9, 0, 0).getTime()
@@ -415,5 +415,132 @@ describe('an entry without a text', () => {
     // It stays pending, and the panel shows the backlog — better than a
     // nameless line on a customer's project.
     expect(after.pending).toHaveLength(1)
+  })
+})
+
+/*
+ * Between reading the state and writing it back lies an HTTP round-trip, and the
+ * hook, the CLI or another window may act in it. Replacing the state with the
+ * snapshot the send worked on threw that away — which is how queued writes went
+ * missing and how entries were created twice (KONZEPT.md §7).
+ */
+describe('folding a send onto the state as it stands now', () => {
+  const sent = { sent: ['e1'], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [] }
+
+  it('keeps time another actor booked while the send was in flight', () => {
+    const before = stateWith(entry({ seconds: 1000 }))
+    const after = stateWith(entry({ seconds: 1000, timeId: 2100, lastWritten: 1000 }))
+    // The hook cut a segment in the meantime.
+    const current = stateWith(entry({ seconds: 1300 }))
+
+    const merged = applySend(current, before, after, sent)
+
+    expect(merged.entries[0]?.seconds).toBe(1300)
+    expect(merged.entries[0]?.timeId).toBe(2100)
+  })
+
+  it('leaves what another actor queued in the meantime alone', () => {
+    const before = stateWith(entry({ seconds: 1000 }))
+    const after = stateWith(entry({ seconds: 1000, timeId: 2100 }))
+
+    const other = entry({ id: 'e2', seconds: 600, timeId: null })
+    const current: State = {
+      ...stateWith(entry({ seconds: 1000 })),
+      entries: [entry({ seconds: 1000 }), other],
+      pending: [
+        { entryId: 'e1', since: NINE, closing: false },
+        { entryId: 'e2', since: NINE, closing: false },
+      ],
+    }
+
+    const merged = applySend(current, before, after, sent)
+
+    // e1 is done and leaves the queue; e2 was never sent and must survive.
+    expect(merged.pending.map((write) => write.entryId)).toEqual(['e2'])
+    expect(merged.entries.find((candidate) => candidate.id === 'e2')?.seconds).toBe(600)
+  })
+
+  it('applies the invoiced remainder as a difference, not as a value', () => {
+    // 5000 s were billed, so the follow-up entry starts at the remainder 1000.
+    const before = stateWith(entry({ seconds: 5000, lastWritten: 4000 }))
+    const after = stateWith(entry({ seconds: 1000, timeId: 2101, lastWritten: 1000 }))
+    // 300 s came in while the follow-up was being created.
+    const current = stateWith(entry({ seconds: 5300, lastWritten: 4000 }))
+
+    const merged = applySend(current, before, after, sent)
+
+    // The remainder, plus what was measured in the meantime — not a bare 1000.
+    expect(merged.entries[0]?.seconds).toBe(1300)
+  })
+})
+
+describe('claiming the right to create an entry', () => {
+  /** A claim shared by two actors, as `state.json` would share it. */
+  function claims(clock: ReturnType<typeof fixedClock>, lease = 60_000) {
+    const held = new Map<string, number>()
+    return {
+      held,
+      claim: (entryId: string) => {
+        if ((held.get(entryId) ?? 0) > clock.now() - lease) return null
+        held.set(entryId, clock.now())
+        return () => held.delete(entryId)
+      },
+    }
+  }
+
+  it('does not create a second entry while another actor holds the claim', async () => {
+    const { api, clock, deps } = setup()
+    const state = stateWith(entry())
+    clock.advance(DEFAULTS.sendDelaySeconds)
+
+    const { claim } = claims(clock)
+    // The other actor is in the middle of creating it and has not answered yet.
+    expect(claim('e1')).not.toBeNull()
+
+    const { state: after, result } = await send(state, { ...deps, claimCreate: claim })
+
+    expect(api.entries.size).toBe(0)
+    expect(result.sent).toEqual([])
+    // It waits for the next round rather than becoming a second invoice line.
+    expect(after.pending).toHaveLength(1)
+  })
+
+  it('takes over a claim whose lease has run out', async () => {
+    const { api, clock, deps } = setup()
+    const state = stateWith(entry())
+    clock.advance(DEFAULTS.sendDelaySeconds)
+
+    const { held, claim } = claims(clock)
+    // A process that died mid-write must not block the entry for good.
+    held.set('e1', clock.now() - 120_000)
+
+    const { result } = await send(state, { ...deps, claimCreate: claim })
+
+    expect(api.entries.size).toBe(1)
+    expect(result.sent).toEqual(['e1'])
+  })
+
+  it('gives the claim back once the write is through', async () => {
+    const { clock, deps } = setup()
+    const state = stateWith(entry())
+    clock.advance(DEFAULTS.sendDelaySeconds)
+
+    const { held, claim } = claims(clock)
+    await send(state, { ...deps, claimCreate: claim })
+
+    expect(held.has('e1')).toBe(false)
+  })
+
+  it('gives it back after a failure too, so the retry is not blocked', async () => {
+    const { api, clock, deps } = setup()
+    const state = stateWith(entry())
+    clock.advance(DEFAULTS.sendDelaySeconds)
+    api.failNext = new ApiError(500, 'kaputt')
+
+    const { held, claim } = claims(clock)
+    const { result } = await send(state, { ...deps, claimCreate: claim })
+
+    expect(result.failed).toHaveLength(1)
+    expect(held.has('e1')).toBe(false)
   })
 })

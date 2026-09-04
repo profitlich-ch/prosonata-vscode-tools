@@ -8,7 +8,7 @@ import { Journal } from './journal.js'
 import { branchKey, identityTerm, isMarkedOpen } from './marker.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
 import { billedTime } from './report.js'
-import { send, type SendResult } from './sender.js'
+import { applySend, send, type SendResult } from './sender.js'
 import { planAdjustment, type Adjustment, type Plan, type Situation } from './adjust.js'
 import type { AttachPlan, Attachment } from './attach.js'
 import { SegmentLog, atLocal, type Segment } from './segments.js'
@@ -20,6 +20,7 @@ import {
   commit,
   forgetRemote,
   currentSeconds,
+  findEntry,
   keepFromRunning,
   lastClosedEntry,
   moveToClosed,
@@ -37,6 +38,13 @@ import {
 } from './tracking.js'
 import type { EntryMode, Scope, State, TimeEntry } from './types.js'
 import { workingTime, type TimeGrid } from './working-time.js'
+
+/**
+ * How long a claim on creating an entry holds before another actor may take it
+ * over. Long enough for a slow round-trip, short enough that a process which
+ * died mid-write costs one entry a round or two — not a stuck file.
+ */
+const CREATE_LEASE_MS = 60_000
 
 /**
  * Wires the pieces together for the two front ends, the CLI and the extension.
@@ -628,11 +636,61 @@ export class Session {
     return { start: hourAndMinute(start), end: hourAndMinute(end) }
   }
 
+  /**
+   * Claims the right to create one entry in ProSonata, or refuses when another
+   * actor holds a fresh claim (KONZEPT.md §7).
+   *
+   * The lease is short and expires on its own: a process that dies between the
+   * claim and the answer must not block this entry for good. That is the same
+   * objection §7 raises against a lock file — only here it costs one entry a
+   * round, not everyone the whole file.
+   */
+  claimCreate = (entryId: string): (() => void) | null => {
+    let claimed = false
+    this.store.update((current) => {
+      claimed = false
+      const entry = findEntry(current, entryId)
+      if (!entry) return current
+      if ((entry.creating ?? 0) > this.clock.now() - CREATE_LEASE_MS) return current
+
+      entry.creating = this.clock.now()
+      claimed = true
+      return current
+    })
+    if (!claimed) return null
+
+    return () =>
+      this.store.update((current) => {
+        const entry = findEntry(current, entryId)
+        if (entry) delete entry.creating
+        return current
+      })
+  }
+
   /** Sends everything that is due (KONZEPT.md §4). */
   async flush(force = false): Promise<SendResult> {
-    const { state, result } = await send(this.state(), this, force)
-    if (result.sent.length > 0 || result.failed.length > 0) {
-      this.store.update(() => state)
+    /*
+     * Book the running segment first, so the sum that goes out covers what has
+     * been measured up to now. Without it an entry reaches ProSonata with 0,00 h
+     * while `workingTimeStart`/`End` already show a span — the two fields would
+     * disagree about the same segment.
+     */
+    for (const timer of this.state().timers) {
+      if (timer.startedAt !== null) this.store.update((state) => settle(state, this.clock, timer.scope))
+    }
+
+    const before = this.state()
+    const { state: after, result } = await send(before, this, force)
+
+    /*
+     * Fold the outcome onto the state as it stands now, rather than replacing it
+     * with the snapshot `send` worked on. Between the two lies an HTTP round-trip
+     * in which the hook, the CLI or another window may have booked time or queued
+     * a write — replacing would throw that away, and that is how queued writes
+     * went missing (KONZEPT.md §7).
+     */
+    if (result.sent.length > 0 || result.awaitingDecision.length > 0) {
+      this.store.update((current) => applySend(current, before, after, result))
     }
     return result
   }

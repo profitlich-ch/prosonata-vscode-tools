@@ -822,11 +822,29 @@ async function attachToLast(session: Session, context: RepoContext): Promise<voi
 }
 
 /** Every 30 seconds: watch HEAD, send what is due, warn if needed. */
+/*
+ * One pass at a time. A flush that outlives the interval — a slow answer, a rate
+ * limit — would otherwise be overtaken by the next tick, and both passes would
+ * send the same entries. The claim on creating catches the worse half of that
+ * across processes; this catches it inside one, and costs nothing.
+ */
+let working = false
+
 async function work(): Promise<void> {
+  if (working) return
   const active = currentSession()
   const context = currentContext()
   if (!active || !context) return
 
+  working = true
+  try {
+    await workOnce(active, context)
+  } finally {
+    working = false
+  }
+}
+
+async function workOnce(active: Session, context: RepoContext): Promise<void> {
   watchHead(active, context)
   reload()
 
@@ -912,6 +930,18 @@ async function askAboutLongRun(active: Session, context: RepoContext): Promise<v
   if (running < active.config.longRunWarningSeconds) return
   if ((snoozedUntil.get(context.key) ?? 0) > active.clock.now()) return
 
+  /*
+   * Snoozed before the question, not after it. While the dialog waits for an
+   * answer nothing else here has changed, so the next beat asked again and put a
+   * second dialog on top of the first. Whoever then answered the second one
+   * first stopped the timer — and the answer to the first hit a guard and was
+   * swallowed without a word.
+   *
+   * Setting it early costs nothing: every answer either cuts the segment, after
+   * which the run is short again, or means "later" anyway.
+   */
+  snoozedUntil.set(context.key, active.clock.now() + SNOOZE_MS)
+
   const answer = await vscode.window.showWarningMessage(
     `ProSonata: der Timer läuft seit ${clock(running)} ohne Unterbruch. Wie viel davon zählt?`,
     'Alles behalten',
@@ -919,11 +949,7 @@ async function askAboutLongRun(active: Session, context: RepoContext): Promise<v
     'Verwerfen',
   )
 
-  // No answer counts as "later": asking again in thirty seconds would nag.
-  if (answer === undefined || answer === 'Alles behalten') {
-    snoozedUntil.set(context.key, active.clock.now() + SNOOZE_MS)
-    return
-  }
+  if (answer === undefined || answer === 'Alles behalten') return
 
   const kept = answer === 'Verwerfen' ? 0 : await askForDuration(running)
   if (kept === null) return

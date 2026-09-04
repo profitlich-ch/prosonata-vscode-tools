@@ -51,6 +51,18 @@ export interface TimeEntry {
   awaitingDecision?: boolean
   /** What ProSonata holds for it, read at the moment the close was noticed. */
   remoteFinalSeconds?: number
+  /**
+   * Epoch milliseconds since some actor began creating this entry in ProSonata.
+   *
+   * A `POST` creates, so unlike a `PUT` with an absolute sum it cannot simply be
+   * repeated: two actors that both see `timeId: null` produce two entries, and
+   * in ProSonata two invoice lines. The compare-and-swap on `state.json` guards
+   * the file, not the call — so the call is claimed here first (KONZEPT.md §7).
+   *
+   * A lease, not a lock: it expires on its own, so a process that dies mid-write
+   * leaves nothing to clean up, and it holds up this one entry rather than all.
+   */
+  creating?: number
 }
 
 /**
