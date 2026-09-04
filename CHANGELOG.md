@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.11.3] — 2026-09-04
+
 ### Behoben
 
 - **Zeiteinträge wurden doppelt in ProSonata angelegt**, einzelne sogar
