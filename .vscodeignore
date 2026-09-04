@@ -16,6 +16,7 @@ node_modules/**
 tsconfig.json
 package-lock.json
 KONZEPT.md
+CLAUDE.md
 
 **/*.ts
 **/*.map
