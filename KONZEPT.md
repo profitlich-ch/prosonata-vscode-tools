@@ -1295,6 +1295,11 @@ das gewesen.
   es dort, wo es sich geändert haben **kann** – beim Öffnen des Fensters, wenn ein Projekt zum
   ersten Mal auftaucht, und sobald ein abgeschlossener Eintrag tatsächlich in ProSonata
   angekommen ist. Nie auf Zuruf eines Zeitgebers; dieses Werkzeug pollt nicht.
+- **Drei Symbole in der Titelleiste des Panels**, für das, was nicht auf eine Zeile wirkt,
+  sondern auf das Ganze: Zeiteinträge durchsehen, Segmentprotokoll, Einstellungen. Dort, weil
+  VS Code an dieser Stelle unterbringt, was der Ansicht als Ganzes gilt – eine Zeile dafür wäre
+  eine Zeile, die keinen Zustand zeigt. Das Durchsehen erscheint nur mit eingerichtetem Projekt,
+  das Zahnrad nur mit eingerichtetem Konto; sonst führten sie ins Leere.
 - Dropdowns über `window.showQuickPick` – native Liste mit Suchfeld, kein UI-Code, kein
   Webview, kein Svelte.
 - Der Projekt-QuickPick ist **dreistufig**: oben die im Repo registrierten Projekte, darunter

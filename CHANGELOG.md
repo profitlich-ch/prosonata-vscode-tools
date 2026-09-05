@@ -30,6 +30,10 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ### Hinzugefügt
 
+- **Zwei Symbole mehr in der Titelleiste des Panels**: Zeiteinträge durchsehen
+  und Einstellungen öffnen. Beide gab es nur in der Befehlspalette, wo sie
+  niemand vermutet — das Durchsehen hatte sogar längst ein Symbol zugewiesen,
+  nur keinen Platz.
 - **Stunden lassen sich auch dezimal eingeben.** In der Durchsicht wurde bisher
   nur `1:30` angenommen, während ProSonata überall Dezimalstunden zeigt. Jetzt
   gilt beides, und der Doppelpunkt entscheidet: `1:30` sind neunzig Minuten,

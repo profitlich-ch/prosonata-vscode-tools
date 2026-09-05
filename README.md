@@ -45,7 +45,7 @@ Fürs Update dasselbe noch einmal, nach `git pull`.
 
 **Nutze einen persönlichen Benutzer-Key, keine App-Integration**, damit die Zeiteinträge mit deinem User verknüpft sind.
 
-Denselben Befehl später erneut aufrufen, um **Key oder Basis-URL zu wechseln** — etwa wenn der Key abläuft. Die Basis-URL steht dann schon da, und ein leer gelassenes Key-Feld behält den bisherigen. Alle übrigen Einstellungen in `config.json` bleiben unberührt; die Datei selbst öffnet «ProSonata: Einstellungen öffnen». Dort stehen auch die Vorgaben, die kein Dialog abfragt: das Zeitraster, die Sendeverzögerung, die Schwellen für die Warnungen und die Schlaferkennung.
+Denselben Befehl später erneut aufrufen, um **Key oder Basis-URL zu wechseln** — etwa wenn der Key abläuft. Die Basis-URL steht dann schon da, und ein leer gelassenes Key-Feld behält den bisherigen. Alle übrigen Einstellungen in `config.json` bleiben unberührt; die Datei selbst öffnet das Zahnrad in der Titelleiste des Panels. Dort stehen auch die Vorgaben, die kein Dialog abfragt: das Zeitraster, die Sendeverzögerung, die Schwellen für die Warnungen und die Schlaferkennung.
 
 ## Einstellungen pro Repository
 
@@ -284,8 +284,10 @@ gemessen hat, bleibt er stehen und das Zuschlagen wird abgelehnt.
 
 ## Zeiteinträge durchsehen
 
-«ProSonata: Zeiteinträge durchsehen» holt die Zeiteinträge des aktuellen
-Repositories aus ProSonata in eine Liste, in der sich mehrere wählen lassen.
+Das Listen-Symbol in der Titelleiste des ProSonata-Panels holt die Zeiteinträge
+des aktuellen Repositories aus ProSonata in eine Liste, in der sich mehrere
+wählen lassen; über die Befehlspalette heisst es «ProSonata: Zeiteinträge
+durchsehen».
 Drei Handlungen stehen daran:
 
 - **Text und Stunden ändern** — das Stift-Symbol an einer Zeile. Stunden werden
@@ -306,7 +308,7 @@ der Messung, berichtigt wird die Abrechnung.
 
 ## Der Log
 
-Das Uhr-Symbol in der Titelleiste des ProSonata-Panels öffnet alle gemessenen
+Das Uhr-Symbol daneben öffnet alle gemessenen
 Segmente als gesetzte Vorschau, nach Tagen gruppiert, mit einer Branch-Auswahl
 davor. Bearbeiten lässt sie sich nicht: Das Protokoll ist ein Archiv, und was
 abgerechnet wird, steht im Zeiteintrag. Korrigiert wird deshalb über die
