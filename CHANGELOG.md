@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.17.1] — 2026-09-06
+
 ### Behoben
 
 - **Das Zusammenlegen rechnete aus einem Bruchteil hoch.** Zwei Einträge mit
