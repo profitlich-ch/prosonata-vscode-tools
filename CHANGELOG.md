@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.15.0] — 2026-09-06
+
 ### Behoben
 
 - **Jeder `post-commit`-Hook rief still die Fassung, mit der er geschrieben
