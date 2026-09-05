@@ -444,16 +444,19 @@ nächsten Zeiteintrag.
 
 ### Abschluss eines Branch-Eintrags
 
-Der Lebenslauf eines Zeiteintrags, wie ihn die Unterabschnitte davor und danach beschreiben:
+Der Lebenslauf eines Zeiteintrags, wie ihn die Unterabschnitte davor und danach beschreiben.
+Angelegt wird er, sobald ein Timer für ihn läuft, notfalls unter dem Platzhalter; beim Abschluss
+verliert der Marker das Wort und behält die Kennung; «hinzufügen» ist ein letztes PUT, das nur
+`workingTime` trägt.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> offen: Timer läuft — zehn Minuten später<br/>angelegt, notfalls unter dem Platzhalter
-    offen --> offen: ein Trailer ersetzt den Text
-    offen --> abgeschlossen: von Hand, mit dem endgültigen Text —<br/>der Marker verliert das Wort, behält die Kennung
-    offen --> geparkt: ein anderer Rechner hat abgeschlossen
-    geparkt --> abgeschlossen: «hinzufügen» — ein letztes PUT,<br/>das nur workingTime trägt
-    geparkt --> [*]: «neuer Eintrag» — die Restzeit<br/>beginnt einen eigenen
+    [*] --> offen: Timer läuft
+    offen --> offen: Trailer ersetzt den Text
+    offen --> abgeschlossen: von Hand, endgültiger Text
+    offen --> geparkt: anderswo abgeschlossen
+    geparkt --> abgeschlossen: hinzufügen
+    geparkt --> [*]: neuer Eintrag
     abgeschlossen --> [*]
 ```
 
