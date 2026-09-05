@@ -125,7 +125,35 @@ export async function toggleMode(session: Session, context: RepoContext): Promis
     return
   }
 
-  const next = context.mode === 'branch' ? 'commit' : 'branch'
+  /*
+   * Three modes, so a two-way toggle no longer does. They serve two ways of
+   * billing (KONZEPT.md §3): `commit` bills by time, `branch` by what was
+   * delivered, and `branch-day` fills the gap — billing by time on branch work.
+   * Named that way, the choice is one a person can make; "toggle" would not be.
+   */
+  const picked = await vscode.window.showQuickPick(
+    [
+      {
+        label: 'Ein Eintrag pro Branch',
+        detail: 'Für Abrechnung nach Leistung: eine Rechnungszeile für das, was geliefert wurde',
+        mode: 'branch' as const,
+      },
+      {
+        label: 'Ein Eintrag pro Branch und Tag',
+        detail: 'Für Abrechnung nach Zeit auf Branch-Arbeit: je Tag eine Zeile, mit Datum und Uhrzeiten',
+        mode: 'branch-day' as const,
+      },
+      {
+        label: 'Ein Eintrag pro Commit',
+        detail: 'Für Abrechnung nach Zeit: jeder Commit wird seine eigene Zeile',
+        mode: 'commit' as const,
+      },
+    ].map((item) => ({ ...item, ...(item.mode === context.mode ? { description: 'aktuell' } : {}) })),
+    { title: `ProSonata: Zeiteinträge auf ${context.scope.branch}` },
+  )
+  if (!picked || picked.mode === context.mode) return
+
+  const next = picked.mode
   const entry = openEntry(session.state(), context.scope)
 
   // Switching to per-commit closes the open entry — otherwise it would hang

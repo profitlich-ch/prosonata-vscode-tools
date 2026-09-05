@@ -11,10 +11,11 @@ export interface Scope {
 }
 
 /**
- * How entries are formed on a branch (KONZEPT.md §3).
- * On the main branch this is fixed to 'commit'.
+ * How entries are formed (KONZEPT.md §3). The two established modes serve two
+ * ways of billing: `commit` bills by time, `branch` by what was delivered.
+ * `branch-day` fills the gap between them — billing by time on branch work.
  */
-export type EntryMode = 'branch' | 'commit'
+export type EntryMode = 'branch' | 'commit' | 'branch-day'
 
 export type EntryState = 'open' | 'closed'
 
@@ -32,6 +33,13 @@ export interface TimeEntry {
   categoryId: number
   /** Set only for entries on the main branch, where one commit is one entry. */
   sha?: string
+  /**
+   * The working day this entry belongs to, `2026-08-30`, in the daily mode.
+   *
+   * Without it `date` would be the day of the last write — which is why a
+   * three-week branch entry carries all its hours on one arbitrary day today.
+   */
+  day?: string
   /** The text the customer reads on the invoice. Without the marker. */
   text: string
   /** Seconds measured on this machine. */

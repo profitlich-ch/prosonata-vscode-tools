@@ -31,6 +31,8 @@ import {
   queueWriteFor,
   resumeAfterAdding,
   resumeAsNew,
+  daySpans,
+  nextMidnight,
   settle,
   shiftStart,
   skipGap,
@@ -199,7 +201,7 @@ export class Session {
 
   pause(context: RepoContext): State {
     const startedAt = this.runningSince(context)
-    const state = this.store.update((current) => pause(current, this.clock, context.scope))
+    const state = this.store.update((current) => pause(current, this.clock, context.scope, randomUUID))
     if (startedAt !== null) this.recordSegmentAt(context, startedAt, this.clock.now(), 'pause')
     return state
   }
@@ -386,17 +388,27 @@ export class Session {
     const entry = bookedInto
       ? this.state().entries.find((candidate) => candidate.id === bookedInto)
       : openEntry(this.state(), context.scope) ?? this.state().entries.find((candidate) => candidate.key === context.key)
-    this.segments.append({
-      from: atLocal(from),
-      until: atLocal(until),
-      seconds: Math.max(0, Math.floor((until - from) / 1000)),
-      repoPath: context.scope.repoPath,
-      branch: context.scope.branch,
-      projectId: context.projectId,
-      entryId: entry?.id ?? '-',
-      reason,
-      ...(ranSeconds === undefined ? {} : { ranSeconds }),
-    })
+
+    /*
+     * One row per calendar day. The log groups by the end of a segment, so a
+     * stretch from 22:00 to 02:00 written as one row would land wholly on the
+     * second day and the first would lose its hours — the archive would answer
+     * the one question it exists for wrongly (KONZEPT.md §3).
+     */
+    const parts = daySpans(from, until)
+    for (const part of parts.length > 0 ? parts : [{ from, until }]) {
+      this.segments.append({
+        from: atLocal(part.from),
+        until: atLocal(part.until),
+        seconds: Math.max(0, Math.floor((part.until - part.from) / 1000)),
+        repoPath: context.scope.repoPath,
+        branch: context.scope.branch,
+        projectId: context.projectId,
+        entryId: entry?.id ?? '-',
+        reason,
+        ...(ranSeconds === undefined ? {} : { ranSeconds }),
+      })
+    }
   }
 
   /** Called by the hook after a commit. */
@@ -517,7 +529,7 @@ export class Session {
   ): Promise<Attachment> {
     // A running timer keeps running; its segment so far is booked, so nothing
     // measured is left out of the sum.
-    this.store.update((state) => settle(state, this.clock, context.scope))
+    this.store.update((state) => settle(state, this.clock, context.scope, randomUUID))
 
     const open = openEntry(this.state(), context.scope)
     const seconds = open ? unwrittenSeconds(open) : 0
@@ -608,6 +620,7 @@ export class Session {
    */
   gridFor = (repoPath: string): TimeGrid => readRepoConfig(repoPath).grid ?? this.config.grid
 
+
   /**
    * The span of the working day for an entry, from the segment log: earliest
    * beginning, latest end, plus the segment running right now — otherwise the
@@ -634,7 +647,19 @@ export class Session {
     if (known.length === 0) return null
 
     const start = Math.min(...known)
-    const end = Math.max(...known)
+    /*
+     * A day worked through to the end has its last segment stop at `00:00:00` of
+     * the next day — the half-open day (KONZEPT.md §3). Taken literally the span
+     * would straddle two days and be dropped, and the daily mode would lose the
+     * span exactly where it matters most.
+     *
+     * So the end is clamped to `23:59`, which is the latest the field can hold.
+     * The cut itself stays on `00:00:00`, so no second is lost: what is a minute
+     * short is the display, not the duration — and ProSonata only displays it.
+     */
+    const midnight = nextMidnight(start)
+    const reached = Math.max(...known)
+    const end = reached === midnight ? midnight - 60_000 : reached
     if (localDate(new Date(start)) !== localDate(new Date(end))) return null
     return { start: hourAndMinute(start), end: hourAndMinute(end) }
   }
@@ -820,7 +845,7 @@ export class Session {
      * disagree about the same segment.
      */
     for (const timer of this.state().timers) {
-      if (timer.startedAt !== null) this.store.update((state) => settle(state, this.clock, timer.scope))
+      if (timer.startedAt !== null) this.store.update((state) => settle(state, this.clock, timer.scope, randomUUID))
     }
 
     const before = this.state()

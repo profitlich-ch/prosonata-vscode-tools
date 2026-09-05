@@ -70,6 +70,7 @@ Zeiteintrag. Wie viele, entscheidet Abschnitt 3.
 |---|---|
 | **Branch** (nicht der Hauptbranch) | **Ein Zeiteintrag pro Branch**, wächst über dessen ganze Lebensdauer |
 | **Hauptbranch** | **Ein Zeiteintrag pro Commit** |
+| *umschaltbar* | **Ein Zeiteintrag pro Branch und Tag** – die Klammer bleibt der Branch, geschnitten wird an Mitternacht |
 
 **Die beiden Modi bedienen zwei Abrechnungsarten.** Das ist die Unterscheidung, aus der alles
 Weitere folgt:
@@ -129,11 +130,38 @@ weil auf ihm mehrere unabhängige Kleinigkeiten liegen, die der Kunde einzeln se
   Abschluss. Umgekehrt beginnt der nächste Commit einen neuen Branch-Eintrag.
 - Der Umschalter steht im Panel (Abschnitt 8), wo auch der aktuelle Branch sichtbar ist.
 
-Ein **dritter Modus** ist entworfen, aber nicht gebaut: `pro Branch und Tag` schneidet einen
-Branch-Eintrag, der über mehrere Tage wächst, an jeder Mitternacht. Er beantwortet, was `date`
-heute falsch beantwortet – ein dreiwöchiger Eintrag trägt seine ganzen Stunden auf dem Tag des
-letzten Schreibvorgangs. Ausgearbeitet samt Begründungen und offenen Punkten in
-[docs/tagesmodus.md](docs/tagesmodus.md).
+### Ein Eintrag pro Branch und Tag
+
+Der dritte Modus schneidet einen Branch-Eintrag, der über mehrere Tage wächst, an **jeder
+Mitternacht**. Er beantwortet, was `date` sonst falsch beantwortet: Ein dreiwöchiger Eintrag
+trägt seine ganzen Stunden auf dem Tag des letzten Schreibvorgangs.
+
+- **Die Grenze liegt auf Mitternacht, nicht auf einem wählbaren Tagesbeginn.** Sobald ein
+  Eintrag ein Datum **und** Uhrzeiten trägt, müssen beide zusammenpassen; `22:00–02:00` auf dem
+  17. wäre unlesbar. Der Tag ist **halboffen**: Was um Mitternacht endet, gehört zum alten Tag,
+  was dort beginnt, zum neuen. Ein Eintrag von 0:00 bis 0:00 kann so nicht entstehen.
+- **Der Eintrag trägt seinen Tag** (`day`), und der Versand schreibt ihn als `date`. Nur
+  Einträge dieses Modus tragen das Feld – es ist zugleich die Markierung, an der der Wechsel
+  hängt. Deshalb braucht der Versand den Modus nicht zu kennen, was ihm einen `git`-Aufruf je
+  laufendem Timer erspart.
+- **Der Nachfolger erbt den Text.** Es ist dieselbe Arbeit, nur ein neuer Tag – anders als nach
+  einem Commit auf dem Hauptbranch, wo der nächste Commit seinen eigenen Text mitbringt.
+- **Die Tagesspanne wird dadurch wieder brauchbar.** Heute verliert sie jeder Eintrag, der über
+  Mitternacht wächst; am eigenen Konto sind das 327 von 559. Wurde ein Tag durchgearbeitet,
+  endet sein letztes Segment auf `00:00:00` – geschrieben wird dann `23:59`, weil das Feld
+  nichts Späteres kann. Verkürzt ist damit die **Anzeige**, nicht die Dauer.
+
+Ausführlich, samt verworfenen Alternativen: [docs/tagesmodus.md](docs/tagesmodus.md).
+
+### Ein Segment über Mitternacht
+
+Wird an jeder Grenze zerlegt, und zwar **in allen drei Modi**. Der Grund liegt im
+Segmentprotokoll: Es gruppiert nach dem **Ende** eines Segments, also landete eine ungeteilte
+Nacht von 22:00 bis 02:00 vollständig auf dem zweiten Tag, und der erste verlor seine zwei
+Stunden – das Protokoll beantwortete die eine Frage falsch, für die es angelegt ist.
+
+Geteilt wird die **Aufzeichnung** immer, die **Buchung** auf verschiedene Einträge nur im
+Tagesmodus; sonst tragen beide Hälften dieselbe Eintrags-Kennung.
 
 ### Zeitwert und Datum
 

@@ -6,6 +6,23 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Modus „ein Eintrag pro Branch und Tag".** Ein Branch-Eintrag, der über
+  mehrere Tage wächst, wird an jeder Mitternacht geschnitten: je Tag eine Zeile,
+  mit richtigem Datum und mit Uhrzeiten. Gedacht für Abrechnung nach Zeit auf
+  Branch-Arbeit — dort gab `pro Branch` eine Summe ohne Tag, und `pro Commit`
+  liess den ersten Commit einer Serie die ganze Zeit tragen. Der Umschalter
+  fragt jetzt in Worten, wofür der Modus gedacht ist, statt zwischen zwei
+  Werten hin und her zu springen.
+
+### Behoben
+
+- **Ein Segment über Mitternacht landete vollständig auf dem zweiten Tag.** Das
+  Segmentprotokoll gruppiert nach dem Ende eines Segments; wer von 22:00 bis
+  02:00 arbeitete, verlor im Bericht die zwei Stunden des ersten Tages. Segmente
+  werden jetzt an jeder Tagesgrenze zerlegt — in allen Modi, nicht nur im neuen.
+
 ## [0.13.0] — 2026-09-05
 
 ### Hinzugefügt

@@ -135,7 +135,7 @@
       },
       {
         "command": "prosonata.toggleMode",
-        "title": "Zwischen einem Eintrag pro Branch und pro Commit wechseln",
+        "title": "Modus für Zeiteinträge wählen",
         "category": "ProSonata"
       },
       {

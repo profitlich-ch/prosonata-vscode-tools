@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto'
+
 import type { Clock } from './clock.js'
 import type { EntryMode, PendingWrite, Scope, State, TimeEntry, Timer } from './types.js'
 
@@ -53,7 +55,12 @@ export function start(state: State, clock: Clock, options: StartOptions): State 
     return next
   }
 
-  const entry = openEntry(next, options.scope) ?? createEntry(next, options)
+  const entry =
+    openEntry(next, options.scope) ??
+    createEntry(next, {
+      ...options,
+      ...(options.mode === 'branch-day' ? { day: dayOf(clock.now()) } : {}),
+    })
   next.timers.push({
     id: options.newId(),
     origin: 'local',
@@ -81,13 +88,13 @@ export function start(state: State, clock: Clock, options: StartOptions): State 
  * The write goes out with the usual delay — or right away when VS Code closes,
  * which flushes.
  */
-export function pause(state: State, clock: Clock, scope: Scope): State {
+export function pause(state: State, clock: Clock, scope: Scope, newId: () => string = randomId): State {
   const next = structuredClone(state)
   const timer = findTimerIn(next, scope)
   const startedAt = timer?.startedAt
   if (!timer || startedAt === null || startedAt === undefined) return state
 
-  bookSegment(next, timer.entryId, startedAt, clock.now())
+  bookAcrossDays(next, timer, startedAt, clock.now(), newId)
   timer.startedAt = null
   if (findEntry(next, timer.entryId)?.timeId !== null) queueWrite(next, timer.entryId, clock.now(), false)
   return next
@@ -130,7 +137,11 @@ export function commit(
 
   if (isRunning(timer)) {
     entry ??= findEntry(next, timer.entryId)
-    booked = bookSegment(next, timer.entryId, timer.startedAt, options.at)
+    booked = bookAcrossDays(next, timer, timer.startedAt, options.at, options.newId).reduce(
+      (sum, part) => sum + part.seconds,
+      0,
+    )
+    entry = findEntry(next, timer.entryId) ?? entry
     // The commit is the dividing line: the next segment starts here.
     timer.startedAt = options.at
   }
@@ -363,14 +374,14 @@ export function close(state: State, entryId: string, text: string, at: number, n
 }
 
 /** Books the running segment without ending it. Used before a write goes out. */
-export function settle(state: State, clock: Clock, scope: Scope): State {
+export function settle(state: State, clock: Clock, scope: Scope, newId: () => string = randomId): State {
   const next = structuredClone(state)
   const timer = findTimerIn(next, scope)
   const startedAt = timer?.startedAt
   if (!timer || startedAt === null || startedAt === undefined) return state
 
   const now = clock.now()
-  bookSegment(next, timer.entryId, startedAt, now)
+  bookAcrossDays(next, timer, startedAt, now, newId)
   timer.startedAt = now
   return next
 }
@@ -534,6 +545,52 @@ export function skipGap(state: State, scope: Scope, from: number, until: number)
   return next
 }
 
+/**
+ * A span cut at every midnight it crosses (KONZEPT.md §3).
+ *
+ * The day is **half-open**: a stretch ending at midnight belongs to the day that
+ * is ending, one beginning there to the day that starts. So a span from 0:00 to
+ * 0:00 cannot arise, and no second falls into two days.
+ *
+ * Needed in every mode, not only the daily one. The segment log groups by the
+ * **end** of a segment, so an unsplit 22:00–02:00 lands wholly on the second day
+ * and the first loses its two hours — the log would answer the one question it
+ * exists for wrongly.
+ */
+export function daySpans(from: number, until: number): { from: number; until: number }[] {
+  if (until <= from) return []
+
+  const spans: { from: number; until: number }[] = []
+  let start = from
+  while (true) {
+    const midnight = nextMidnight(start)
+    if (midnight >= until) {
+      spans.push({ from: start, until })
+      return spans
+    }
+    spans.push({ from: start, until: midnight })
+    start = midnight
+  }
+}
+
+/** The first instant of the day after the one `at` falls on, in local time. */
+export function nextMidnight(at: number): number {
+  const day = new Date(at)
+  day.setHours(0, 0, 0, 0)
+  day.setDate(day.getDate() + 1)
+  return day.getTime()
+}
+
+/** `2026-08-30` for the local day a moment falls on. */
+export function dayOf(at: number): string {
+  const day = new Date(at)
+  const pad = (value: number) => String(value).padStart(2, '0')
+  return `${day.getFullYear()}-${pad(day.getMonth() + 1)}-${pad(day.getDate())}`
+}
+
+/** For the callers that do not bring their own; a roll-over needs a fresh id. */
+const randomId = (): string => randomUUID()
+
 /** Narrows to a timer whose segment is running, so `startedAt` is a number. */
 function isRunning(timer: Timer | undefined): timer is Timer & { startedAt: number } {
   return timer !== undefined && timer.startedAt !== null
@@ -541,7 +598,10 @@ function isRunning(timer: Timer | undefined): timer is Timer & { startedAt: numb
 
 function createEntry(
   state: State,
-  options: Pick<StartOptions, 'scope' | 'key' | 'projectId' | 'categoryId' | 'newId'> & { text?: string },
+  options: Pick<StartOptions, 'scope' | 'key' | 'projectId' | 'categoryId' | 'newId'> & {
+    text?: string
+    day?: string
+  },
 ): TimeEntry {
   const entry: TimeEntry = {
     id: options.newId(),
@@ -555,12 +615,65 @@ function createEntry(
     lastWritten: null,
     timeId: null,
     state: 'open',
+    ...(options.day === undefined ? {} : { day: options.day }),
   }
   state.entries.push(entry)
   return entry
 }
 
-function closeEntry(state: State, entry: TimeEntry, newId: () => string, at = Date.now()): State {
+/**
+ * Books a stretch, cut at every midnight it crosses (KONZEPT.md §3).
+ *
+ * In the daily mode each day gets an entry of its own: the one that is full is
+ * closed, and the timer runs on into a successor that inherits the text — the
+ * work is the same, only the day is new. In the other two modes the halves land
+ * in the same entry, and the cut shows only in the segment log.
+ *
+ * Returns what was booked, and per day, so the log can write one row per day
+ * rather than one that straddles them.
+ */
+export function bookAcrossDays(
+  state: State,
+  timer: Timer,
+  from: number,
+  until: number,
+  newId: () => string,
+): { from: number; until: number; entryId: string; seconds: number }[] {
+  const booked: { from: number; until: number; entryId: string; seconds: number }[] = []
+
+  for (const span of daySpans(from, until)) {
+    const entry = findEntry(state, timer.entryId)
+    const day = dayOf(span.from)
+
+    /*
+     * The entry carries its day, and only entries made in the daily mode do —
+     * so the field is the mark, and nothing here needs to be told the mode. That
+     * also keeps the send path free of a `git` call: it walks timers from several
+     * repositories, whose modes the open window knows nothing about.
+     */
+    if (entry?.day !== undefined && entry.day !== day) {
+      closeEntry(state, entry, newId, span.from, day)
+    }
+
+    const seconds = bookSegment(state, timer.entryId, span.from, span.until)
+    if (seconds > 0) booked.push({ ...span, entryId: timer.entryId, seconds })
+  }
+  return booked
+}
+
+function closeEntry(
+  state: State,
+  entry: TimeEntry,
+  newId: () => string,
+  at = Date.now(),
+  /**
+   * Set when a day rolls over: the successor takes the new day and **keeps the
+   * text**, because it is the same work — only the day is new. Left out, the
+   * successor starts blank, as after a commit on the main branch, where the next
+   * commit brings its own text.
+   */
+  nextDay?: string,
+): State {
   entry.state = 'closed'
   queueWrite(state, entry.id, at, true)
 
@@ -573,6 +686,7 @@ function closeEntry(state: State, entry: TimeEntry, newId: () => string, at = Da
       projectId: entry.projectId,
       categoryId: entry.categoryId,
       newId,
+      ...(nextDay === undefined ? {} : { day: nextDay, text: entry.text }),
     })
     timer.entryId = successor.id
   }

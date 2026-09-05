@@ -19,6 +19,7 @@ import {
   resumeAfterAdding,
   resumeAsNew,
   setText,
+  daySpans,
   shiftStart,
   skipGap,
   start,
@@ -859,5 +860,147 @@ describe('a stretch in which the machine slept', () => {
     state = pause(state, clock, scope)
 
     expect(skipGap(state, scope, at(10, 0), at(11, 0))).toBe(state)
+  })
+})
+
+/*
+ * The day is half-open: a stretch ending at midnight belongs to the day that is
+ * ending, one beginning there to the day that starts. Needed in every mode —
+ * the segment log groups by the end of a segment, so an unsplit night would land
+ * wholly on the second day and the first would lose its hours.
+ */
+describe('cutting a span at midnight', () => {
+  const on = (day: number, hour: number, minute = 0) =>
+    new Date(2026, 7, day, hour, minute, 0).getTime()
+
+  it('leaves a span inside one day whole', () => {
+    expect(daySpans(on(17, 9), on(17, 17))).toEqual([{ from: on(17, 9), until: on(17, 17) }])
+  })
+
+  it('cuts a night in two, at midnight exactly', () => {
+    expect(daySpans(on(17, 22), on(18, 2))).toEqual([
+      { from: on(17, 22), until: on(18, 0) },
+      { from: on(18, 0), until: on(18, 2) },
+    ])
+  })
+
+  it('gives a day of its own to every midnight crossed', () => {
+    // A timer forgotten from Friday evening to Monday morning.
+    const spans = daySpans(on(14, 18), on(17, 9))
+    expect(spans).toHaveLength(4)
+    expect(spans[0]?.from).toBe(on(14, 18))
+    expect(spans.at(-1)?.until).toBe(on(17, 9))
+  })
+
+  it('loses not a second: the parts add up to the whole', () => {
+    const whole = on(17, 9) - on(14, 18)
+    const parts = daySpans(on(14, 18), on(17, 9)).reduce((sum, s) => sum + (s.until - s.from), 0)
+    expect(parts).toBe(whole)
+  })
+
+  it('has the parts meet without a gap and without an overlap', () => {
+    const spans = daySpans(on(17, 22), on(19, 3))
+    for (const [index, span] of spans.slice(1).entries()) {
+      expect(span.from).toBe(spans[index]?.until)
+    }
+  })
+
+  it('ends a stretch that stops at midnight on the day it began', () => {
+    expect(daySpans(on(17, 22), on(18, 0))).toEqual([{ from: on(17, 22), until: on(18, 0) }])
+  })
+
+  it('gives nothing back for a span with no length', () => {
+    expect(daySpans(on(17, 9), on(17, 9))).toEqual([])
+  })
+})
+
+/*
+ * The daily mode: one entry per branch and day. It fills the gap between the two
+ * established modes — billing by time on branch work, where `pro Branch` gives a
+ * sum without a day and `pro Commit` lets the first commit of a burst carry
+ * everything (KONZEPT.md §3).
+ */
+describe('an entry per branch and day', () => {
+  const on = (day: number, hour: number, minute = 0) =>
+    new Date(2026, 7, day, hour, minute, 0).getTime()
+
+  /** The test clock only moves forward; this spells "until". */
+  const until = (clock: ReturnType<typeof fixedClock>, at: number) => clock.advance((at - clock.now()) / 1000)
+
+  function startDaily(state: State, clock: ReturnType<typeof fixedClock>) {
+    return start(state, clock, {
+      scope,
+      key: 'a3f9c1',
+      projectId: 166,
+      categoryId: 70,
+      mode: 'branch-day',
+      newId,
+    })
+  }
+
+  it('marks the entry with the day it belongs to', () => {
+    const state = startDaily(emptyState(), fixedClock(on(17, 9)))
+    expect(openEntry(state, scope)?.day).toBe('2026-08-17')
+  })
+
+  it('leaves the other modes without a day, so nothing rolls over there', () => {
+    const clock = fixedClock(on(17, 9))
+    expect(openEntry(startOn(emptyState(), clock), scope)?.day).toBeUndefined()
+  })
+
+  it('closes the day that is full and carries the text into the next', () => {
+    const clock = fixedClock(on(17, 22))
+    let state = startDaily(emptyState(), clock)
+    state = setText(state, openEntry(state, scope)!.id, 'Buchungsmodul', on(17, 22))
+
+    // Worked from 22:00 into the small hours, then paused at 02:00.
+    until(clock, on(18, 2))
+    state = pause(state, clock, scope, newId)
+
+    const closed = state.entries.filter((entry) => entry.state === 'closed')
+    expect(closed).toHaveLength(1)
+    expect(closed[0]?.day).toBe('2026-08-17')
+    expect(closed[0]?.seconds).toBe(2 * 3600)
+
+    const open = openEntry(state, scope)!
+    expect(open.day).toBe('2026-08-18')
+    expect(open.seconds).toBe(2 * 3600)
+    // The work is the same, only the day is new.
+    expect(open.text).toBe('Buchungsmodul')
+  })
+
+  it('gives a day of its own to every midnight a forgotten timer crossed', () => {
+    const clock = fixedClock(on(14, 18))
+    let state = startDaily(emptyState(), clock)
+
+    until(clock, on(17, 9))
+    state = pause(state, clock, scope, newId)
+
+    const days = state.entries.map((entry) => entry.day)
+    expect(days).toEqual(['2026-08-14', '2026-08-15', '2026-08-16', '2026-08-17'])
+    // Nothing is lost: the parts add up to the whole stretch.
+    const total = state.entries.reduce((sum, entry) => sum + entry.seconds, 0)
+    expect(total).toBe(Math.floor((on(17, 9) - on(14, 18)) / 1000))
+  })
+
+  it('does not roll over inside one day', () => {
+    const clock = fixedClock(on(17, 9))
+    let state = startDaily(emptyState(), clock)
+
+    until(clock, on(17, 17))
+    state = pause(state, clock, scope, newId)
+
+    expect(state.entries).toHaveLength(1)
+    expect(state.entries[0]?.seconds).toBe(8 * 3600)
+  })
+
+  it('queues each finished day for sending, so none waits for the branch to end', () => {
+    const clock = fixedClock(on(17, 22))
+    let state = startDaily(emptyState(), clock)
+    until(clock, on(18, 2))
+    state = pause(state, clock, scope, newId)
+
+    const closed = state.entries.find((entry) => entry.state === 'closed')!
+    expect(state.pending.some((write) => write.entryId === closed.id && write.closing)).toBe(true)
   })
 })

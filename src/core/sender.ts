@@ -325,7 +325,9 @@ async function writeEntry(
   const draft: EntryDraft = {
     projectID: entry.projectId,
     category: entry.categoryId,
-    date: clock.today(),
+    // The day the work happened, not the day it was written — that is the whole
+    // point of the daily mode (KONZEPT.md §3).
+    date: entry.day ?? clock.today(),
     detail,
     workingTime: workingTime(total, grid),
     // Null clears them; an empty string would write 01:00:00, as measured. So a

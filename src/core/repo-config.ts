@@ -82,7 +82,7 @@ export function readRepoConfig(cwd: string): RepoConfig {
     const [name, value] = line.split(' ')
     if (!name || !value) continue
     const branchKey = name.slice('prosonata.'.length, -'.mode'.length)
-    if (value === 'commit' || value === 'branch') modes.set(branchKey, value)
+    if (value === 'commit' || value === 'branch' || value === 'branch-day') modes.set(branchKey, value)
   }
 
   return {
