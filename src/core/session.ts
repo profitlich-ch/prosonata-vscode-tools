@@ -144,9 +144,10 @@ export class Session {
    * The whole elapsed time therefore goes to the scope it was started in, and
    * the timer is paused. Asking is left to the next window.
    */
-  reconcileBranchSwitch(context: RepoContext): boolean {
-    let switched = false
+  reconcileBranchSwitch(context: RepoContext): string | null {
+    let switched: string | null = null
     this.store.update((state) => {
+      switched = null
       const stray = state.timers.find(
         (timer) =>
           timer.startedAt !== null &&
@@ -155,7 +156,7 @@ export class Session {
       )
       if (!stray) return state
 
-      switched = true
+      switched = stray.scope.branch
       return pause(state, this.clock, stray.scope)
     })
     return switched
@@ -469,7 +470,7 @@ export class Session {
     // closing line here rather than only where somebody closes one by hand.
     const finished = state.entries.find((entry) => entry.id === bookedInto && entry.state === 'closed')
     if (finished) this.recordEntryClosed(finished)
-    return { state, booked, hadTimer, closed, branchSwitched: switched }
+    return { state, booked, hadTimer, closed, branchSwitched: switched !== null }
   }
 
   /**

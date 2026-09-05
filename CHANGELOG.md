@@ -6,6 +6,18 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Ein Branch-Wechsel warf das laufende Segment weg.** Die Meldung sagte, die
+  Zeit sei dem alten Branch gutgeschrieben worden — tatsächlich wurde der Timer
+  nur angehalten, ohne zu buchen. Wie viel dabei verlorenging, hing davon ab,
+  wann zuletzt gebucht wurde.
+- **Ein frisch gestarteter Timer wurde nach dem Branch-Wechsel wieder
+  angehalten.** Gesucht wurde nur nach dem Arbeitsverzeichnis, nicht nach dem
+  Branch; ein Timer, den man nach dem Wechsel auf dem neuen Branch startete,
+  galt darum als der alte und wurde binnen 30 Sekunden gestoppt. Das trifft
+  jeden, der nach einem Wechsel sofort weiterarbeitet.
+
 ## [0.11.3] — 2026-09-04
 
 ### Behoben

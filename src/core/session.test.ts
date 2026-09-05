@@ -575,3 +575,68 @@ describe('the entry a segment is filed under', () => {
     expect(session.state().entries.find((candidate) => candidate.id === entry.id)?.state).toBe('closed')
   })
 })
+
+/*
+ * A branch switch pauses the timer of the branch one came from — and only that
+ * one. The extension repeated this rule instead of using it, and got both halves
+ * wrong: it searched by working directory alone, so a timer just started on the
+ * branch one had arrived at was mistaken for the old one, and it cleared
+ * `startedAt` without booking, throwing the running segment away.
+ */
+describe('reconciling a branch switch', () => {
+  const other = { repoPath: '/work/shop', branch: 'main' } as const
+
+  function contextOn(branch: string): RepoContext {
+    return { ...context, scope: { repoPath: '/work/shop', branch } } as RepoContext
+  }
+
+  /** Like `sessionWith`, but the clock stays in reach so a test can move it. */
+  function ticking() {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-switch-'))
+    const clock = fixedClock(NINE)
+    const config: Config = { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' }
+    const session = new Session(config, {
+      api: new FakeApi(),
+      clock,
+      store: new StateStore(join(dir, 'state.json')),
+      journal: new Journal(join(dir, 'log.jsonl')),
+      segments: new SegmentLog(join(dir, 'segments.jsonl')),
+    })
+    return { session, clock }
+  }
+
+  it('pauses the timer of the branch one came from and books its segment', async () => {
+    const { session, clock } = ticking()
+    await session.start(contextOn('main'))
+    clock.advance(1800)
+
+    const from = session.reconcileBranchSwitch(contextOn('feature/buchung'))
+
+    expect(from).toBe('main')
+    expect(openEntry(session.state(), other)?.seconds).toBe(1800)
+    expect(session.state().timers.find((timer) => timer.scope.branch === 'main')?.startedAt).toBeNull()
+  })
+
+  it('leaves a timer running on the branch one is on', async () => {
+    const { session, clock } = ticking()
+    await session.start(contextOn('feature/buchung'))
+    clock.advance(60)
+
+    const from = session.reconcileBranchSwitch(contextOn('feature/buchung'))
+
+    expect(from).toBeNull()
+    const timer = session.state().timers.find((candidate) => candidate.scope.branch === 'feature/buchung')
+    expect(timer?.startedAt).not.toBeNull()
+  })
+
+  it('loses no time: what was measured is in the entry, not thrown away', async () => {
+    const { session, clock } = ticking()
+    await session.start(contextOn('main'))
+    clock.advance(900)
+
+    session.reconcileBranchSwitch(contextOn('feature/buchung'))
+
+    // Fifteen minutes were running; they belong to the old branch, not to nobody.
+    expect(openEntry(session.state(), other)?.seconds).toBe(900)
+  })
+})

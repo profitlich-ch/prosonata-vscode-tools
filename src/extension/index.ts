@@ -878,20 +878,20 @@ function watchHead(active: Session, context: RepoContext): void {
   lastHead = head
   if (previous === null) return
 
-  const state = active.state()
-  const running = state.timers.find((timer) => timer.startedAt !== null && timer.scope.repoPath === context.scope.repoPath)
-  if (!running) return
-
-  // The elapsed time belongs to the branch we came from.
-  active.store.update((current) => {
-    const timer = current.timers.find((candidate) => candidate.id === running.id)
-    if (timer) timer.startedAt = null
-    return current
-  })
+  /*
+   * The one place that decides this is `reconcileBranchSwitch`, and it is used
+   * rather than repeated. Repeating it here had cost twice over: the search went
+   * by working directory alone, so a timer just started on the branch we arrived
+   * at was mistaken for the old one and stopped — and `startedAt` was cleared
+   * without booking, so the running segment was thrown away while the message
+   * claimed it had gone to the old branch.
+   */
+  const from = active.reconcileBranchSwitch(context)
+  if (from === null) return
 
   void vscode.window
     .showInformationMessage(
-      `ProSonata: der Branch hat gewechselt. Die bisherige Zeit ging an ${running.scope.branch}. Hier weiterzählen?`,
+      `ProSonata: der Branch hat gewechselt. Die bisherige Zeit ging an ${from}. Hier weiterzählen?`,
       'Hier weiterzählen',
       'Pausiert lassen',
     )
