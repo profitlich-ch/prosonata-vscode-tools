@@ -142,6 +142,11 @@
         "command": "prosonata.openSettings",
         "title": "Einstellungen öffnen",
         "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.resolveSleep",
+        "title": "Schlafzeit des Rechners abziehen oder behalten",
+        "category": "ProSonata"
       }
     ],
     "menus": {

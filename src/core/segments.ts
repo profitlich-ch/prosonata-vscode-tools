@@ -41,7 +41,7 @@ export interface Segment {
    * next begins. Its `seconds` are zero on purpose — the time is already in the
    * segments above it, and counting it again would double every day it closes.
    */
-  reason: 'pause' | 'commit' | 'trimmed' | 'correction' | 'entry'
+  reason: 'pause' | 'commit' | 'trimmed' | 'correction' | 'entry' | 'asleep'
   /** For `trimmed`: how long it really ran before the answer cut it. */
   ranSeconds?: number
   /** For `entry`: the total the entry was closed with, foreign share included. */

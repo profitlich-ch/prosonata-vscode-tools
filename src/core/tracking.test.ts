@@ -20,6 +20,7 @@ import {
   resumeAsNew,
   setText,
   shiftStart,
+  skipGap,
   start,
   unwrittenSeconds,
 } from './tracking.js'
@@ -801,5 +802,62 @@ describe('the open entries of a working directory', () => {
 
     expect(openEntriesIn(after, '/work/shop').map((candidate) => candidate.id)).not.toContain(entry.id)
     expect(openEntriesIn(after, '/work/shop')).toHaveLength(2)
+  })
+})
+
+/*
+ * A suspended machine freezes the process, so a beat that should come every
+ * second and returns an hour later proves nothing ran in between. Unlike the
+ * question about a long-running timer, the amount here is measured — and unlike
+ * a pause, the timer runs on: the person is back and at it.
+ */
+describe('a stretch in which the machine slept', () => {
+  it('books what was worked before and starts again at waking', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+
+    // Worked 9:00–10:00, asleep 10:00–11:30, awake again.
+    state = skipGap(state, scope, at(10, 0), at(11, 30))
+
+    expect(openEntry(state, scope)?.seconds).toBe(3600)
+    // Still running, and counting from the moment of waking.
+    expect(state.timers[0]?.startedAt).toBe(at(11, 30))
+  })
+
+  it('does not stop the timer, unlike a pause', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    state = skipGap(state, scope, at(10, 0), at(11, 30))
+
+    expect(state.timers[0]?.startedAt).not.toBeNull()
+  })
+
+  it('leaves a gap that lies before the segment alone', () => {
+    const clock = fixedClock(new Date(2026, 6, 30, 12, 0, 0).getTime())
+    const state = startOn(emptyState(), clock)
+
+    // The machine slept in the morning; the timer was started afterwards.
+    const after = skipGap(state, scope, at(10, 0), at(11, 0))
+
+    expect(after).toBe(state)
+  })
+
+  it('books nothing when the sleep began before the segment did', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+
+    // Asleep from 8:00 — before the start — until 10:00.
+    state = skipGap(state, scope, at(8, 0), at(10, 0))
+
+    expect(openEntry(state, scope)?.seconds).toBe(0)
+    expect(state.timers[0]?.startedAt).toBe(at(10, 0))
+  })
+
+  it('does nothing while no timer runs', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    state = pause(state, clock, scope)
+
+    expect(skipGap(state, scope, at(10, 0), at(11, 0))).toBe(state)
   })
 })

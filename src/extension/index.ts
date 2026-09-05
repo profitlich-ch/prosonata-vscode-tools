@@ -99,6 +99,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   register(context, 'prosonata.setup', () => setUpAccount())
   register(context, 'prosonata.openSettings', () => openSettings())
+  register(context, 'prosonata.resolveSleep', () => resolveSleep())
   register(context, 'prosonata.start', withContext(async (s, c) => void (await s.start(c))))
   register(context, 'prosonata.pause', withContext((s, c) => void s.pause(c)))
   register(context, 'prosonata.toggle', withContext(toggle))
@@ -135,7 +136,10 @@ export function activate(context: vscode.ExtensionContext): void {
   }
   context.subscriptions.push(watcher)
 
-  const drawer = setInterval(() => draw(), DRAW_MS)
+  const drawer = setInterval(() => {
+    noticeSleep()
+    draw()
+  }, DRAW_MS)
   const worker = setInterval(() => void work(), WORK_MS)
   const pruner = setInterval(() => void prune(), PRUNE_MS)
   context.subscriptions.push({
@@ -251,17 +255,74 @@ function currentSession(): Session | null {
   return session
 }
 
+/**
+ * The last answer of `readContext`, kept until something could have changed it.
+ *
+ * Reading it costs about a dozen `git` child processes — the repository root,
+ * the root commit, the branch, the HEAD path, the main branch, and half a dozen
+ * `git config` lookups. Measured at roughly 6 ms each. The status bar redraws
+ * every second, so without this the extension spent some 7 % of a core on
+ * finding out what it already knew.
+ *
+ * Emptied by `reload`, which runs after every command, on every change to
+ * `state.json`, when the editor changes and at the end of each work beat — so a
+ * branch switch shows up within one beat at the latest.
+ */
+let contextCache: { path: string; context: RepoContext | null } | null = null
+
+function forgetContext(): void {
+  contextCache = null
+}
+
 function currentContext(): RepoContext | null {
   const folder = vscode.workspace.workspaceFolders?.[0]
   if (!folder) return null
+  const path = folder.uri.fsPath
+  if (contextCache?.path === path) return contextCache.context
+
+  const context = readContext(path)
+  contextCache = { path, context }
+  return context
+}
+
+function readContext(path: string): RepoContext | null {
   const active = currentSession()
   if (!active) return null
   try {
-    return active.context(folder.uri.fsPath)
+    return active.context(path)
   } catch (error) {
     if (error instanceof NotConfigured || error instanceof MissingConfig) return null
     throw error
   }
+}
+
+/**
+ * The answer to a sleeping machine, in the two words it comes down to
+ * (KONZEPT.md §3).
+ *
+ * The number is not asked for but stated: the gap was measured, so the question
+ * is only whether it counts. It might — a call about this project, a look at the
+ * printout — which is why nothing is subtracted without an answer.
+ */
+async function resolveSleep(): Promise<void> {
+  const active = currentSession()
+  if (!active || active.sleepGaps.length === 0) return
+
+  const slept = clock(active.sleptSeconds())
+  const answer = await vscode.window.showInformationMessage(
+    `ProSonata: der Rechner schlief ${slept}, während der Timer lief. Diese Zeit abziehen?`,
+    'Abziehen',
+    'Behalten',
+  )
+  if (answer === undefined) return
+
+  if (answer === 'Abziehen') {
+    active.skipSleep()
+    void vscode.window.showInformationMessage(`ProSonata: ${slept} abgezogen, der Timer läuft weiter.`)
+  } else {
+    active.keepSleep()
+  }
+  reload()
 }
 
 function register(context: vscode.ExtensionContext, id: string, handler: () => Promise<void> | void): void {
@@ -979,6 +1040,10 @@ function readHead(file: string): string | null {
 
 /** Reads the state from disk once, then draws. */
 function reload(): void {
+  // Anything that reaches here may have moved the branch or the repository
+  // settings, so the cached context is dropped and read once, not every second.
+  forgetContext()
+
   const active = currentSession()
   try {
     cached = active?.state() ?? null
@@ -1001,6 +1066,38 @@ function reload(): void {
  * Draws from the cached state, counting the running segment up locally. Called
  * every second, so it must not touch the disk.
  */
+/**
+ * When this beat last ran. A suspended machine freezes the process, so a timer
+ * that should fire every second and comes back an hour later did not fire at all.
+ */
+let lastBeat = Date.now()
+
+/**
+ * Notices that the machine was asleep (KONZEPT.md §3).
+ *
+ * There is no power event in the VS Code API — checked against the type
+ * definitions, not assumed. The gap in this beat is the signal, and it is a
+ * measurement rather than a guess: between the two beats nothing on this machine
+ * ran, so nobody worked at it. That is what makes it different from every idle
+ * heuristic, which infers from the tool to the person and is often wrong.
+ *
+ * Nothing is subtracted here. The gap is recorded and the panel asks.
+ */
+function noticeSleep(): void {
+  const now = Date.now()
+  const gap = now - lastBeat
+  lastBeat = now
+
+  const active = currentSession()
+  if (!active) return
+  if (gap < active.config.sleepGapSeconds * 1000) return
+  // Only worth a question while something was being measured.
+  if (!active.state().timers.some((timer) => timer.startedAt !== null)) return
+
+  active.sleepGaps.push({ from: now - gap, until: now })
+  reload()
+}
+
 function draw(): void {
   const context = currentContext()
   const state = cached

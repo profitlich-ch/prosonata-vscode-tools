@@ -8,6 +8,13 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ### Hinzugefügt
 
+- **Schlafzeit des Rechners wird erkannt und angeboten.** Lief ein Timer,
+  während der Rechner ausgesetzt war, erscheint im Panel eine Zeile mit der
+  gemessenen Dauer: abziehen oder behalten. Der Wert ist gemessen, nicht
+  geschätzt — Zeitgeber feuern nicht, solange ein Rechner schläft, also belegt
+  die Lücke im Takt, dass an dieser Maschine nichts geschah. Nach dem Abzug
+  läuft der Timer ab dem Aufwachen weiter. Schwelle einstellbar über
+  `sleepGapSeconds`, Vorgabe fünf Minuten.
 - **Befehl „Einstellungen öffnen"**, der `~/.prosonata/config.json` im Editor
   zeigt. Bisher musste man den Pfad auswendig kennen. Bewusst keine
   VS-Code-Einstellungen: Hook und CLI lesen die Datei ohne VS Code, und Settings

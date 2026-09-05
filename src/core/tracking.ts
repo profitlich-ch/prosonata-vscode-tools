@@ -506,6 +506,34 @@ export function keepFromRunning(state: State, clock: Clock, scope: Scope, second
   return next
 }
 
+/**
+ * Cuts a stretch out of the running segment in which the machine was asleep
+ * (KONZEPT.md §3).
+ *
+ * Unlike `keepFromRunning`, the amount is not guessed and not asked for: the
+ * window is measured, and the timer keeps running afterwards. What was worked
+ * before falling asleep is booked, the gap is dropped, and the segment starts
+ * again at the moment of waking — the person is back and at it.
+ *
+ * The gap is left as a hole in the segment log rather than written down as a
+ * segment of its own: nothing happened in it, and the archive records what was
+ * measured, not what was not.
+ */
+export function skipGap(state: State, scope: Scope, from: number, until: number): State {
+  const next = structuredClone(state)
+  const timer = findTimerIn(next, scope)
+  if (!timer || timer.startedAt === null) return state
+
+  // A gap that lies entirely before the segment began takes nothing away — the
+  // timer was started after waking, and the sleep is none of its business.
+  if (until <= timer.startedAt) return state
+
+  const worked = Math.max(timer.startedAt, Math.min(from, until))
+  bookSegment(next, timer.entryId, timer.startedAt, worked)
+  timer.startedAt = until
+  return next
+}
+
 /** Narrows to a timer whose segment is running, so `startedAt` is a number. */
 function isRunning(timer: Timer | undefined): timer is Timer & { startedAt: number } {
   return timer !== undefined && timer.startedAt !== null

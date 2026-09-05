@@ -208,6 +208,24 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     }
 
     /*
+     * The machine slept while the clock ran. The row waits rather than a
+     * notification: whoever comes back to a woken machine finds it here, and a
+     * popup fired while nobody was there is gone by then (KONZEPT.md §3).
+     */
+    if (session.sleepGaps.length > 0) {
+      const slept = session.sleptSeconds()
+      const since = new Date(session.sleepGaps[0]!.from)
+      rows.push(
+        new PanelRow(
+          'Rechner schlief',
+          `${clock(slept)} ab ${since.toTimeString().slice(0, 5)} — abziehen?`,
+          'debug-disconnect',
+          { command: 'prosonata.resolveSleep', title: 'Schlafzeit entscheiden' },
+        ),
+      )
+    }
+
+    /*
      * The reason, not just the count. A key that no longer works, a text over the
      * limit and a spent quota all used to look the same here: a number that would
      * not go down, with nothing saying why (KONZEPT.md §10).

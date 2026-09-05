@@ -45,6 +45,15 @@ export interface Config {
   longRunWarningSeconds: number
   /** Stop the timer when the last VS Code window closes. Off means it keeps running. */
   pauseOnWindowClose: boolean
+  /**
+   * A pause in the beat this long counts as the machine having slept.
+   *
+   * Timers do not fire while a machine is suspended, so a beat that should come
+   * every second and comes back an hour later is proof that nothing ran in
+   * between — a measurement, not a guess. Below this the gap is ignored: a lid
+   * closed for two minutes is not worth a question.
+   */
+  sleepGapSeconds: number
 }
 
 export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
@@ -56,6 +65,7 @@ export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
   sendDelaySeconds: 600,
   longRunWarningSeconds: 6 * 3600,
   pauseOnWindowClose: true,
+  sleepGapSeconds: 5 * 60,
 }
 
 export function stateDir(): string {

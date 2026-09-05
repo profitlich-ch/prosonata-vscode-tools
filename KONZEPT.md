@@ -508,6 +508,27 @@ Rein informierend. Gebucht wird nie automatisch.
   weiss nur, wer dabei war. Antworten: alles behalten, eine eigene Dauer, verwerfen. Nach
   „alles behalten" schweigt die Frage eine Stunde, sonst wäre sie nach zwei Tagen unsichtbar.
   Im Terminal dasselbe über `prosonata pause [h:mm]`.
+- **Der Rechner hat geschlafen.** Anders als alle anderen Warnungen beruht diese auf einer
+  **Messung**, nicht auf einem Verdacht: Zeitgeber feuern nicht, solange ein Rechner
+  ausgesetzt ist. Kommt der Sekundentakt nach einer Stunde zurück, ist damit belegt, dass in
+  dieser Stunde auf dieser Maschine nichts lief – also auch niemand an ihr gearbeitet hat.
+  Gefragt wird deshalb nicht, wie viel zählt, sondern nur, ob die **genannte** Zeit abgezogen
+  werden soll; sie könnte trotzdem Arbeit sein, etwa ein Telefonat über dasselbe Projekt.
+  Nach dem Abzug **läuft der Timer weiter**, ab dem Aufwachen – wer zurück ist, arbeitet.
+  Mehrere Lücken sammeln sich, falls niemand antwortet, und werden der Reihe nach angewandt;
+  die wachen Zeiten dazwischen bleiben unangetastet.
+
+  Angezeigt wird das als **Zeile im Panel**, nicht als Meldung: Wer an einen aufgewachten
+  Rechner zurückkommt, findet sie dort, während eine Benachrichtigung ins Leere gelaufen wäre.
+  Die Schwelle ist konfigurierbar (`sleepGapSeconds`, Vorgabe fünf Minuten) – ein kurz
+  zugeklappter Deckel ist keine Frage wert.
+
+  **Warum keine Betriebssystem-Ereignisse:** Die Extension-API von VS Code kennt keine – in den
+  Typdefinitionen kommt weder `suspend` noch `resume` oder `lock` vor. Echte Erkennung hiesse
+  drei plattformabhängige Implementierungen und nativen Code, und sie beantwortete die falsche
+  Frage: Ein gesperrter Bildschirm heisst nicht, dass niemand arbeitet. Was diese Lücke misst,
+  ist genau das Gewünschte. Der eine Fall, den sie nicht sieht, ist der gesperrte Bildschirm
+  auf einem wachen Rechner.
 - **Zeit vor- und zurückdrehen.** Zwei Alltagsfehler, einer je Richtung: Der Timer lief durch
   ein Telefonat, oder er lief nie, obwohl gearbeitet wurde. Beides erinnert ein Mensch als
   **Uhrzeit** („um 9:40 klingelte das Telefon"), nicht als Differenz – deshalb wirken Anker

@@ -32,6 +32,7 @@ import {
   resumeAsNew,
   settle,
   shiftStart,
+  skipGap,
   start,
   takeFromOpen,
   unwrittenSeconds,
@@ -676,6 +677,67 @@ export class Session {
    * share.
    */
   lastTrouble: string | null = null
+
+  /**
+   * Stretches in which this machine was asleep while a timer ran (KONZEPT.md §3).
+   *
+   * Measured, not guessed: a beat that should come every second and comes back
+   * an hour later proves that nothing ran in between. Several may pile up — a lid
+   * closed twice before anybody answered — so they are kept in order and applied
+   * one after the other, with the waking hours between them left alone.
+   *
+   * In memory beside `lastTrouble`: an observation of this window, not state that
+   * three processes share.
+   */
+  sleepGaps: { from: number; until: number }[] = []
+
+  /** What the gaps add up to, for the question that names a number. */
+  sleptSeconds(): number {
+    return this.sleepGaps.reduce((sum, gap) => sum + Math.floor((gap.until - gap.from) / 1000), 0)
+  }
+
+  /**
+   * Takes the sleeping time out of every running segment and lets the timer run
+   * on from the moment of waking — the person is back and at it.
+   *
+   * Each cut is written to the log with its cause. Time that disappears on
+   * purpose must not disappear silently as well (KONZEPT.md §3); the gap itself
+   * stays a hole between two rows, because nothing happened in it.
+   */
+  skipSleep(): State {
+    const gaps = [...this.sleepGaps].sort((a, b) => a.from - b.from)
+    this.sleepGaps = []
+
+    for (const gap of gaps) {
+      for (const timer of this.state().timers.filter((candidate) => candidate.startedAt !== null)) {
+        const startedAt = timer.startedAt!
+        if (gap.until <= startedAt) continue
+
+        const worked = Math.max(startedAt, Math.min(gap.from, gap.until))
+        const entry = findEntry(this.state(), timer.entryId)
+        this.store.update((state) => skipGap(state, timer.scope, gap.from, gap.until))
+
+        if (entry && worked > startedAt) {
+          this.segments.append({
+            from: atLocal(startedAt),
+            until: atLocal(worked),
+            seconds: Math.floor((worked - startedAt) / 1000),
+            repoPath: timer.scope.repoPath,
+            branch: timer.scope.branch,
+            projectId: entry.projectId,
+            entryId: entry.id,
+            reason: 'asleep',
+          })
+        }
+      }
+    }
+    return this.state()
+  }
+
+  /** Keeps it: the machine slept, the person did not (KONZEPT.md §3). */
+  keepSleep(): void {
+    this.sleepGaps = []
+  }
 
   /** Sends everything that is due (KONZEPT.md §4). */
   async flush(force = false): Promise<SendResult> {
