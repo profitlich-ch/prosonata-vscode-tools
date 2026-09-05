@@ -1,9 +1,9 @@
 Prosonata Tools für Visual Studio Code
 ===========
 
-Diese VS-Code-Erweiterung ermöglicht es, [ProSonata](https://www.prosonata.de)-Zeiteinträge direkt aus VS Code anzulegen, gebunden an Commits und Branches, per ProSonata-API. Statt in der SaaS-Oberfläche von ProSonata einen Timer zu starten und die Beschreibung von Hand einzutragen, startest du den Timer in VS Code, und die gemessene Zeit wird zu einem Zeiteintrag pro Branch (alternativ: pro Commit) — mit einer Beschreibung, die aus dem Commit stammt.
+Diese VS-Code-Erweiterung ermöglicht es, [ProSonata](https://www.prosonata.de)-Zeiteinträge direkt aus VS Code anzulegen, gebunden an Commits und Branches, per ProSonata-API. Statt in der SaaS-Oberfläche von ProSonata einen Timer zu starten und die Beschreibung von Hand einzutragen, startest du den Timer in VS Code, und die gemessene Zeit wird zu einem Zeiteintrag pro Branch — oder, umschaltbar, pro Branch und Tag oder pro Commit — mit einer Beschreibung, die aus dem Commit stammt.
 
-Die Idee: Ein Zeiteintrag stellt eine Leistung dar, die dem Kunden verrechenbar ist. Ob sie an einem Tag entsteht oder an mehreren spielt für den Kunden keine Rolle.
+Die Idee: Ein Zeiteintrag stellt eine Leistung dar, die dem Kunden verrechenbar ist. Wer nach Leistung abrechnet, dem ist gleich, ob sie an einem Tag entsteht oder an mehreren; wer nach Zeit abrechnet, bekommt dafür die beiden anderen Modi.
 
 Dies ist kein offizielles ProSonata-Produkt. Es steht nicht im Marketplace, du musst es von Hand installieren.
 
@@ -41,11 +41,11 @@ Fürs Update dasselbe noch einmal, nach `git pull`.
 
 ## Konfiguration
 
-Öffne aus der Seitenleiste das :P Menü und klicke ‹ProSonata: Konto einrichten›. Es fragt nach der ProSonata Basis-URL und einem Benutzer-API-Key und schreibt beides mit Modus 0600 nach `~/.prosonata/config.json`.
+Öffne in der Aktivitätsleiste den Eintrag **:Profitlich** und klicke ‹ProSonata: Konto einrichten›. Es fragt nach der ProSonata Basis-URL und einem Benutzer-API-Key und schreibt beides mit Modus 0600 nach `~/.prosonata/config.json`.
 
 **Nutze einen persönlichen Benutzer-Key, keine App-Integration**, damit die Zeiteinträge mit deinem User verknüpft sind.
 
-Denselben Befehl später erneut aufrufen, um **Key oder Basis-URL zu wechseln** — etwa wenn der Key abläuft. Die Basis-URL steht dann schon da, und ein leer gelassenes Key-Feld behält den bisherigen. Alle übrigen Einstellungen in `config.json` bleiben unberührt.
+Denselben Befehl später erneut aufrufen, um **Key oder Basis-URL zu wechseln** — etwa wenn der Key abläuft. Die Basis-URL steht dann schon da, und ein leer gelassenes Key-Feld behält den bisherigen. Alle übrigen Einstellungen in `config.json` bleiben unberührt; die Datei selbst öffnet «ProSonata: Einstellungen öffnen». Dort stehen auch die Vorgaben, die kein Dialog abfragt: das Zeitraster, die Sendeverzögerung, die Schwellen für die Warnungen und die Schlaferkennung.
 
 ## Einstellungen pro Repository
 
@@ -55,7 +55,7 @@ Direkt danach fragt die Erweiterung nach der **Zeitkategorie**. ProSonata verlan
 
 Auch das Projekt lässt sich später korrigieren. Weil ein Wechsel fast immer ein Versehen richtigstellt, wandern alle noch nicht fertigen Zeiteinträge dieses Repositories mit — auch die, die in ProSonata bereits stehen, und samt der laufenden Messung. Liegen bleibt nur, was abgeschlossen ist und dessen Abschluss ProSonata schon erreicht hat; ist ein solcher Eintrag dort sogar fakturiert, entsteht statt einer Änderung ein Folgeeintrag im neuen Projekt.
 
-Zusätzlich kannst du das Zeitraster wählen und ob Zeiteinträge an Branches oder an Commits gebunden werden. Das Zeitraster wirkt auf alle noch offenen Zeiteinträge, sobald diese das nächste Mal geschrieben werden. Der Wechsel auf «ein Eintrag pro Commit» dagegen schliesst den offenen Branch-Eintrag und fragt vorher nach seinem endgültigen Text.
+Zusätzlich kannst du das Zeitraster wählen und den Modus: ein Eintrag pro Branch, pro Branch und Tag, oder pro Commit (siehe [Funktionsweise](#funktionsweise)). Das Zeitraster wirkt auf alle noch offenen Zeiteinträge, sobald diese das nächste Mal geschrieben werden. Der Wechsel auf «ein Eintrag pro Commit» dagegen schliesst den offenen Branch-Eintrag und fragt vorher nach seinem endgültigen Text.
 
 Das **Zeitraster gilt allein für den Zeiteintrag**, der nach ProSonata geht — nie für die Segmente. Gemessen und im Log gezeigt wird sekundengenau; gerundet wird erst beim Schreiben, und zwar einmal je Zeiteintrag — nicht jedes Segment für sich. Gerundet wird **aufwärts**, auf die nächste Stufe: Bei einem Raster von 15 Minuten werden aus gemessenen 2:05 h gebuchte 2:15 h. Weil je Eintrag gerundet wird, **wächst die Aufrundung mit der Zahl der Einträge**: Auf `main` mit drei Commits von je zwanzig Minuten werden daraus dreimal eine halbe Stunde, also 1:30 h statt einer Stunde. Ein Branch-Eintrag, der dieselbe Arbeit sammelt, wird einmal gerundet. Gezeigt wird diese Zahl überall als Stunden:Minuten; in ProSonata selbst steht sie als Dezimalstunde (2.25), weil die API es so speichert.
 
@@ -69,18 +69,34 @@ Während der Arbeit in VS Code werden Zeiten als **Segmente** lokal auf dem
 Computer gespeichert. Ein **Zeiteintrag** ist das, was in ProSonata gespeichert wird.
 Ein Zeiteintrag entsteht aus beliebig vielen Segmenten.
 
-Nach ProSonata geschrieben wird nicht erst am Schluss: Zehn Minuten nach einem
-Commit legt das Werkzeug den Zeiteintrag an und aktualisiert ihn
-danach bei jedem weiteren Schreibvorgang mit der gewachsenen Summe. Ein
-Branch-Eintrag steht also von Anfang an in ProSonata und wächst dort mit. Der
-Abschluss ist nur das letzte Update.
+Nach ProSonata geschrieben wird nicht erst am Schluss: Zehn Minuten nach dem
+**Start** des Timers legt das Werkzeug den Zeiteintrag an — noch ohne Text, unter
+einem Platzhalter — und aktualisiert ihn danach bei jedem weiteren Schreibvorgang
+mit der gewachsenen Summe. Ein Branch-Eintrag steht also von Anfang an in
+ProSonata und wächst dort mit. Der Abschluss ist nur das letzte Update.
 
-| Wo du arbeitest | Was ProSonata bekommt |
-|---|---|
-| Auf einem Branch | Ein Eintrag pro Branch, der über dessen ganze Lebensdauer wächst (alternativ: pro Commit) |
-| Auf dem Main-Branch | Ein Eintrag pro Commit |
+| Wo du arbeitest | Was ProSonata bekommt | Gedacht für |
+|---|---|---|
+| Auf einem Branch | **Ein Eintrag pro Branch**, der über dessen ganze Lebensdauer wächst | Abrechnung nach Leistung: eine Zeile für das, was geliefert wurde |
+| Auf einem Branch, umgeschaltet | **Ein Eintrag pro Branch und Tag** — geschnitten an jeder Mitternacht | Abrechnung nach Zeit auf Branch-Arbeit: je Tag eine Zeile mit Datum und Uhrzeiten |
+| Auf dem Main-Branch | **Ein Eintrag pro Commit** | Abrechnung nach Zeit: Wartung, jeder Commit eine Zeile |
 
-Die Konzeptidee: Ein Branch ist das Stück Arbeit, das ein Kunde als Einheit bezahlt. Commits sind eher Zwischenschritte, die der Kunde nicht zu sehen braucht. Wird hingegen auf dem Main-Branch gearbeitet, ist es Wartung und jeder Commit ist es wert, als Zeiteintrag erfasst zu werden.
+Die Konzeptidee: Ein Branch ist das Stück Arbeit, das ein Kunde als Einheit bezahlt. Commits sind eher Zwischenschritte, die der Kunde nicht zu sehen braucht. Wird hingegen auf dem Main-Branch gearbeitet, ist es Wartung und jeder Commit ist es wert, als Zeiteintrag erfasst zu werden. Der Modus lässt sich je Branch umschalten («ProSonata: Modus für Zeiteinträge wählen»).
+
+Was ein Commit auslöst, hängt vom Modus ab — das Segment wird in jedem Fall am Commit-Zeitpunkt geschnitten:
+
+```mermaid
+flowchart TD
+    C([Commit]) --> S["laufendes Segment wird<br/>am Commit-Zeitpunkt geschnitten"]
+    S --> M{Modus}
+    M -- "pro Commit<br/>(Main-Branch)" --> A["Eintrag <b>abgeschlossen</b><br/>Text: Trailer, sonst Subject<br/>Timer läuft in einen Nachfolger"]
+    M -- "pro Branch" --> B["Eintrag <b>bleibt offen</b><br/>ein Trailer ersetzt den Text"]
+    M -- "pro Branch und Tag" --> D["wie pro Branch —<br/>um Mitternacht wird der Tag abgeschlossen,<br/>der Nachfolger erbt den Text"]
+    A --> W
+    B --> W
+    D --> W
+    W["Schreibvorgang vorgemerkt, geht zehn Minuten später hinaus:<br/>immer die <b>absolute Summe</b>, nie eine Differenz"]
+```
 
 Der Text des Zeiteintrags kommt aus dem Commit, aus einem mit `Prosonata:` beginnenden Trailer:
 
@@ -114,7 +130,7 @@ kann:
 Beim Abschliessen fällt also das **Wort** weg, nicht die Klammer: Auf einem
 fertigen Eintrag wäre «LAUFEND» falsch, die Kennung dagegen wird weiter
 gebraucht. Ohne sie ist ein abgeschlossener Eintrag in ProSonata anonym, und
-weder das Zuschlagen noch eine Wiederherstellung fänden ihn wieder. Die sieben
+weder das Zuschlagen noch eine Wiederherstellung fänden ihn wieder. Die acht
 technischen Zeichen auf der Rechnungszeile sind dafür der bewusste Preis —
 solange, bis ProSonata ein eigenes Feld für solche Angaben hat.
 
@@ -129,6 +145,27 @@ Die Kennung im Marker entsteht aus dem ersten Commit des Repositories und dem
 Branchnamen — in jedem Klon dieselbe. Der zweite Computer findet den Zeiteintrag
 deshalb wieder und **ergänzt** ihn, statt einen zweiten anzulegen. Vorausgesetzt
 ist, dass nicht beide gleichzeitig messen.
+
+Jeder Computer merkt sich den **fremden Anteil** und schreibt `fremd + eigen`.
+Woher er den fremden Anteil kennt: an der Differenz zwischen dem, was er zuletzt
+selbst geschrieben hat, und dem, was in ProSonata steht.
+
+```mermaid
+sequenceDiagram
+    participant B as Büro
+    participant P as ProSonata
+    participant Z as Zuhause
+    B->>P: misst 3:00, schreibt 3:00
+    Note over B: zuletzt geschrieben 3:00<br/>fremd 0:00 · eigen 3:00
+    Z->>P: sucht «LAUFEND:a3f9c1», findet 3:00
+    Note over Z: übernimmt den Eintrag<br/>fremd 3:00 · eigen 0:00
+    Z->>P: misst 1:00, liest 3:00 = zuletzt geschrieben → fremd bleibt<br/>schreibt 4:00
+    Note over Z: zuletzt geschrieben 4:00
+    B->>P: misst 0:30, liest 4:00 ≠ 3:00 → jemand war da: fremd 1:00<br/>schreibt fremd 1:00 + eigen 3:30 = 4:30
+```
+
+Der geschriebene Wert hängt nur vom eigenen Zustand ab, nie vom gerade
+Gelesenen — ein wiederholter Schreibvorgang verdoppelt deshalb nichts.
 
 Zwei **Personen** stören einander dagegen nicht: Zeiten gehören in ProSonata
 Benutzern, und jede führt ihren eigenen Eintrag pro Branch.
@@ -149,7 +186,28 @@ abgeschlossene Eintrag wird nie ungefragt wieder angefasst.
 Läuft ein Segment stundenlang am Stück, fragt die Erweiterung, **wie viel davon
 zählt** — alles, eine eigene Dauer, oder nichts. Sie rät nicht: Ein Timer, der
 über Nacht lief, hat Wanduhrzeit gemessen, und was davon Arbeit war, weisst nur
-du.
+du. Antwortest du «zwei Stunden», sind das die **ersten** zwei — gearbeitet
+wurde am Anfang, vergessen wurde das Anhalten.
+
+Hat der Rechner zwischendurch **geschlafen**, weiss die Erweiterung das genau:
+Zeitgeber feuern nicht, solange ein Rechner ausgesetzt ist, und ein Takt, der
+nach Stunden zurückkommt, belegt, dass an dieser Maschine nichts lief. Im Panel
+erscheint dann eine Zeile mit der gemessenen Dauer — abziehen oder behalten.
+Nach dem Abzug läuft der Timer ab dem Aufwachen weiter.
+
+```mermaid
+gantt
+    title Ein Timer läuft über Nacht
+    dateFormat YYYY-MM-DD HH:mm
+    axisFormat %H:%M
+    section Gemessen
+    Timer lief 15 h                        :crit, 2026-08-17 18:00, 2026-08-18 09:00
+    section Erkannt
+    Rechner schlief — Lücke im Takt        :2026-08-17 23:00, 2026-08-18 07:00
+    section Antwort «2 Stunden zählen»
+    behalten, der Anfang                   :active, 2026-08-17 18:00, 2026-08-17 20:00
+    verworfen                              :done, 2026-08-17 20:00, 2026-08-18 09:00
+```
 
 Ohne auf diese Frage zu warten, lässt sich ein laufendes Segment jederzeit **ganz
 verwerfen** — der Fall «committet, Anhalten vergessen, danach nicht mehr
@@ -211,6 +269,28 @@ ProSonata selbst. Steht der offene Eintrag schon dort, verschwindet er beim
 Zuschlagen: Seine Zeit ist ja umgezogen. Nur wenn ein anderer Computer in ihn
 gemessen hat, bleibt er stehen und das Zuschlagen wird abgelehnt.
 
+## Zeiteinträge durchsehen
+
+«ProSonata: Zeiteinträge durchsehen» holt die Zeiteinträge des aktuellen
+Repositories aus ProSonata in eine Liste, in der sich mehrere wählen lassen.
+Drei Handlungen stehen daran:
+
+- **Text und Stunden ändern** — das Stift-Symbol an einer Zeile. Stunden werden
+  als `h:mm` oder Dezimalzahl getippt; geschrieben wird die neue Summe, auf das
+  Raster gerundet.
+- **Zusammenlegen** — mehrere wählen, ein Eintrag bleibt, die übrigen werden
+  gelöscht, nachdem die Summe sicher auf dem bleibenden steht. Vorgeschlagen
+  werden die Stunden aus den gemessenen Segmenten, **einmal** auf das Raster
+  gerundet: Wer im Nachhinein zusammenlegt, sagt damit, das sei in einem Rutsch
+  gemacht worden, und ein Rutsch wird einmal gerundet, nicht dreimal. Decken die
+  Segmente die Einträge nicht — etwa weil ein anderer Rechner gemessen hat —,
+  steht die Summe aus ProSonata da, mit dem Hinweis, warum.
+- **Löschen** — nach Rückfrage mit den Zahlen.
+
+**Fakturierte Einträge bleiben stehen**, bei allen drei Handlungen: Sie gehören
+der Rechnung. Das Segmentprotokoll wird nicht nachgezogen; es bleibt das Archiv
+der Messung, berichtigt wird die Abrechnung.
+
 ## Der Log
 
 Das Uhr-Symbol in der Titelleiste des ProSonata-Panels öffnet alle gemessenen
@@ -247,7 +327,7 @@ prosonata send                    alles senden, was gerade fällig ist
 prosonata project                 Projekt dieses Repositories wählen
 prosonata category                Zeitkategorie dieses Projekts wählen
 prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
-prosonata mode [branch|commit]    ein Eintrag pro Branch oder pro Commit
+prosonata mode [branch|tag|commit] ein Eintrag pro Branch, pro Branch und Tag, oder pro Commit
 prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
 prosonata text <Text>             Text des offenen Zeiteintrags ändern
 prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen

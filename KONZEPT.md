@@ -102,8 +102,7 @@ Kleinigkeit ist – und wo die Rechnung ohnehin nach Zeit gestellt wird.
   Einheit der Arbeitsabschnitt, bei Leistungsabrechnung die Leistung.
 
 Wer nach Zeit abrechnet, aber auf Branches arbeitet, hat deshalb ein Problem, das der Modus
-`pro Branch` nicht löst – dafür ist der entworfene Tagesmodus gedacht
-([docs/tagesmodus.md](docs/tagesmodus.md)).
+`pro Branch` nicht löst – dafür ist der dritte Modus da, *pro Branch und Tag* (unten).
 
 Der Hauptbranch ist **konfigurierbar**. Default ist der Branch, auf den
 `refs/remotes/origin/HEAD` zeigt, ersatzweise `main`.
@@ -113,9 +112,9 @@ Kurzform im weiteren Text: **Branch-Eintrag** für den einen Zeiteintrag eines B
 ### Umschalter pro Branch
 
 Die Tabelle oben ist die **Voreinstellung**, nicht das Gesetz. Für jeden Branch lässt sich der
-Modus umschalten – `pro Branch` oder `pro Commit`. Auf dem Hauptbranch steht er fest auf
-`pro Commit` und ist deaktiviert: dort gibt es keine Klammer, die einen wachsenden Eintrag
-rechtfertigen würde.
+Modus umschalten – `pro Branch`, `pro Branch und Tag` oder `pro Commit`; in der CLI heisst der
+mittlere `tag`. Auf dem Hauptbranch steht er fest auf `pro Commit` und ist deaktiviert: dort gibt
+es keine Klammer, die einen wachsenden Eintrag rechtfertigen würde.
 
 Gebraucht wird das, wenn ein Branch ausnahmsweise nicht als eine Rechnungszeile taugt – etwa
 weil auf ihm mehrere unabhängige Kleinigkeiten liegen, die der Kunde einzeln sehen soll.
@@ -173,7 +172,9 @@ Tagesmodus; sonst tragen beide Hälften dieselbe Eintrags-Kennung.
   ist.
 - `date` wird bei **jedem** Schreibzugriff auf **heute** gesetzt. Das Datum benennt damit die
   **Fertigstellung**, nicht den Beginn. Ein Zeiteintrag darf sich über mehrere Tage erstrecken;
-  kein Sonderfall um Mitternacht, kein automatisches Schliessen bei Tageswechsel.
+  kein Sonderfall um Mitternacht, kein automatisches Schliessen bei Tageswechsel. Die eine
+  Ausnahme ist der Modus *pro Branch und Tag*: Dort trägt der Eintrag seinen Tag (`day`), der
+  Versand schreibt ihn als `date`, und Mitternacht ist die Grenze zum nächsten Eintrag.
 - **„Heute" ist die lokale Zeit des schreibenden Rechners**, nicht UTC. Der Arbeitstag ist
   durch die eigene Uhr definiert, nicht durch einen Meridian. Eine Umrechnung findet ohnehin
   nicht statt: `date` ist in der API ein reines Datum ohne Zeitanteil. Die einzige Frage ist,
@@ -249,7 +250,6 @@ Fakturieren zu prüfen. Der Text ist in ProSonata jederzeit nachbearbeitbar.
 | Fall | Wirkung |
 |---|---|
 | **Commit auf einem Branch** | Das laufende Segment wird geschnitten, seine Zeit fliesst in den Branch-Eintrag. Der bleibt **offen**. Ein Trailer ersetzt seinen Text. |
-| **Erster Commit auf einem neuen Branch** | Zusätzlich: Rückfrage nach der Bezeichnung, falls kein Trailer vorliegt. |
 | **Commit auf dem Hauptbranch** | Das Segment wird geschnitten, seine Zeit wird als eigener Zeiteintrag **abgeschlossen**. `detail` = Trailer, sonst Subject. |
 | **Commit ohne laufenden Timer** | Keine Zeit zu buchen. Hinweis mit Angebot, die Zeit seit dem letzten Commit nachzutragen. *(Angebot noch nicht gebaut; der Hook meldet nur, dass nichts gebucht wurde.)* |
 
@@ -312,9 +312,33 @@ und in ihr steht eine falsche Zeile. Bearbeiten wäre trotzdem falsch:
 - Der auf einem anderen Rechner gemessene Anteil liegt gar nicht hier und wäre von hier aus
   ohnehin nicht zu berichtigen.
 
-Wer einen bereits gesendeten Eintrag korrigieren muss, tut das in ProSonata. Was hier korrigiert
-werden kann, ist das laufende Segment – über die Zeitkorrektur (Abschnitt 3, *Zeitwert und
-Datum*).
+Was hier korrigiert werden kann, ist das laufende Segment – über die Zeitkorrektur (unten, *Zeit
+vor- und zurückdrehen*). Ein bereits **gesendeter** Eintrag wird nicht über das Protokoll
+berichtigt, sondern als das, was er ist: ein Datensatz in ProSonata (nächster Unterabschnitt).
+
+### Zeiteinträge durchsehen und berichtigen
+
+Die Zeiteinträge des aktuellen Repositories lassen sich aus dem Editor **durchsehen**: eine
+QuickPick-Liste aus ProSonata, mehrfach wählbar, mit drei Handlungen – **Text und Stunden
+ändern**, **zusammenlegen**, **löschen**. Nur das aktuelle Repository, denn die Frage, die dazu führt, lautet
+immer „was habe ich hier gebucht", nie „was steht in allen Projekten".
+
+- **Zusammenlegen ist eine Aussage über die Arbeit**: Wer im Nachhinein drei Einträge zu einem
+  macht, sagt damit, das sei in einem Rutsch entstanden – und ein Rutsch wird **einmal** gerundet,
+  nicht dreimal. *Gerundet wird eine Arbeit, nicht ein Datensatz.* Der Vorschlag für die Stunden
+  kommt deshalb aus den Segmenten, sobald sie die Einträge abdecken, einmal auf das Raster
+  gerundet; decken sie nicht, ist die Summe aus ProSonata die Vorbelegung, mit dem Hinweis, warum.
+  Die überzähligen Einträge werden per `DELETE` entfernt, nachdem die Summe sicher auf dem
+  bleibenden steht – dieselbe Reihenfolge wie beim Zuschlagen.
+- **Fakturierte Einträge** bleiben unberührt, auch beim Löschen einer Auswahl, die sie enthält:
+  Sie gehören der Rechnung, nicht dem Werkzeug.
+- **Das Protokoll wird nicht nachgezogen.** Es bleibt das Archiv der Messung; berichtigt wird die
+  Abrechnung. Dass beide danach verschieden sind, ist kein Widerspruch, sondern der Grund, warum
+  es zwei Ebenen gibt (Abschnitt 2).
+
+Die Liste selbst ist eine native QuickPick, kein Webview – aus demselben Grund wie alle
+Auswahlen in Abschnitt 8. Gebraucht wird Mehrfachauswahl und ein Knopf je Zeile, und beides hat
+die QuickPick.
 
 ### Das Zeitraster
 
@@ -453,8 +477,8 @@ das:
    Rechnung, die „Buchungsmodul: A 8 h, B 4 h" ausweist.
 2. **Summieren.** Die absolute Summe ist rechnergebunden und darf nicht mehr unbesehen
    geschrieben werden – der Bürorechner würde sonst am nächsten Tag die zu Hause gearbeiteten
-   Stunden überschreiben. Jeder Rechner merkt sich deshalb den **fremden Anteil** und schreibt
-   `fremd + eigen`. Gelesen wird im GET, der wegen `isInvoiced` ohnehin vor jedem PUT fällig
+   Stunden überschreiben. Jeder Rechner merkt sich deshalb den **fremden Anteil**
+   (`foreignSeconds`, Abschnitt 7) und schreibt `fremd + eigen`. Gelesen wird im GET, der wegen `isInvoiced` ohnehin vor jedem PUT fällig
    ist. Der geschriebene Wert hängt nicht vom gelesenen ab und bleibt damit idempotent.
 
 Woher ein Rechner den fremden Anteil **kennt**, beantwortet `lastWritten` – die Summe, die er
@@ -467,7 +491,7 @@ Zuhause kennt den Eintrag nicht        → sync: fremd 3:00, eigen 0:00
 Zuhause misst 1:00 → liest 3.00        3:00 − 3:00 = 0 → fremd bleibt
                     → schreibt 4.00    lastWritten 4:00
 Büro    misst 0:30 → liest 4.00        4:00 − 3:00 = 1:00 → fremd 1:00
-                    → schreibt 4.30    (fremd 1:00 + eigen 3:30)
+                    → schreibt 4.50    (fremd 1:00 + eigen 3:30 = 4:30 h)
 ```
 
 Ohne `lastWritten` liesse sich „drüben gewachsen" nicht von „das haben wir selbst geschrieben"
@@ -591,36 +615,39 @@ Rein informierend. Gebucht wird nie automatisch.
   Frage: Ein gesperrter Bildschirm heisst nicht, dass niemand arbeitet. Was diese Lücke misst,
   ist genau das Gewünschte. Der eine Fall, den sie nicht sieht, ist der gesperrte Bildschirm
   auf einem wachen Rechner.
-- **Zeit vor- und zurückdrehen.** Zwei Alltagsfehler, einer je Richtung: Der Timer lief durch
-  ein Telefonat, oder er lief nie, obwohl gearbeitet wurde. Beides erinnert ein Mensch als
-  **Uhrzeit** („um 9:40 klingelte das Telefon"), nicht als Differenz – deshalb wirken Anker
-  absolut. `bis 9:40` bucht das laufende Segment bis dahin und **hält an**; nur so stimmen im
-  Segmentprotokoll auch die Uhrzeiten, während ein verschobener Beginn die Dauer erhielte und
-  den Zeitpunkt erfände. `ab 9:40` verschiebt den **Beginn** des
-  laufenden Segments dorthin, sodass eine durchgehende Messung entsteht statt einer Messung
-  plus Nachtrag.
-
-  **Uhrzeiten setzen einen laufenden Timer voraus.** Sie ändern das laufende Segment; steht
-  der Timer, gibt es keines, auf das sie zeigen könnten. Ein fertiges Segment wird nicht
-  umgeschrieben – das Protokoll ist ein Archiv, und „alles nach 17:15 zählt nicht" sagt nicht,
-  welche der gebuchten Spannen schrumpfen soll. Was bleibt, ist das Nachtragen einer **Dauer**;
-  sie ist keine Messung und trägt deshalb im Protokoll keine Anfangszeit.
-
-  **Die Grenze ist das Ende des letzten Segments.** Ein abgeschlossenes Segment ist eine
-  Aussage: Bis hierhin ist alles richtig erfasst. Deshalb darf kein Anker dahinter greifen –
-  und deshalb braucht es auch keine Suche nach Lücken: Zwischen jenem Ende und jetzt liegt
-  nichts Gemessenes ausser dem laufenden Segment selbst. Wird ein Wunsch dadurch gekürzt,
-  sagt es die Zeile, bevor sie angeklickt wird. Gerechnet wird beides in einer reinen Funktion, die
-  beide Frontends zweimal brauchen: einmal, um die Wirkung zu zeigen, einmal, um sie zu tun.
 - **Beim Schliessen des letzten VS-Code-Fensters wird pausiert** (abschaltbar über
   `pauseOnWindowClose`). Anhalten ist die vorsichtige Richtung; ein Timer, der das Schliessen
   des Editors überlebt, ist der klassische Weg, eine Nacht zu verbuchen. Starten bleibt
   dagegen eine Entscheidung, die niemand für dich trifft.
-- **Timer läuft ungewöhnlich lange ohne Commit** – Pause vergessen? Verhindert, dass das
-  Mittagessen auf der Kundenrechnung landet.
 - **Commit ohne laufenden Timer** – Start vergessen? Mit Angebot, die Zeit seit dem letzten
   Commit nachzutragen. Das ist der teurere der beiden Fehler, weil die Zeit sonst
   unwiederbringlich verloren ist.
+
+### Zeit vor- und zurückdrehen
+
+Keine Warnung, sondern die Handlung, zu der eine Warnung führt. Zwei Alltagsfehler, einer je
+Richtung: Der Timer lief durch ein Telefonat, oder er lief nie, obwohl gearbeitet wurde. Beides
+erinnert ein Mensch als **Uhrzeit** („um 9:40 klingelte das Telefon"), nicht als Differenz –
+deshalb wirken Anker absolut. `bis 9:40` bucht das laufende Segment bis dahin und **hält an**; nur
+so stimmen im Segmentprotokoll auch die Uhrzeiten, während ein verschobener Beginn die Dauer
+erhielte und den Zeitpunkt erfände. `ab 9:40` verschiebt den **Beginn** des laufenden Segments
+dorthin, sodass eine durchgehende Messung entsteht statt einer Messung plus Nachtrag.
+
+**Uhrzeiten setzen einen laufenden Timer voraus.** Sie ändern das laufende Segment; steht der
+Timer, gibt es keines, auf das sie zeigen könnten. Ein fertiges Segment wird nicht umgeschrieben –
+das Protokoll ist ein Archiv, und „alles nach 17:15 zählt nicht" sagt nicht, welche der gebuchten
+Spannen schrumpfen soll. Was bleibt, ist das Nachtragen einer **Dauer**; sie ist keine Messung und
+trägt deshalb im Protokoll keine Anfangszeit.
+
+**Die Grenze ist das Ende des letzten Segments.** Ein abgeschlossenes Segment ist eine Aussage:
+Bis hierhin ist alles richtig erfasst. Deshalb darf kein Anker dahinter greifen – und deshalb
+braucht es auch keine Suche nach Lücken: Zwischen jenem Ende und jetzt liegt nichts Gemessenes
+ausser dem laufenden Segment selbst. Wird ein Wunsch dadurch gekürzt, sagt es die Zeile, bevor sie
+angeklickt wird. Gerechnet wird beides in einer reinen Funktion, die beide Frontends zweimal
+brauchen: einmal, um die Wirkung zu zeigen, einmal, um sie zu tun.
+
+Antwortet jemand auf die Frage nach dem lange laufenden Segment mit einer **Dauer**, bleibt davon
+der **Anfang**: Gearbeitet wurde, als der Timer gestartet wurde; vergessen wurde das Anhalten.
 
 ### Zurückgerollte Commits
 
@@ -875,6 +902,26 @@ Zwei Regeln folgen daraus, und beide sind verbindlich für jeden Code, der schre
 Sie läuft von selbst ab, ein abgestürzter Prozess hinterlässt keine Leiche. Und sie hält einen
 einzelnen Eintrag auf, nicht alle.
 
+```mermaid
+sequenceDiagram
+    participant E as Extension
+    participant S as state.json (CAS)
+    participant H as post-commit-Hook
+    participant P as ProSonata
+    E->>S: Anspruch: creating = jetzt
+    S-->>E: eingetragen
+    H->>S: Anspruch?
+    S-->>H: fremder, frischer Anspruch → diese Runde überspringen
+    E->>P: POST /projecttimes
+    P-->>E: timeID 2304
+    E->>S: zusammenführen: timeId übernehmen, Zähler als Differenz, creating löschen
+    Note over H: nächste Runde: timeId vorhanden → PUT, kein zweiter POST
+```
+
+Was das Bild zeigt und der Text davor nur sagt: Der CAS sichert den letzten Pfeil. Ohne den
+Anspruch wären die beiden POSTs nebeneinander gelaufen, und der CAS hätte den zweiten Zustand
+gewissenhaft über den ersten geschrieben – mit zwei `timeID` in ProSonata und einer im Zustand.
+
 ### Journal
 
 **`log.jsonl` ist append-only**, damit dort gar keine konkurrierenden Updates entstehen.
@@ -975,7 +1022,9 @@ seconds         eigene Summe auf diesem Rechner
 foreignSeconds  Anteil anderer Rechner, aus dem letzten GET abgeleitet
 lastWritten     zuletzt geschriebener Gesamtwert – daran erkennt der
                 Rechner, dass ein anderer dazugeschrieben hat
-timeID          ProSonata-ID, null vor dem ersten POST
+timeId          ProSonata-ID (`timeID` der API), null vor dem ersten POST
+creating        Zeitstempel des Anspruchs vor dem POST, sonst fehlend (oben)
+day             nur im Modus pro Branch und Tag: der Tag, den der Eintrag abrechnet
 state           "open" | "closed"
 awaitingDecision  gesetzt, wenn ein anderer Rechner den Eintrag abgeschlossen
                   hat: nichts wird geschrieben, bis jemand antwortet
@@ -1112,7 +1161,7 @@ Aufgeteilt in Module, seit die Einstiegsdatei über tausend Zeilen trug: `view.t
 Fensterzustand und die Handvoll Zugriffe, die alle brauchen — `currentSession`, `currentContext`,
 `reload`. Daneben liegen `setup.ts` (Konto, Projekt, Kategorie, Raster), `entries.ts` (was mit
 einem Zeiteintrag geschehen kann), `adjust-ui.ts` (Zeitkorrektur), `watch.ts` (die Takte und was
-sie beobachten), `log-view.ts` und `panel.ts`. `index.ts` bleibt die Anmeldung: Befehle
+sie beobachten), `browse.ts` (Zeiteinträge durchsehen), `log-view.ts` und `panel.ts`. `index.ts` bleibt die Anmeldung: Befehle
 registrieren, Zeitgeber starten, sonst nichts.
 
 **Die Abhängigkeit läuft in eine Richtung.** Nichts in `view.ts` importiert einen Befehl, sonst
@@ -1133,11 +1182,11 @@ das gewesen.
     Kategorie      Programmierung
     Läuft          0:42:13 · 3:48:02 · Buchungsmodul
     Offen          Rabattstufen         seit 6 Tagen
+  ```
 
   Die Timer-Zeile nennt **beide** Zahlen: zuerst das laufende Segment, dann die Summe des
   Branches. Sie beantworten Verschiedenes – „wie lange sitze ich an diesem Stück" und „was
   wird abgerechnet" –, und nur die erste macht einen vergessenen Timer sichtbar.
-  ```
 
   Klick auf eine Zeile öffnet den passenden QuickPick – Projekt wechseln, Zeitraster setzen,
   Kategorie und Modus umschalten, Zeiteintrag abschliessen. Auf dem Hauptbranch ist die Zeile
@@ -1161,9 +1210,14 @@ das gewesen.
   die eigenen (`userID=myself`), zuunterst alle übrigen. Gezeigt werden nur **offene, aktive**
   Projekte ohne Vorlagen – `projectStatus=0&activeStatus=1`. Ohne diesen Filter stünden nach
   ein paar Jahren abgeschlossene Projekte und Vorlagen in der Liste.
-- Die **Kategorienwahl liegt am Timer** und zeigt den zuletzt benutzten Wert. Ihre Liste hängt
-  am Projekt und wird pro Projekt gecacht; ein Command aktualisiert Projekte und Kategorien.
-- Statusleiste mit `setInterval` (30 s), clientseitig aus `startedAt` hochgezählt.
+- Die **Kategorienwahl liegt am Timer** und zeigt den zuletzt benutzten Wert. Die Liste ist
+  global (Abschnitt 9) und wird bei jeder Wahl geholt, solange `cache.json` nicht gebaut ist
+  (Abschnitt 6).
+- Drei Takte: **jede Sekunde** Statusleiste und Panel aus `startedAt` hochzählen und dabei auf
+  die Lücke achten, die einen schlafenden Rechner verrät (Abschnitt 3); **alle 30 s** HEAD prüfen,
+  Fälliges senden, warnen; **stündlich** `git fetch --prune`, solange ein Branch-Eintrag offen
+  ist. Der Sekundentakt kostet gemessen unter einer Mikrosekunde, solange er nichts zu zeichnen
+  hat.
 - `FileSystemWatcher` auf `state.json`: schreibt der Hook, aktualisieren sich alle offenen
   Fenster sofort – ohne API-Call. Deckt Commits aus Terminal und Claude Code ab.
   Zwei Fallstricke: Die Datei liegt **ausserhalb des Workspace**, der Watcher braucht deshalb
@@ -1303,7 +1357,8 @@ liegen in [bruno/](bruno/).
   warnen und den Text unverändert lassen. Auf eine Ablehnung durch die API ist kein Verlass –
   ein abgeschnittener Satz auf einer Kundenrechnung entstünde sonst unbemerkt. Die
   anzunehmende Grenze bleibt konfigurierbar, für Konten mit anderen Zusagen.
-  Der Marker verbraucht davon 15 Zeichen, mit der Zeitklammer 29, nach dem Abschluss 8.
+  Der Marker verbraucht davon 16 Zeichen, mit der Zeitklammer 30, nach dem Abschluss 8 –
+  jeweils plus das Leerzeichen vor dem Text.
 - `timeViaApi` markiert per API erzeugte Einträge (nur lesend) – **kein** Statusfeld für
   „offen/fertig" vorhanden. Deshalb der Marker im Text.
 - Rechte: Benutzer bis Stufe »Zeiterfasser 1« sehen und bearbeiten **nur ihre eigenen**
@@ -1571,7 +1626,9 @@ Nicht erneut vorschlagen:
 ## 13. Stand der Umsetzung
 
 Gebaut sind die Punkte 1 bis 9 der Reihenfolge unten, dazu Zeitkorrektur, Verwerfen,
-Zuschlagen, Segmentprotokoll samt Bericht und der Abgleich über mehrere Rechner.
+Zuschlagen, Segmentprotokoll samt Bericht, der Abgleich über mehrere Rechner, der Modus *pro
+Branch und Tag*, die Schlaferkennung, das Durchsehen und Berichtigen der Zeiteinträge und der
+Anspruch vor dem Anlegen (Abschnitt 7).
 
 **Noch nicht gebaut** – jeweils an Ort und Stelle gekennzeichnet:
 

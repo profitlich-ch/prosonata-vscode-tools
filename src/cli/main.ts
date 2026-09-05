@@ -6,6 +6,7 @@ import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../co
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
+import type { EntryMode } from '../core/types.js'
 import { noteFor, readAdjustment } from '../core/adjust.js'
 import { describeAttachment, describePlan } from '../core/attach.js'
 import { describeRunningElsewhere } from '../core/sync.js'
@@ -45,7 +46,7 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata project                 Projekt dieses Repositories wählen
   prosonata category                Zeitkategorie dieses Projekts wählen
   prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
-  prosonata mode [branch|commit]    ein Eintrag pro Branch oder pro Commit
+  prosonata mode [branch|tag|commit] ein Eintrag pro Branch, pro Branch und Tag, oder pro Commit
   prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
   prosonata text <Text>             Text des offenen Zeiteintrags ändern
   prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
@@ -261,16 +262,24 @@ async function chooseMode(cwd: string, argument: string): Promise<number> {
     return 1
   }
 
-  const wanted = argument !== '' ? argument : await ask('Modus — branch oder commit: ')
-  if (wanted !== 'branch' && wanted !== 'commit') {
-    process.stderr.write(`kein Modus: ${wanted} — nimm "branch" oder "commit"\n`)
+  // `tag` on the command line, `branch-day` in the config: the German word is
+  // what a person types, the config key is what the extension already writes.
+  const names: Record<string, EntryMode> = { branch: 'branch', tag: 'branch-day', 'branch-day': 'branch-day', commit: 'commit' }
+  const labels: Record<EntryMode, string> = { branch: 'Branch', 'branch-day': 'Branch und Tag', commit: 'Commit' }
+
+  const typed = argument !== '' ? argument : await ask('Modus — branch, tag oder commit: ')
+  const wanted = names[typed]
+  if (wanted === undefined) {
+    process.stderr.write(`kein Modus: ${typed} — nimm "branch", "tag" oder "commit"\n`)
     return 2
   }
   if (wanted === context.mode) {
-    process.stdout.write(`bereits ein Eintrag pro ${wanted === 'branch' ? 'Branch' : 'Commit'}\n`)
+    process.stdout.write(`bereits ein Eintrag pro ${labels[wanted]}\n`)
     return 0
   }
 
+  // Switching to per-commit closes the open entry — otherwise it would hang
+  // there with no prospect of ever being closed (KONZEPT.md §3).
   if (wanted === 'commit') {
     const entry = openEntry(session.state(), context.scope)
     if (entry && entry.text !== '') {
@@ -280,7 +289,7 @@ async function chooseMode(cwd: string, argument: string): Promise<number> {
   }
 
   setMode(context.repo.root, context.key, wanted)
-  process.stdout.write(`ein Eintrag pro ${wanted === 'branch' ? 'Branch' : 'Commit'} auf ${context.scope.branch}\n`)
+  process.stdout.write(`ein Eintrag pro ${labels[wanted]} auf ${context.scope.branch}\n`)
   return 0
 }
 

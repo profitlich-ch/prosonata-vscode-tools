@@ -6,6 +6,25 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **`prosonata mode tag`.** Die CLI kann den Modus „pro Branch und Tag" setzen;
+  bisher konnte das nur die Extension.
+
+### Geändert
+
+- **README zeichnet die Mechanik.** Drei Mermaid-Diagramme: was ein Commit je
+  Modus auslöst, wie zwei Rechner denselben Eintrag ergänzen, und was mit einem
+  Timer geschieht, der über Nacht lief. Dabei nachgezogen, was der README noch
+  fehlte: der Modus „pro Branch und Tag", die Schlaferkennung, das Durchsehen
+  der Zeiteinträge und der Befehl „Einstellungen öffnen".
+- **KONZEPT ohne Widersprüche.** Ältere Absätze, die vom Tagesmodus, vom
+  Durchsehen der Zeiteinträge und vom Anspruch vor dem Anlegen nichts wussten,
+  sagen nicht mehr das Gegenteil: `date` um Mitternacht, die verworfene
+  Rückfrage beim ersten Commit, der nie gebaute Kategorien-Cache, die doppelte
+  Sechs-Stunden-Warnung, die Markerlänge und das Rechenbeispiel mit „4.30". Die
+  Zeitkorrektur steht als eigener Unterabschnitt, nicht mehr unter „Warnungen".
+
 ## [0.14.0] — 2026-09-05
 
 ### Hinzugefügt
