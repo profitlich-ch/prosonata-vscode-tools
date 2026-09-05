@@ -101,6 +101,12 @@ weil auf ihm mehrere unabhängige Kleinigkeiten liegen, die der Kunde einzeln se
   Abschluss. Umgekehrt beginnt der nächste Commit einen neuen Branch-Eintrag.
 - Der Umschalter steht im Panel (Abschnitt 8), wo auch der aktuelle Branch sichtbar ist.
 
+Ein **dritter Modus** ist entworfen, aber nicht gebaut: `pro Branch und Tag` schneidet einen
+Branch-Eintrag, der über mehrere Tage wächst, an jeder Mitternacht. Er beantwortet, was `date`
+heute falsch beantwortet – ein dreiwöchiger Eintrag trägt seine ganzen Stunden auf dem Tag des
+letzten Schreibvorgangs. Ausgearbeitet samt Begründungen und offenen Punkten in
+[docs/tagesmodus.md](docs/tagesmodus.md).
+
 ### Zeitwert und Datum
 
 - `workingTime` ist die **absolute Summe in Dezimalstunden**, nicht die Differenz.
