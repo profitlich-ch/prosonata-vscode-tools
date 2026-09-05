@@ -561,14 +561,16 @@ Woher ein Rechner den fremden Anteil **kennt**, beantwortet `lastWritten` – di
 zuletzt selbst geschrieben hat. Steht drüben mehr, war jemand anders am Werk, und die Differenz
 ist dessen Anteil:
 
-```text
-Büro    misst 3:00 → schreibt 3.00     lastWritten 3:00, fremd 0:00, eigen 3:00
-Zuhause kennt den Eintrag nicht        → sync: fremd 3:00, eigen 0:00
-Zuhause misst 1:00 → liest 3.00        3:00 − 3:00 = 0 → fremd bleibt
-                    → schreibt 4.00    lastWritten 4:00
-Büro    misst 0:30 → liest 4.00        4:00 − 3:00 = 1:00 → fremd 1:00
-                    → schreibt 4.50    (fremd 1:00 + eigen 3:30 = 4:30 h)
-```
+| Rechner | misst | liest | folgert daraus | fremd + eigen | schreibt |
+|---|---|---|---|---|---|
+| Büro | 3:00 | – | nichts liegt vor | 0:00 + 3:00 | **3.00** |
+| Zuhause | – | 3.00 | kennt den Eintrag nicht: alles darin ist fremd | 3:00 + 0:00 | – |
+| Zuhause | 1:00 | 3.00 | genau sein eigenes `lastWritten` – niemand war da | 3:00 + 1:00 | **4.00** |
+| Büro | 0:30 | 4.00 | 1:00 mehr als sein `lastWritten` von 3:00 | 1:00 + 3:30 | **4.50** |
+
+Die Zähler stehen als Stunden und Minuten, der geschriebene Wert als Dezimalstunde, wie die API
+ihn verlangt: `4.50` sind 4:30 h. Die vorletzte Spalte ist zugleich die Rechnung – geschrieben
+wird immer ihre Summe, nie das Gelesene.
 
 Ohne `lastWritten` liesse sich „drüben gewachsen" nicht von „das haben wir selbst geschrieben"
 unterscheiden. Und **schlicht lesen, addieren, schreiben** wäre keine Lösung: Das ist ein
