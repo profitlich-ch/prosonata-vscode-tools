@@ -6,6 +6,25 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Das Zusammenlegen rechnete aus einem Bruchteil hoch.** Zwei Einträge mit
+  zusammen 13:34 wurden mit 0:01 vorgeschlagen, weil das Segmentprotokoll nur
+  22 Sekunden davon kannte. Die Regel von gestern verlangte nur, dass das
+  Protokoll den Eintrag überhaupt kennt — jetzt muss die gemessene Summe die
+  gebuchte auch erklären können. Trennen darf die beiden nur die Rundung, und
+  die macht höchstens einen Rasterschritt je Eintrag aus. Reicht es nicht, wird
+  die Summe aus ProSonata vorgeschlagen, wie bei Zeit von einem anderen Rechner.
+
+  Betroffen war jeder Eintrag vom 4. und 5. September: An diesen Tagen hat ein
+  Fehler das Protokoll in Dreissig-Sekunden-Schnipsel zerlegt (behoben in
+  0.14.0). Die Zeiten in ProSonata stimmen, das Protokoll ist für jene Tage
+  nicht wiederherstellbar.
+- **Misst das Protokoll mehr, als ProSonata hält, wird ebenfalls nicht
+  zurückgerechnet.** Dann hat jemand den Eintrag dort von Hand verkleinert, und
+  eine Rückrechnung machte diese Korrektur still rückgängig und erhöhte die
+  Rechnung.
+
 ## [0.17.0] — 2026-09-06
 
 ### Geändert

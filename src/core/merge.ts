@@ -1,6 +1,6 @@
 import type { RemoteEntry } from './api.js'
 import type { Segment } from './segments.js'
-import { hoursToSeconds, toHours, type TimeGrid } from './working-time.js'
+import { gridStep, hoursToSeconds, toHours, type TimeGrid } from './working-time.js'
 
 /**
  * Putting several time entries back into one (KONZEPT.md §3).
@@ -78,13 +78,27 @@ export function planMerge(entries: RemoteEntry[], measured: Map<number, number>,
   const addedSeconds = usable.reduce((sum, entry) => sum + Math.round(entry.hours * 3600), 0)
 
   /*
-   * Recomputing is only allowed when the log holds measured time for **every**
-   * entry; otherwise the result is not an honest rounding but an incomplete sum.
-   * Present with zero is not coverage: whatever the log knows about that entry,
-   * it is not where its hours came from.
+   * Recomputing has to be earned, and two things earn it.
+   *
+   * Every entry must appear with time of its own — present with zero is not
+   * coverage, whatever else the log knows about it.
+   *
+   * And the measured total must be able to explain the booked one. Rounding is
+   * the only thing that may separate them, and it can add at most one step per
+   * entry; anything beyond that means the hours came from somewhere this log
+   * never saw. That happens for real: a share measured on another machine, an
+   * entry older than the log — and, at this account, the days on which a fault
+   * cut the log into thirty-second scraps. In every one of those cases the
+   * honest number is what ProSonata holds, not a recomputation from a fraction.
+   *
+   * The distance is checked in **both** directions. Measuring more than
+   * ProSonata holds means somebody lowered the entry there by hand, and a
+   * recomputation would quietly undo that correction and raise the invoice.
    */
-  const covered = usable.every((entry) => (measured.get(entry.timeID) ?? 0) > 0)
   const rawSeconds = usable.reduce((sum, entry) => sum + (measured.get(entry.timeID) ?? 0), 0)
+  const everyEntryKnown = usable.every((entry) => (measured.get(entry.timeID) ?? 0) > 0)
+  const explainsTheHours = Math.abs(rawSeconds - addedSeconds) <= usable.length * gridStep(grid)
+  const covered = everyEntryKnown && explainsTheHours
 
   return {
     keep,

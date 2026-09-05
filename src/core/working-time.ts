@@ -71,3 +71,12 @@ export function parseHours(value: string): number | null {
 
   return null
 }
+
+/**
+ * One step of the grid in seconds: what a single entry can gain by rounding.
+ *
+ * The exact grid holds hundredths of an hour, so its step is 36 seconds.
+ */
+export function gridStep(grid: TimeGrid): number {
+  return grid.kind === 'exact' ? 36 : grid.minutes * 60
+}

@@ -199,6 +199,54 @@ describe('what counts as measured', () => {
     expect(planMerge([remote(1, 0.17), remote(2, 0.11)], measured, EXACT)!.recomputedSeconds).toBeNull()
   })
 
+  /*
+   * The case that reached the screen a second time: two entries booked 9:53 and
+   * 3:41, but the log held sixteen and six seconds of them — the days on which a
+   * fault cut it into scraps. Both entries were «known», so the recomputation
+   * went ahead and proposed 0:01 for a quarter of an hour of work.
+   */
+  it('refuses to recompute when the log cannot explain the booked hours', () => {
+    const measured = measuredPerEntry(
+      [segment('e1', 16, 'commit'), segment('e2', 6, 'commit')],
+      new Map([['e1', 2482], ['e2', 2483]]),
+    )
+
+    const plan = planMerge([remote(2482, 0.16), remote(2483, 0.06)], measured, EXACT)!
+
+    expect(plan.recomputedSeconds).toBeNull()
+    expect(plan.addedSeconds).toBe(792)
+  })
+
+  /*
+   * Rounding may separate the two, and it can add at most one step per entry —
+   * that much distance has to stay allowed, or the whole point of merging is
+   * gone. Twice twenty minutes cost half an hour each on a quarter-hour grid;
+   * as one piece of work the same time is three quarters.
+   */
+  it('still recomputes when only the rounding separates log and ProSonata', () => {
+    const measured = measuredPerEntry(
+      [segment('e1', 1200, 'pause'), segment('e2', 1200, 'pause')],
+      new Map([['e1', 1], ['e2', 2]]),
+    )
+
+    const plan = planMerge([remote(1, 0.5), remote(2, 0.5)], measured, quarter)!
+
+    expect(plan.addedSeconds).toBe(3600)
+    expect(plan.recomputedSeconds).toBe(2700)
+  })
+
+  // Somebody lowered the entry in ProSonata; recomputing would undo that.
+  it('refuses to recompute when the log holds more than ProSonata does', () => {
+    const measured = measuredPerEntry(
+      [segment('e1', 3600, 'pause'), segment('e2', 3600, 'pause')],
+      new Map([['e1', 1], ['e2', 2]]),
+    )
+
+    const plan = planMerge([remote(1, 0.25), remote(2, 0.25)], measured, EXACT)!
+
+    expect(plan.recomputedSeconds).toBeNull()
+  })
+
   it('proposes the ProSonata sum when an entry has no measured time here', () => {
     const entries = [remote(1, 0.11), remote(2, 0.11)]
     // The log knows both entries, but only as closing lines.
