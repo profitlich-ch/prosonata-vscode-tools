@@ -13,6 +13,11 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ### Geändert
 
+- **Die Erweiterung heisst in VS Code jetzt „ProSonata Tools", Herausgeber
+  „Profitlich".** Bisher stand dort „:Profitlich" als Name — die Liste der
+  Erweiterungen zeigt gross den Namen und darunter den Herausgeber, und so
+  stand der Herausgeber an beiden Stellen, während nirgends stand, wofür das
+  Werkzeug da ist.
 - **README zeichnet die Mechanik.** Drei Mermaid-Diagramme: was ein Commit je
   Modus auslöst, wie zwei Rechner denselben Eintrag ergänzen, und was mit einem
   Timer geschieht, der über Nacht lief. Dabei nachgezogen, was der README noch

@@ -1,9 +1,9 @@
 {
   "name": "prosonata-vscode-tools",
-  "displayName": ":Profitlich",
-  "description": "Verbindet VS Code mit ProSonata. Vorerst: Zeiterfassung, gebunden an Commits und Branches.",
+  "displayName": "ProSonata Tools",
+  "description": "Verbindet VS Code mit ProSonata. Zeiterfassung, gebunden an Commits und Branches.",
   "version": "0.14.0",
-  "publisher": "profitlich",
+  "publisher": "Profitlich",
   "repository": {
     "type": "git",
     "url": "https://github.com/profitlich-ch/prosonata-vscode-tools.git"

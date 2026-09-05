@@ -1476,10 +1476,40 @@ Zwei Dinge gelten deshalb **unabhängig** von einer Veröffentlichung, allein we
 ProSonata bietet in der API-Dokumentation an, Anbindungen auf der Website zu listen und in den
 News zu erwähnen. Das setzt eine Veröffentlichung voraus und ist deshalb offen.
 
-**Was fehlt, falls doch veröffentlicht wird:** ein Publisher bei Azure DevOps – der Name in
-`package.json` ist bis dahin ein Platzhalter und muss dem registrierten entsprechen. Und ein
-Hinweis, dass dies **kein offizielles ProSonata-Produkt** ist; das Repo trägt aus demselben
-Grund weder deren Namen noch deren Logo.
+### Name, Kennung, Anzeigename
+
+Drei Dinge, die leicht verwechselt werden, und nur eines davon ist Identität:
+
+| Was | Woher | Beispiel |
+|---|---|---|
+| **Kennung** der Extension | `publisher` + `name` aus der `package.json`, von VS Code **kleingeschrieben** | `profitlich.prosonata-vscode-tools` |
+| **Anzeigename** der Extension | `displayName` | ProSonata Tools |
+| **Anzeigename des Herausgebers** | Marketplace-Konto, **nicht** die `package.json` | Profitlich |
+
+**Am eigenen Rechner gemessen:** `"publisher": "Anthropic"` liegt als
+`anthropic.claude-code` im Verzeichnis und in VS Codes Bestandsliste; ebenso `DavidAnson` als
+`davidanson.…`. Die Kennung ist also gegen Gross- und Kleinschreibung unempfindlich – eine
+geänderte Schreibweise legt **keine zweite Extension** an, sie aktualisiert dieselbe. Das ist
+hier keine Kosmetik: Zwei gleichzeitig laufende Fassungen hiessen zwei Panels, zwei Timer und
+zwei Schreiber auf `state.json`.
+
+Der **Anzeigename des Herausgebers** steht nirgends in der `package.json`. Bei einer
+veröffentlichten Extension liefert ihn der Marketplace – `formulahendry` erscheint deshalb als
+„Jun Han". Wer eine `.vsix` von Hand installiert, hat diese Angabe nicht: Dann zeigt VS Code die
+Kennung selbst, in der Schreibweise aus der `package.json`. **Genau darum wirkt `Profitlich`
+heute** – und darum wird es nach einer Veröffentlichung vom Namen des Marketplace-Kontos
+abgelöst.
+
+**Was fehlt, falls doch veröffentlicht wird:** ein Publisher bei Azure DevOps, registriert als
+`profitlich`, und dort der Anzeigename. Die Kennung ist ab der ersten Veröffentlichung
+unveränderlich – sie steht später als Schlüssel in `api-comments` (Abschnitt 12), wo als
+Teilstring gesucht wird; eine Umbenennung fände die alten Einträge nicht mehr.
+
+Der Name **trägt das fremde Produkt und soll es**: „ProSonata Tools" sagt, wofür das Werkzeug
+da ist, und der Publisher `Profitlich` sagt, dass es nicht von dort kommt – dasselbe Muster wie
+bei jeder Anbindung an ein fremdes System. Was deshalb dazugehört: der Hinweis, dass dies
+**kein offizielles ProSonata-Produkt** ist, und der Verzicht auf deren Logo und Farben. Die
+Verwechslung entstünde nicht durch den Namen, sondern durch die Aufmachung.
 
 ---
 
@@ -1541,12 +1571,19 @@ Nicht erneut vorschlagen:
    ```
 
    - **Der äussere Schlüssel ist die Kennung der Extension** – `publisher.name` aus der
-     `package.json`. Nicht der GitHub-Pfad: Der benennt den Ort, an dem der Code heute liegt,
-     und das ist die unbeständigste Eigenschaft überhaupt – eine Umbenennung oder ein Umzug
-     machte die Kennung falsch, während sie in tausend Zeiteinträgen steht. Die
-     Extension-Kennung dagegen ist im Marketplace registriert und steht ohnehin schon in der
-     `package.json`, kann also nicht auseinanderlaufen. Als **Schlüssel**, nicht als Wert,
-     damit mehrere Anbindungen dasselbe Feld nutzen können, ohne einander zu überschreiben.
+     `package.json`, **kleingeschrieben**. Nicht der GitHub-Pfad: Der benennt den Ort, an dem
+     der Code heute liegt, und das ist die unbeständigste Eigenschaft überhaupt – eine
+     Umbenennung oder ein Umzug machte die Kennung falsch, während sie in tausend Zeiteinträgen
+     steht. Die Extension-Kennung dagegen ist im Marketplace registriert und steht ohnehin schon
+     in der `package.json`, kann also nicht auseinanderlaufen. Als **Schlüssel**, nicht als
+     Wert, damit mehrere Anbindungen dasselbe Feld nutzen können, ohne einander zu
+     überschreiben.
+
+     **Kleingeschrieben, weil VS Code selbst so normalisiert** (Abschnitt 10): Aus dem Feld
+     `"publisher": "Profitlich"` wird dort die Kennung `profitlich.prosonata-vscode-tools`. Die
+     Schreibweise im Feld ist damit folgenlos – nur hier wäre sie es nicht, denn gesucht wird
+     als Teilstring, und der ist gross oder klein. Der Schlüssel muss deshalb an der Form
+     hängen, die VS Code erzwingt, nicht an der, die jemand in die `package.json` tippt.
    - `v` ist die Formatversion – ein Zeichen, das später erlaubt, das Format zu ändern, ohne
      alte Einträge falsch zu lesen.
    - `key` ist die Branch-Kennung, `running` der Beginn der laufenden Messung; beim Pausieren

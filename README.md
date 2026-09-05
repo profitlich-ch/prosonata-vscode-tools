@@ -1,4 +1,4 @@
-Prosonata Tools für Visual Studio Code
+ProSonata Tools für Visual Studio Code
 ===========
 
 Diese VS-Code-Erweiterung ermöglicht es, [ProSonata](https://www.prosonata.de)-Zeiteinträge direkt aus VS Code anzulegen, gebunden an Commits und Branches, per ProSonata-API. Statt in der SaaS-Oberfläche von ProSonata einen Timer zu starten und die Beschreibung von Hand einzutragen, startest du den Timer in VS Code, und die gemessene Zeit wird zu einem Zeiteintrag pro Branch — oder, umschaltbar, pro Branch und Tag oder pro Commit — mit einer Beschreibung, die aus dem Commit stammt.
