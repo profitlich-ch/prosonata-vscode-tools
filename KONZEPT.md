@@ -900,18 +900,17 @@ Begründung: Der `post-commit`-Hook läuft als eigener Prozess, oft ohne offenes
 `globalState` wäre für ihn unerreichbar. Ablage im Repo würde parallele Timer über mehrere
 Repos verstreuen und wäre beim Neu-Klonen weg.
 
-```
-~/.prosonata/
-  config.json      API-Key, Subdomain, globale Defaults   (Dateirechte 0600)
-  state.json       laufende Timer, offene Zeiteinträge,
-                   ausstehende Schreibzugriffe            (atomar, mit Version)
-  cli.cjs          die CLI, die jeder post-commit-Hook ruft   (fest, versionslos)
-  cli-version      welche Fassung das ist
-  log.jsonl        abgeschlossene Segmente,
-                   SHA-Annotationen           (append-only, gekürzt statt archiviert)
-  cache.json       Projekte, Kategorien                    (noch nicht gebaut)
-  segments.jsonl   jedes gemessene Segment, dauerhaft
-```
+Was dort liegt:
+
+| Datei | Inhalt | Wie sie geschrieben wird |
+|---|---|---|
+| `config.json` | API-Key, Subdomain, globale Vorgaben | Dateirechte 0600 |
+| `state.json` | laufende Timer, offene Zeiteinträge, ausstehende Schreibzugriffe | atomar, mit Versionszähler |
+| `cli.cjs` | die CLI, die jeder `post-commit`-Hook ruft | fester Ort ohne Versionsnummer, bei jedem Start aufgefrischt |
+| `cli-version` | welche Fassung dort liegt | zusammen mit ihr |
+| `log.jsonl` | abgeschlossene Segmente, SHA-Annotationen | nur anhängen, gekürzt statt archiviert |
+| `segments.jsonl` | jedes gemessene Segment | nur anhängen, dauerhaft |
+| `cache.json` | Projekte, Kategorien | *noch nicht gebaut* |
 
 ### Nebenläufigkeit: atomar genügt nicht
 
@@ -923,12 +922,12 @@ halb geschriebenes JSON liest; das Betriebssystem ersetzt die Datei in einem Zug
 
 **Es verhindert aber keinen verlorenen Schreibzugriff:**
 
-```
-22:14:03  Extension liest state.json   (Timer läuft, 0 s aufgelaufen)
-22:14:03  Hook liest state.json        (derselbe Stand)
-22:14:04  Hook schneidet Segment, schreibt  → 1800 s im Zeiteintrag
-22:14:04  Extension schreibt "pausiert"     → überschreibt die 1800 s
-```
+| Zeit | Extension | Hook | Was in der Datei steht |
+|---|---|---|---|
+| 22:14:03 | liest | | Timer läuft, 0 s aufgelaufen |
+| 22:14:03 | | liest denselben Stand | unverändert |
+| 22:14:04 | | schneidet das Segment, schreibt | **1800 s** im Zeiteintrag |
+| 22:14:04 | schreibt «pausiert» | | 0 s – die 1800 s sind überschrieben |
 
 Beide Schreibzugriffe waren für sich atomar, und trotzdem ist eine halbe Stunde weg –
 genau das, wogegen dieses Werkzeug gebaut wird.
@@ -1073,14 +1072,14 @@ Settings würden über Settings Sync in die Cloud wandern.
 
 Ein laufender Timer trägt:
 
-```
-id            lokale UUID (nicht auf eine ProSonata-ID warten)
-origin        "local" | "remote"      – heute konstant "local"
-remoteTimerId null                    – ungenutzt; eine Timer-API ist nicht vorgesehen
-repoPath, branch
-startedAt     Zeitstempel des laufenden Segments, null solange pausiert
-entryId       lokaler Zeiteintrag, in den die Zeit fliesst
-```
+| Feld | Bedeutung |
+|---|---|
+| `id` | lokale UUID – es wird nicht auf eine ProSonata-ID gewartet |
+| `origin` | `"local"` oder `"remote"`, heute konstant `"local"` |
+| `remoteTimerId` | ungenutzt; eine Timer-API ist nicht vorgesehen |
+| `repoPath`, `branch` | der Scope (Abschnitt 5) |
+| `startedAt` | Zeitstempel des laufenden Segments, `null` solange pausiert |
+| `entryId` | der lokale Zeiteintrag, in den die Zeit fliesst |
 
 Einen zweiten Zähler für bereits gemessene Sekunden gibt es **nicht**: Fertige Segmente gehen
 sofort in den Zeiteintrag, das laufende ist `startedAt` allein. Zwei Zähler könnten
@@ -1099,25 +1098,22 @@ Ereignis.
 
 Ein Zeiteintrag trägt:
 
-```
-id              lokale UUID
-projectId, categoryId
-repoPath, branch                      – auf dem Hauptbranch zusätzlich die SHA
-key             Kennung aus Root-Commit-SHA und Branchname
-text            Rechnungstext, vorläufig oder endgültig
-seconds         eigene Summe auf diesem Rechner
-foreignSeconds  Anteil anderer Rechner, aus dem letzten GET abgeleitet
-lastWritten     zuletzt geschriebener Gesamtwert – daran erkennt der
-                Rechner, dass ein anderer dazugeschrieben hat
-timeId          ProSonata-ID (`timeID` der API), null vor dem ersten POST
-creating        Zeitstempel des Anspruchs vor dem POST, sonst fehlend (oben)
-day             nur im Modus pro Branch und Tag: der Tag, den der Eintrag abrechnet
-state           "open" | "closed"
-awaitingDecision  gesetzt, wenn ein anderer Rechner den Eintrag abgeschlossen
-                  hat: nichts wird geschrieben, bis jemand antwortet
-remoteFinalSeconds  was ProSonata in jenem Moment hielt – daraus ergibt sich,
-                    was von der hiesigen Zeit noch nicht drüben steht
-```
+| Feld | Bedeutung |
+|---|---|
+| `id` | lokale UUID |
+| `projectId`, `categoryId` | Projekt und Zeitkategorie in ProSonata |
+| `repoPath`, `branch` | der Scope; auf dem Hauptbranch zusätzlich die SHA |
+| `key` | Kennung aus Root-Commit-SHA und Branchname (Abschnitt 3) |
+| `text` | Rechnungstext, vorläufig oder endgültig |
+| `seconds` | eigene Summe auf diesem Rechner |
+| `foreignSeconds` | Anteil anderer Rechner, aus dem letzten GET abgeleitet |
+| `lastWritten` | zuletzt geschriebener Gesamtwert – daran erkennt der Rechner, dass ein anderer dazugeschrieben hat |
+| `timeId` | ProSonata-ID (`timeID` der API), `null` vor dem ersten POST |
+| `creating` | Zeitstempel des Anspruchs vor dem POST, sonst fehlend (oben) |
+| `day` | nur im Modus *pro Branch und Tag*: der Tag, den der Eintrag abrechnet |
+| `state` | `"open"` oder `"closed"` – die einzigen beiden Zustände im Code |
+| `awaitingDecision` | gesetzt, wenn ein anderer Rechner den Eintrag abgeschlossen hat: nichts wird geschrieben, bis jemand antwortet |
+| `remoteFinalSeconds` | was ProSonata in jenem Moment hielt – daraus ergibt sich, was von der hiesigen Zeit noch nicht drüben steht |
 
 Die Statusleiste rendert eine **Liste** laufender Timer, kein Singleton – parallele Timer sind
 der Normalfall, und später können fremde Timer von anderen Geräten dazukommen.
