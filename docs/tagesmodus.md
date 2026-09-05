@@ -4,6 +4,23 @@ Ein Entwurf: Ein Branch-Eintrag, der über mehrere Tage wächst, wird pro Tag ge
 Ergänzt [KONZEPT.md](../KONZEPT.md), ersetzt nichts darin. Stand: September 2026, **nichts
 davon gebaut**.
 
+## Wofür
+
+**Der Tagesmodus ist der Modus für Abrechnung nach Zeit auf Branch-Arbeit.**
+
+KONZEPT.md §3 ordnet die beiden bestehenden Modi zwei Abrechnungsarten zu: `pro Commit` der
+Abrechnung nach **Zeit**, `pro Branch` der Abrechnung nach **Leistung**. Daran hängt, was
+wesentlich ist und was nebensächlich — beim Branch-Eintrag sind Datum und Tagesspanne
+nebensächlich, weil das Ergebnis bezahlt wird und nicht die Anwesenheit.
+
+Zwischen den beiden klafft aber eine Lücke: **Wer nach Zeit abrechnet, aber auf Branches
+arbeitet.** Dann liefert `pro Branch` genau das Falsche — eine Summe ohne Tag, ohne Spanne,
+ohne Nachweis. Und `pro Commit` liefert es auch nicht, weil ein Branch aus fünfzehn Commits
+besteht, von denen der erste die ganze Zeit trägt. Dafür ist dieser Modus gedacht.
+
+Dasselbe gilt für die **Projektsteuerung**, die immer zeitbasiert ist, auch wenn nach Leistung
+abgerechnet wird: Sie fragt, was an einem Tag geschah.
+
 ## Warum
 
 Ein Branch-Eintrag wächst über seine ganze Lebensdauer, und `date` wird bei jedem
@@ -45,7 +62,17 @@ Versandverzögerung.
 Die Mechanik existiert: `closeEntry` schliesst einen Eintrag und legt einen Nachfolger an. Der
 muss künftig **Text und Tag erben** statt leer zu starten.
 
-## 3. Zwei Grenzen, die nicht dasselbe sind
+## 3. Jeder Eintrag bekommt wieder eine Tagesspanne
+
+Heute verliert jeder Eintrag `workingTimeStart` und `-End`, sobald er über Mitternacht wächst —
+eine Spanne sagt nur innerhalb eines Kalendertages etwas. Ein Branch-Eintrag hat also nie eine.
+Am eigenen Konto nachgezählt: **327 von 559 Einträgen ohne Spanne.**
+
+Ein Tages-Eintrag liegt konstruktionsbedingt in einem Kalendertag. Die Regel greift nie mehr,
+und jeder Eintrag trägt wieder Anfang und Ende — genau der Nachweis, den die Abrechnung nach
+Zeit braucht.
+
+## 4. Zwei Grenzen, die nicht dasselbe sind
 
 | Grenze | Wert | Wirkung |
 |---|---|---|
@@ -60,7 +87,7 @@ Spanne stets länger als die Dauer, weil Pausen darin liegen. Gerechnet wird dar
 Geklemmt wird nur, wenn der Tag durchgearbeitet wurde. Endet das letzte Segment um 22:15,
 steht dort 22:15.
 
-## 4. Ein Segment über Mitternacht wird geteilt — in allen Modi
+## 5. Ein Segment über Mitternacht wird geteilt — in allen Modi
 
 Der eigentliche Bauaufwand. Eine Spanne, die eine oder **mehrere** Mitternachtsgrenzen
 überschreitet — ein über das Wochenende vergessener Timer —, wird an jeder Grenze zerlegt.
@@ -84,7 +111,7 @@ eine Spanne zerlegt, statt drei Aufrufstellen zu flicken. Das Protokoll bekommt 
 Grund neben `pause`, `commit`, `trimmed`, `correction`, `entry` und `asleep` — ohne ihn stünde
 dort `pause`, und eine Pause hat es nicht gegeben.
 
-## 5. Der Tag muss im Eintrag stehen
+## 6. Der Tag muss im Eintrag stehen
 
 Neues Feld `day` (ISO-Datum), beim Anlegen gesetzt. Der Versand schreibt dann
 `date: entry.day ?? clock.today()` statt unbedingt heute (`sender.ts`).
@@ -92,7 +119,7 @@ Neues Feld `day` (ISO-Datum), beim Anlegen gesetzt. Der Versand schreibt dann
 Das ändert die Datumssemantik aus §3 — `date` benennt nicht mehr den Schreibvorgang, sondern
 den Tag, an dem gearbeitet wurde. Genau darum geht es.
 
-## 6. Der Marker bleibt, wie er ist
+## 7. Der Marker bleibt, wie er ist
 
 Die Kennung identifiziert den **Branch**, nicht den Eintrag:
 
@@ -104,7 +131,7 @@ Die Kennung identifiziert den **Branch**, nicht den Eintrag:
 Mehrrechner-Abgleich und Wiederherstellung laufen unverändert. Nebenbei wird der fremde Anteil
 täglich zurückgesetzt, womit das Fenster für §12.4 auf einen Tag schrumpft.
 
-## 7. Der Text
+## 8. Der Text
 
 Solange der Branch läuft, tragen die Tage den vorläufigen Text. Beim **Abschluss** wird der
 endgültige über die zurückliegenden Tage nachgezogen — gefunden über `a3f9c1]`, in **einem**
@@ -121,7 +148,7 @@ Ein Zwanzig-Tage-Branch kostet beim Abschluss einen GET und bis zu zwanzig PUTs 
 Viertelstunde machbar, aber ein Stoss, der im Fehlerfall fortsetzbar sein muss. Seit 0.13.0
 gibt es dafür die Drosselung in `send()`.
 
-## 8. Bekannte Grenze
+## 9. Bekannte Grenze
 
 Wechseln zwei Rechner derselben Person den Tag, bevor sie den Eintrag des anderen gesehen
 haben, entstehen zwei Einträge für denselben Branch-Tag. Deshalb: **Tageswechsel nur nach

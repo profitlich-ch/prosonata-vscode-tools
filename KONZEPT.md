@@ -71,10 +71,38 @@ Zeiteintrag. Wie viele, entscheidet Abschnitt 3.
 | **Branch** (nicht der Hauptbranch) | **Ein Zeiteintrag pro Branch**, wächst über dessen ganze Lebensdauer |
 | **Hauptbranch** | **Ein Zeiteintrag pro Commit** |
 
-Der Branch ist die natürliche Klammer um ein Stück Arbeit, das der Kunde als Einheit bezahlt.
-„Buchungsmodul: 12,5 h" ist die Zeile, die auf eine Rechnung gehört – nicht fünfzehn
-Commit-Subjects. Auf dem Hauptbranch wird dagegen typischerweise Wartung erledigt, wo jeder
-Commit für sich eine abgeschlossene Kleinigkeit ist.
+**Die beiden Modi bedienen zwei Abrechnungsarten.** Das ist die Unterscheidung, aus der alles
+Weitere folgt:
+
+| Modus | gedacht für | Was die Rechnungszeile benennt |
+|---|---|---|
+| **pro Commit** | Abrechnung nach **Zeit** | einen Zeitraum, in dem gearbeitet wurde |
+| **pro Branch** | Abrechnung nach **Leistung** | ein Stück Arbeit, das geliefert wurde |
+
+Wer nach Zeit abrechnet, dem schuldet die Rechnung den Nachweis: wann, wie lange, woran. Viele
+kleine Zeilen sind dort kein Makel, sondern der Beleg. Wer nach Leistung abrechnet, dem schuldet
+sie das Gegenteil: **eine** Zeile mit einem Namen, den der Kunde wiedererkennt.
+„Buchungsmodul: 12,5 h" – nicht fünfzehn Commit-Subjects.
+
+Der Branch ist die natürliche Klammer für den zweiten Fall, weil er ohnehin um ein Stück Arbeit
+gezogen wird und sein Ende von Git erzwungen wird, nicht von der Disziplin. Auf dem Hauptbranch
+wird dagegen typischerweise Wartung erledigt, wo jeder Commit für sich eine abgeschlossene
+Kleinigkeit ist – und wo die Rechnung ohnehin nach Zeit gestellt wird.
+
+**Daran hängen die Einzelheiten, und dort erklärt sich, was sonst wie ein Mangel aussieht:**
+
+- **Die Tagesspanne** (`workingTimeStart`/`-End`) fällt bei einem mehrtägigen Eintrag weg, weil
+  sie über Tagesgrenzen nichts Wahres sagen könnte (siehe *Zeitwert und Datum*). Beim Abrechnen
+  nach Zeit wäre das ein Verlust – dort ist sie der Nachweis. Beim Abrechnen nach Leistung fehlt
+  sie niemandem: Bezahlt wird das Ergebnis, nicht die Anwesenheit.
+- **Das Datum** benennt beim Commit-Eintrag den Arbeitstag, beim Branch-Eintrag nur den Tag der
+  Fertigstellung. Auch das ist im ersten Fall wesentlich und im zweiten nebensächlich.
+- **Gerundet wird je Eintrag**, also je abgerechneter Einheit. Bei Zeitabrechnung ist die
+  Einheit der Arbeitsabschnitt, bei Leistungsabrechnung die Leistung.
+
+Wer nach Zeit abrechnet, aber auf Branches arbeitet, hat deshalb ein Problem, das der Modus
+`pro Branch` nicht löst – dafür ist der entworfene Tagesmodus gedacht
+([docs/tagesmodus.md](docs/tagesmodus.md)).
 
 Der Hauptbranch ist **konfigurierbar**. Default ist der Branch, auf den
 `refs/remotes/origin/HEAD` zeigt, ersatzweise `main`.
