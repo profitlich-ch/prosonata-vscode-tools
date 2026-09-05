@@ -1166,11 +1166,11 @@ additiv daneben, ohne die Identität anzutasten.
 
 **Ein Paket, drei Einstiegspunkte.** TypeScript/Node.
 
-```
-src/core        Logik, Zustand, API-Client. Importiert NIEMALS "vscode".
-src/cli         bin "prosonata". Wird vom post-commit-Hook aufgerufen.
-src/extension   QuickPicks, Statusleiste, FileSystemWatcher.
-```
+| Verzeichnis | Was darin liegt |
+|---|---|
+| `src/core` | Logik, Zustand, API-Client. Importiert **niemals** `vscode`. |
+| `src/cli` | bin `prosonata`. Wird vom `post-commit`-Hook aufgerufen. |
+| `src/extension` | QuickPicks, Statusleiste, `FileSystemWatcher`. |
 
 Die Trennung ist die zentrale Strukturentscheidung. Läge die Logik in der Extension, könnte
 der Hook sie nicht nutzen und man baute sie ein zweites Mal.
@@ -1254,26 +1254,34 @@ das gewesen.
 
 
 - **Panel in der Seitenleiste** – ein eigener View-Container mit `TreeDataProvider`, keine
-  Webview. Es zeigt für das geöffnete Repo dauerhaft:
+  Webview. Diese Zeilen stehen für das geöffnete Repo **dauerhaft** da, und jede ist zugleich
+  der Weg zu der Einstellung, die sie zeigt:
 
-  ```
-  ProSonata
-    Projekt        24-017 Feature Buchungsmodul · 15,25 von 20 h
-    Zeitraster     exakt
-    Branch         feature/buchung
-    Zeiteintrag    pro Branch
-    Kategorie      Programmierung
-    Läuft          0:42:13 · 3:48:02 · Buchungsmodul
-    Offen          Rabattstufen         seit 6 Tagen
-  ```
+  | Zeile | Beispiel | Klick |
+  |---|---|---|
+  | Projekt | 24-017 Feature Buchungsmodul · 15,25 von 20 h | Projekt wechseln |
+  | Zeitraster | exakt | Raster setzen |
+  | Branch | feature/buchung | – |
+  | Zeiteintrag | pro Branch | Modus umschalten; auf dem Hauptbranch deaktiviert und `pro Commit` |
+  | Kategorie | Programmierung | Kategorie wählen |
+  | Läuft / Pausiert | 0:42:13 · 3:48:02 · Buchungsmodul | Timer starten oder anhalten |
+  | Offener Eintrag | Rabattstufen · seit 6 Tagen | Eintrag abschliessen |
 
   Die Timer-Zeile nennt **beide** Zahlen: zuerst das laufende Segment, dann die Summe des
   Branches. Sie beantworten Verschiedenes – „wie lange sitze ich an diesem Stück" und „was
   wird abgerechnet" –, und nur die erste macht einen vergessenen Timer sichtbar.
 
-  Klick auf eine Zeile öffnet den passenden QuickPick – Projekt wechseln, Zeitraster setzen,
-  Kategorie und Modus umschalten, Zeiteintrag abschliessen. Auf dem Hauptbranch ist die Zeile
-  `Zeiteintrag` deaktiviert und zeigt `pro Commit`.
+  Dazu kommen Zeilen, die **nur erscheinen, wenn es etwas zu sagen gibt** – und jede führt
+  dorthin, wo die Sache zu erledigen ist:
+
+  | Zeile | Wann | Klick |
+  |---|---|---|
+  | Ohne Text | Branch-Eintrag ohne Rechnungstext | Text setzen |
+  | Nicht gebucht | Zeit nach dem letzten Commit auf dem Hauptbranch | dem letzten Eintrag zuschlagen |
+  | Anderswo abgeschlossen | ein anderer Rechner hat den Eintrag geschlossen | entscheiden |
+  | Rechner schlief | gemessene Lücke im Sekundentakt | abziehen oder behalten |
+  | Wartet auf Versand | vorgemerkte Schreibvorgänge, mit dem Grund, falls es hakt | jetzt senden |
+  | Hook bucht nichts | `~/.prosonata/cli.cjs` fehlt, der Hook liefe ins Leere | Hook neu einrichten |
 
   Der Modus steht in einer **eigenen Zeile**, nicht hinter dem Branchnamen: Namen wie
   `167-startseite-mobile-tablet-expertise-layout` schieben in einer schmalen Seitenleiste
