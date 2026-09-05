@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.14.0] — 2026-09-05
+
 ### Hinzugefügt
 
 - **Modus „ein Eintrag pro Branch und Tag".** Ein Branch-Eintrag, der über
