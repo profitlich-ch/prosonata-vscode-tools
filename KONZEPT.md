@@ -952,6 +952,17 @@ Einen zweiten Zähler für bereits gemessene Sekunden gibt es **nicht**: Fertige
 sofort in den Zeiteintrag, das laufende ist `startedAt` allein. Zwei Zähler könnten
 auseinanderlaufen, einer nicht.
 
+Daraus folgt eine Regel, die einmal gebrochen wurde und deshalb hier steht: **`startedAt`
+wandert nur bei einem echten Ereignis** – Pause, Commit, Schlaf, Branch-Wechsel, Kürzen. Ein
+Schreibvorgang nach ProSonata ist keines. Wer dort bucht, verschiebt `startedAt` mit jedem
+Takt, und alles, was es als „seit wann" liest, erblindet: die Warnung vor dem vergessenen
+Timer, das Verwerfen, die Marke für den zweiten Rechner – und das Segmentprotokoll, das bei der
+nächsten Pause ab `startedAt` schreibt. Für einen Arbeitstag hielt es zweieinhalb Minuten. Der
+Versand **rechnet** die laufenden Sekunden deshalb hinzu und speichert nichts; das trägt, weil
+der geschriebene Wert eine absolute Summe ist und die spätere Buchung auf dieselbe Zahl kommt.
+Die eine Ausnahme ist der fakturierte Eintrag: Die Rechnung zieht eine Grenze, und das ist ein
+Ereignis.
+
 Ein Zeiteintrag trägt:
 
 ```

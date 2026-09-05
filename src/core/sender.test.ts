@@ -11,6 +11,7 @@ import { Journal } from './journal.js'
 import { isMarkedOpen, readKey } from './marker.js'
 import { adoptForeignShare, applySend, describeTrouble, dueWrites, send, type SendDeps, type SendResult } from './sender.js'
 import { emptyState, type State, type TimeEntry } from './types.js'
+import { pause } from './tracking.js'
 
 const NINE = new Date(2026, 6, 30, 9, 0, 0).getTime()
 
@@ -628,5 +629,85 @@ describe('naming why a queue is stuck', () => {
 
   it('names the missing category, which no retry would fix', () => {
     expect(describeTrouble({ ...empty, missingCategory: ['e1'] })).toMatch(/Zeitkategorie/)
+  })
+})
+
+/*
+ * `startedAt` is the only record of the running stretch, and it moves only at a
+ * real event. A write to ProSonata is not one: booking there advanced it every
+ * thirty seconds and blinded everything that reads it as "since when" — the
+ * long-run question, the discard, the marker, and the segment log, which records
+ * from `startedAt` at the next pause. For one day the log held 22 rows of at
+ * most 28 seconds each. So the send adds the running seconds and stores nothing.
+ */
+describe('a write while the timer runs', () => {
+  function running(seconds: number, overrides: Partial<TimeEntry> = {}) {
+    const e = entry({ seconds: 1800, ...overrides })
+    const state = stateWith(e)
+    state.timers.push({
+      id: 't1',
+      origin: 'local',
+      remoteTimerId: null,
+      scope: e.scope,
+      startedAt: NINE - seconds * 1000,
+      entryId: e.id,
+    })
+    return state
+  }
+
+  it('sends the running seconds on top of what is booked', async () => {
+    const { api, deps } = setup()
+    // Half an hour booked, and the timer has been running another hour.
+    const { state } = await send(running(3600), deps, true)
+
+    expect([...api.entries.values()][0]?.hours).toBe(1.5)
+    // Nothing was booked: the entry still holds only what a pause put there.
+    expect(state.entries[0]?.seconds).toBe(1800)
+  })
+
+  it('leaves `startedAt` where it was', async () => {
+    const { deps } = setup()
+    const before = running(3600)
+    const { state } = await send(before, deps, true)
+
+    expect(state.timers[0]?.startedAt).toBe(before.timers[0]?.startedAt)
+  })
+
+  it('counts nothing twice once the stretch is booked for real', async () => {
+    const { api, deps } = setup()
+    const first = await send(running(3600), deps, true)
+    const timeId = first.state.entries[0]!.timeId!
+    expect(api.entries.get(timeId)?.hours).toBe(1.5)
+
+    // The pause books the same hour the send already added on top.
+    const paused = pause(first.state, deps.clock, first.state.entries[0]!.scope)
+    expect(paused.entries[0]?.seconds).toBe(1800 + 3600)
+
+    const again = await send({ ...paused, pending: [{ entryId: 'e1', since: NINE, closing: false }] }, deps, true)
+    expect(api.entries.get(timeId)?.hours).toBe(1.5)
+    expect(again.state.entries[0]?.lastWritten).toBe(5400)
+  })
+
+  /*
+   * The one place the running stretch has to be booked at a write: the entry
+   * turned out invoiced, which draws a line. Left running, the seconds the last
+   * write had sent on top would be booked into the follow-up a second time.
+   */
+  it('books the stretch when the entry turns out invoiced, so the follow-up does not count it twice', async () => {
+    const { api, deps } = setup()
+    const first = await send(running(3600), deps, true)
+    const mine = first.state.entries[0]!
+    api.entries.get(mine.timeId!)!.isInvoiced = true
+
+    // Nothing paused in between; the timer is still the same stretch, now longer.
+    deps.clock.advance(1800)
+    const state = { ...first.state, pending: [{ entryId: 'e1', since: NINE, closing: false }] }
+    const second = await send(state, deps, true)
+    const follow = second.state.entries[0]!
+
+    // Since the invoice: only the half hour that came after the first write.
+    expect(api.entries.get(follow.timeId!)?.hours).toBe(0.5)
+    // And the stretch was cut here, so a later pause adds nothing of the past.
+    expect(second.state.timers[0]?.startedAt).toBe(deps.clock.now())
   })
 })

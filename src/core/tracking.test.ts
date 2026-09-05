@@ -20,6 +20,7 @@ import {
   resumeAsNew,
   setText,
   daySpans,
+  runningInto,
   shiftStart,
   skipGap,
   start,
@@ -1002,5 +1003,47 @@ describe('an entry per branch and day', () => {
 
     const closed = state.entries.find((entry) => entry.state === 'closed')!
     expect(state.pending.some((write) => write.entryId === closed.id && write.closing)).toBe(true)
+  })
+})
+
+describe('what the running timer has put into an entry', () => {
+  const on = (day: number, hour: number) => new Date(2026, 7, day, hour, 0, 0).getTime()
+
+  it('is the whole stretch for an entry without a day', () => {
+    const clock = fixedClock(on(17, 9))
+    const state = startOn(emptyState(), clock)
+    expect(runningInto(state, openEntry(state, scope)!, on(17, 11))).toBe(2 * 3600)
+  })
+
+  it('stops at midnight for a day entry, so yesterday does not swell overnight', () => {
+    const clock = fixedClock(on(17, 22))
+    const state = start(state0(), clock, {
+      scope, key: 'a3f9c1', projectId: 166, categoryId: 70, mode: 'branch-day', newId,
+    })
+    // 02:00 the next day, no event in between: the 17th gets its two hours, not four.
+    expect(runningInto(state, openEntry(state, scope)!, on(18, 2))).toBe(2 * 3600)
+  })
+
+  it('is nothing while the timer stands still', () => {
+    const clock = fixedClock(on(17, 9))
+    const state = pause(startOn(emptyState(), clock), clock, scope)
+    expect(runningInto(state, openEntry(state, scope)!, on(17, 11))).toBe(0)
+  })
+
+  function state0() {
+    return emptyState()
+  }
+})
+
+describe('keeping part of a stretch that ran too long', () => {
+  it('keeps the beginning, where the work was, not the end', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    // Ran from 9:00 to 17:00; the person says two hours count.
+    clock.advance(8 * 3600)
+    state = keepFromRunning(state, clock, scope, 2 * 3600)
+
+    expect(openEntry(state, scope)?.seconds).toBe(2 * 3600)
+    expect(state.timers[0]?.startedAt).toBeNull()
   })
 })

@@ -3,7 +3,7 @@ import type { Clock } from './clock.js'
 import type { Config } from './config.js'
 import type { Journal } from './journal.js'
 import { isMarkedOpen, stripMarker, withIdentity, withMarker } from './marker.js'
-import { findEntry, parkClosedElsewhere } from './tracking.js'
+import { findEntry, parkClosedElsewhere, runningInto } from './tracking.js'
 import type { State, TimeEntry } from './types.js'
 import { workingTime, type TimeGrid } from './working-time.js'
 
@@ -174,7 +174,8 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
     }
 
     try {
-      const closedElsewhere = await writeEntry(entry, detail, deps.spanFor?.(entry) ?? null, deps)
+      const running = runningInto(next, entry, clock.now())
+      const closedElsewhere = await writeEntry(next, entry, detail, deps.spanFor?.(entry) ?? null, running, deps)
       if (closedElsewhere !== null) {
         next = parkClosedElsewhere(next, entryId, closedElsewhere)
         result.awaitingDecision.push(entryId)
@@ -277,6 +278,19 @@ export function applySend(current: State, before: State, after: State, result: S
     next.pending = next.pending.filter((write) => write.entryId !== entryId)
   }
 
+  /*
+   * The invoiced branch books the running stretch and moves `startedAt`. Carried
+   * over only when nobody else moved it in the meantime — a pause that came
+   * during the send is theirs, not ours to undo.
+   */
+  for (const timer of after.timers) {
+    const was = before.timers.find((candidate) => candidate.id === timer.id)
+    const mine = next.timers.find((candidate) => candidate.id === timer.id)
+    if (was && mine && timer.startedAt !== was.startedAt && mine.startedAt === was.startedAt) {
+      mine.startedAt = timer.startedAt
+    }
+  }
+
   return next
 }
 
@@ -314,14 +328,18 @@ function runningSinceOf(state: State, entryId: string): number | null {
 }
 
 async function writeEntry(
+  state: State,
   entry: TimeEntry,
   detail: string,
   span: { start: string; end: string } | null,
+  /** Seconds of the running stretch that fall into this entry — read, not booked. */
+  running: number,
   deps: SendDeps,
 ): Promise<number | null> {
   const { api, clock, config } = deps
   const grid = deps.gridFor?.(entry.scope.repoPath) ?? config.grid
-  const total = entry.foreignSeconds + entry.seconds
+  const booked = entry.foreignSeconds + entry.seconds
+  const total = booked + running
   const draft: EntryDraft = {
     projectID: entry.projectId,
     category: entry.categoryId,
@@ -364,10 +382,22 @@ async function writeEntry(
   }
 
   if (remote.isInvoiced) {
-    // An invoiced entry must not grow. The follow-up carries what has come in
-    // since the last write, and starts with no foreign share of its own.
+    /*
+     * An invoiced entry must not grow. The follow-up carries what has come in
+     * since the last write, and starts with no foreign share of its own.
+     *
+     * The invoice drew a line, and that **is** an event — so the running stretch
+     * is booked here, unlike at an ordinary write. Left running, the seconds the
+     * last write had already sent on top would be booked into the follow-up a
+     * second time at the next pause: once captured by the invoice, once measured.
+     */
+    const timer = state.timers.find((candidate) => candidate.entryId === entry.id && candidate.startedAt !== null)
+    if (timer && timer.startedAt !== null) {
+      entry.seconds += Math.max(0, Math.floor((clock.now() - timer.startedAt) / 1000))
+      timer.startedAt = clock.now()
+    }
     const alreadyBilled = entry.lastWritten ?? 0
-    const remainder = Math.max(0, total - alreadyBilled)
+    const remainder = Math.max(0, entry.foreignSeconds + entry.seconds - alreadyBilled)
     const created = await api.createEntry({
       ...draft,
       workingTime: workingTime(remainder, grid),
@@ -381,7 +411,7 @@ async function writeEntry(
 
   adoptForeignShare(entry, remote.hours)
 
-  const corrected = entry.foreignSeconds + entry.seconds
+  const corrected = entry.foreignSeconds + entry.seconds + running
   await api.updateEntry(entry.timeId, { ...draft, workingTime: workingTime(corrected, grid) })
   entry.lastWritten = corrected
   return null

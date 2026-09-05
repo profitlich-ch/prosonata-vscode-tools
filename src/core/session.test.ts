@@ -640,3 +640,73 @@ describe('reconciling a branch switch', () => {
     expect(openEntry(session.state(), other)?.seconds).toBe(900)
   })
 })
+
+/*
+ * What the segment log records, not just what the entry sums to. The log is
+ * where the day view, the span and the merge recomputation come from — an
+ * amount that is right at the wrong clock time still puts a wrong span on the
+ * invoice.
+ */
+describe('what the log says about a stretch', () => {
+  const on = (day: number, hour: number) => new Date(2026, 7, day, hour, 0, 0).getTime()
+
+  function ticking(mode: 'branch' | 'branch-day', at: number) {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-log-'))
+    const clock = fixedClock(at)
+    const config: Config = { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' }
+    const segments = new SegmentLog(join(dir, 'segments.jsonl'))
+    const session = new Session(config, {
+      api: new FakeApi(),
+      clock,
+      store: new StateStore(join(dir, 'state.json')),
+      journal: new Journal(join(dir, 'log.jsonl')),
+      segments,
+    })
+    const ctx = { ...context, mode } as RepoContext
+    return { session, clock, segments, ctx, until: (t: number) => clock.advance((t - clock.now()) / 1000) }
+  }
+
+  it('places the kept part at the beginning of the stretch', async () => {
+    const { session, segments, ctx, until } = ticking('branch', on(17, 9))
+    await session.start(ctx)
+    until(on(17, 17))
+
+    session.keepFromRunning(ctx, 2 * 3600)
+
+    const row = segments.read().find((segment) => segment.reason === 'trimmed')!
+    expect(row.from).toBe(atLocal(on(17, 9)))
+    expect(row.until).toBe(atLocal(on(17, 11)))
+    expect(row.ranSeconds).toBe(8 * 3600)
+  })
+
+  it('gives each day of a night its own entry in the daily mode', async () => {
+    const { session, segments, ctx, until } = ticking('branch-day', on(17, 22))
+    await session.start(ctx)
+    until(on(18, 2))
+
+    session.pause(ctx)
+
+    const rows = segments.read().filter((segment) => segment.reason === 'pause')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.until).toBe(atLocal(on(18, 0)))
+    expect(rows[1]?.from).toBe(atLocal(on(18, 0)))
+    // Two entries, and each row belongs to the one whose day it falls on.
+    expect(rows[0]?.entryId).not.toBe(rows[1]?.entryId)
+    const days = new Map(session.state().entries.map((entry) => [entry.id, entry.day]))
+    expect(days.get(rows[0]!.entryId)).toBe('2026-08-17')
+    expect(days.get(rows[1]!.entryId)).toBe('2026-08-18')
+  })
+
+  it('keeps one entry per night outside the daily mode, with two rows in the log', async () => {
+    const { session, segments, ctx, until } = ticking('branch', on(17, 22))
+    await session.start(ctx)
+    until(on(18, 2))
+
+    session.pause(ctx)
+
+    const rows = segments.read().filter((segment) => segment.reason === 'pause')
+    expect(rows).toHaveLength(2)
+    expect(rows[0]?.entryId).toBe(rows[1]?.entryId)
+    expect(session.state().entries).toHaveLength(1)
+  })
+})

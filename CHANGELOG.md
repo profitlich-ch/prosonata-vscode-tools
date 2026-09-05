@@ -18,6 +18,23 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ### Behoben
 
+- **Das Segmentprotokoll wurde seit 0.11.3 zu 30-Sekunden-Splittern zerhackt.**
+  Der Versand buchte das laufende Segment vor jedem Schreibvorgang und setzte
+  dabei den Anfang der Strecke auf «jetzt» — alle 30 Sekunden. Die
+  Eintragssummen blieben richtig, aber alles, was «seit wann läuft das» liest,
+  war blind: Die Sechs-Stunden-Warnung feuerte nie, «verwerfen» verwarf 30
+  Sekunden, die Marke für den zweiten Rechner sagte immer «gerade eben», und
+  das Protokoll hielt für einen ganzen Arbeitstag zweieinhalb Minuten. Der
+  Versand rechnet die laufenden Sekunden jetzt hinzu, ohne sie zu buchen. Die
+  Protokollzeilen vom 4. und 5. September sind als Segmente nicht
+  wiederherstellbar; ProSonata stimmt.
+- **«Zwei Stunden zählen» buchte die letzten zwei Stunden, nicht die ersten.**
+  Die Frage gilt einem Timer, der über Nacht lief: gearbeitet wurde am Anfang,
+  das Anhalten wurde vergessen. Die Menge stimmte, die Uhrzeiten nicht — und
+  daraus entstehen Spanne und Protokollzeile.
+- **Im Tagesmodus hingen alle Teile einer Nacht an einem Eintrag** im
+  Protokoll, obwohl die Buchung sie richtig verteilte. Jede Zeile gehört jetzt
+  zum Eintrag ihres Tages.
 - **Ein Segment über Mitternacht landete vollständig auf dem zweiten Tag.** Das
   Segmentprotokoll gruppiert nach dem Ende eines Segments; wer von 22:00 bis
   02:00 arbeitete, verlor im Bericht die zwei Stunden des ersten Tages. Segmente

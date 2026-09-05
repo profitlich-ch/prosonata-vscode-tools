@@ -373,7 +373,51 @@ export function close(state: State, entryId: string, text: string, at: number, n
   return closeEntry(next, entry, newId, at)
 }
 
-/** Books the running segment without ending it. Used before a write goes out. */
+/**
+ * Seconds the running timer has put into this entry so far — read, not booked
+ * (KONZEPT.md §7).
+ *
+ * `startedAt` is the only record of the running stretch, and it moves only at a
+ * real event: a pause, a commit, a sleep, a branch switch. A write to ProSonata
+ * is not one. Booking there — as `settle` does — would advance `startedAt`
+ * every thirty seconds, and everything that reads it as "since when" would go
+ * blind: the long-run question, the discard, the marker for the other machine,
+ * and the segment log, which records from `startedAt` at the next pause.
+ *
+ * So the send adds this on top of what is booked and stores nothing. That is
+ * sound because the written value is an absolute sum: when the stretch is
+ * booked for real later, the next sum comes to the same number.
+ *
+ * In the daily mode only the part inside the entry's day counts. Past midnight
+ * the stretch belongs to the next day's entry, which the next event will open —
+ * until then it must not swell yesterday's line.
+ */
+export function runningInto(state: State, entry: TimeEntry, now: number): number {
+  const timer = state.timers.find((candidate) => candidate.entryId === entry.id && candidate.startedAt !== null)
+  if (!timer || timer.startedAt === null) return 0
+
+  let from = timer.startedAt
+  let until = now
+  if (entry.day !== undefined) {
+    const dayStart = startOfDay(entry.day)
+    from = Math.max(from, dayStart)
+    until = Math.min(until, nextMidnight(dayStart))
+  }
+  return elapsed(from, until)
+}
+
+/** The first instant of `2026-08-30`, in local time. */
+function startOfDay(day: string): number {
+  const [year, month, date] = day.split('-').map(Number) as [number, number, number]
+  return new Date(year, month - 1, date, 0, 0, 0, 0).getTime()
+}
+
+/**
+ * Books the running segment without ending it.
+ *
+ * **Not for the send** — see `runningInto`. Used where a person acts on the
+ * stretch as it stands, such as attaching it to the last closed entry.
+ */
 export function settle(state: State, clock: Clock, scope: Scope, newId: () => string = randomId): State {
   const next = structuredClone(state)
   const timer = findTimerIn(next, scope)
@@ -511,7 +555,13 @@ export function keepFromRunning(state: State, clock: Clock, scope: Scope, second
 
   const now = clock.now()
   const kept = Math.max(0, Math.min(seconds, elapsed(timer.startedAt, now)))
-  if (kept > 0) bookSegment(next, timer.entryId, now - kept * 1000, now)
+  /*
+   * The kept part is the **beginning** of the stretch, not its end. The question
+   * is asked of a timer that ran overnight: the work was done, then the stopping
+   * was forgotten. "Two hours count" means the first two — and the clock times
+   * the log and the span are built from should say so.
+   */
+  if (kept > 0) bookSegment(next, timer.entryId, timer.startedAt, timer.startedAt + kept * 1000)
   timer.startedAt = null
   if (findEntry(next, timer.entryId)?.timeId !== null) queueWrite(next, timer.entryId, now, false)
   return next

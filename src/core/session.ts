@@ -32,7 +32,9 @@ import {
   resumeAfterAdding,
   resumeAsNew,
   daySpans,
+  dayOf,
   nextMidnight,
+  sameScope,
   settle,
   shiftStart,
   skipGap,
@@ -218,7 +220,7 @@ export class Session {
     const now = this.clock.now()
     const state = this.store.update((current) => keepFromRunning(current, this.clock, context.scope, seconds))
     const kept = Math.min(seconds, Math.max(0, Math.floor((now - startedAt) / 1000)))
-    this.recordSegmentAt(context, now - kept * 1000, now, 'trimmed', Math.floor((now - startedAt) / 1000))
+    this.recordSegmentAt(context, startedAt, startedAt + kept * 1000, 'trimmed', Math.floor((now - startedAt) / 1000))
     return state
   }
 
@@ -397,6 +399,12 @@ export class Session {
      */
     const parts = daySpans(from, until)
     for (const part of parts.length > 0 ? parts : [{ from, until }]) {
+      // In the daily mode the parts belong to different entries — the one whose
+      // day the part falls on. Everywhere else there is only the one.
+      const day = dayOf(part.from)
+      const owner =
+        this.state().entries.find((candidate) => candidate.day === day && sameScope(candidate.scope, context.scope)) ??
+        entry
       this.segments.append({
         from: atLocal(part.from),
         until: atLocal(part.until),
@@ -404,7 +412,7 @@ export class Session {
         repoPath: context.scope.repoPath,
         branch: context.scope.branch,
         projectId: context.projectId,
-        entryId: entry?.id ?? '-',
+        entryId: owner?.id ?? '-',
         reason,
         ...(ranSeconds === undefined ? {} : { ranSeconds }),
       })
@@ -839,15 +847,11 @@ export class Session {
   /** Sends everything that is due (KONZEPT.md §4). */
   async flush(force = false): Promise<SendResult> {
     /*
-     * Book the running segment first, so the sum that goes out covers what has
-     * been measured up to now. Without it an entry reaches ProSonata with 0,00 h
-     * while `workingTimeStart`/`End` already show a span — the two fields would
-     * disagree about the same segment.
+     * Nothing is booked here. The send adds the running seconds on top of what
+     * is booked and stores nothing — `runningInto` in tracking.ts says why:
+     * booking on every beat moved `startedAt` every thirty seconds and blinded
+     * everything that reads it as "since when", the segment log included.
      */
-    for (const timer of this.state().timers) {
-      if (timer.startedAt !== null) this.store.update((state) => settle(state, this.clock, timer.scope, randomUUID))
-    }
-
     const before = this.state()
     const { state: after, result } = await send(before, this, force)
 
