@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.13.0] — 2026-09-05
+
 ### Hinzugefügt
 
 - **Zeiteinträge durchsehen und richtigstellen.** Ein neuer Befehl zeigt die
