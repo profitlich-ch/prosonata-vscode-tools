@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { RemoteEntry } from './api.js'
-import { joinTexts, measuredPerEntry, planMerge } from './merge.js'
+import { joinTexts, measuredPerEntry, planMerge, planRemoval } from './merge.js'
 import type { Segment } from './segments.js'
 import { EXACT, type TimeGrid } from './working-time.js'
 
@@ -133,5 +133,29 @@ describe('what this machine measured per entry', () => {
     const measured = measuredPerEntry([segment('e9', 600)], new Map())
     expect(measured.has(2287)).toBe(false)
     expect(measured.size).toBe(0)
+  })
+})
+
+/*
+ * Deleting is the one action here that cannot be taken back, and the selection
+ * comes from a list where an invoiced entry looks like any other. What may go
+ * is therefore decided before anything is asked, not while it is being done.
+ */
+describe('planning a deletion', () => {
+  it('takes only what is not invoiced, and says what stays', () => {
+    const plan = planRemoval([remote(1, 1), remote(2, 2, { isInvoiced: true }), remote(3, 0.5)])
+
+    expect(plan?.remove.map((entry) => entry.timeID)).toEqual([1, 3])
+    expect(plan?.invoiced.map((entry) => entry.timeID)).toEqual([2])
+  })
+
+  it('sums what would be deleted, so the question can name it', () => {
+    expect(planRemoval([remote(1, 1.5), remote(2, 0.25)])?.seconds).toBe(6300)
+  })
+
+  // Not an empty plan that deletes nothing: the caller has to say why.
+  it('refuses altogether when everything in the selection is invoiced', () => {
+    expect(planRemoval([remote(1, 1, { isInvoiced: true })])).toBeNull()
+    expect(planRemoval([])).toBeNull()
   })
 })

@@ -1,10 +1,10 @@
 import * as vscode from 'vscode'
 
 import type { RemoteEntry } from '../core/api.js'
-import { planMerge, type MergePlan } from '../core/merge.js'
+import { planMerge, planRemoval, type MergePlan } from '../core/merge.js'
 import { billedTime, hoursAndMinutes } from '../core/report.js'
 import type { RepoContext, Session } from '../core/session.js'
-import { hoursToSeconds, type TimeGrid } from '../core/working-time.js'
+import { hoursToSeconds, parseHours, type TimeGrid } from '../core/working-time.js'
 import { reload } from './view.js'
 
 /**
@@ -120,20 +120,27 @@ async function editEntry(
   })
   if (text === undefined) return
 
-  const before = hoursToSeconds(entry.hours)
+  /*
+   * The field is filled with the billed time, not the measured seconds, and the
+   * two need not agree: five minutes are 0.08 h on the exact grid, which reads
+   * back as 0:04. Comparing seconds would therefore call an untouched field a
+   * change and shave a minute off the entry. So the comparison is on the text:
+   * what nobody typed, nobody meant to change.
+   */
+  const shown = billedTime(hoursToSeconds(entry.hours), grid)
   const given = await vscode.window.showInputBox({
     title: `ProSonata: Stunden für #${entry.timeID}`,
-    prompt: 'Stunden:Minuten, etwa 1:30',
-    value: billedTime(before, grid),
-    validateInput: (value) => (parseSpan(value) === null ? 'Stunden:Minuten, etwa 1:30' : undefined),
+    prompt: 'Stunden:Minuten (1:30) oder Dezimalstunden (1,5)',
+    value: shown,
+    validateInput: (value) => (parseHours(value) === null ? '1:30 oder 1,5' : undefined),
   })
   if (given === undefined) return
-  const seconds = parseSpan(given)!
 
   if (text !== entry.detail) await session.api.updateEntry(entry.timeID, { detail: text })
-  if (seconds !== before) await session.correctHours(entry, seconds, grid, context)
+  const seconds = parseHours(given)!
+  if (given.trim() !== shown) await session.correctHours(entry, seconds, grid, context)
 
-  void vscode.window.showInformationMessage(`ProSonata: #${entry.timeID} geändert.`)
+  void vscode.window.showInformationMessage(`ProSonata: #${entry.timeID} geändert, ${billedTime(seconds, grid)} h.`)
   reload()
 }
 
@@ -148,29 +155,24 @@ function row(entry: RemoteEntry, grid: TimeGrid): Row {
   }
 }
 
-/**
- * Deleting. Invoiced entries are refused rather than silently skipped — a list
- * that quietly does less than it says is worse than one that explains itself.
- */
+/** Deleting. What may go and what may not is decided in `planRemoval`. */
 async function removeEntries(session: Session, entries: RemoteEntry[]): Promise<void> {
-  const invoiced = entries.filter((entry) => entry.isInvoiced)
-  const removable = entries.filter((entry) => !entry.isInvoiced)
-  if (removable.length === 0) {
+  const plan = planRemoval(entries)
+  if (!plan) {
     void vscode.window.showWarningMessage('ProSonata: fakturierte Einträge lassen sich hier nicht löschen.')
     return
   }
 
-  const hours = removable.reduce((sum, entry) => sum + entry.hours, 0)
   const answer = await vscode.window.showWarningMessage(
-    `${removable.length} Zeiteinträge löschen, zusammen ${hours.toFixed(2)} h?` +
-      (invoiced.length > 0 ? ` ${invoiced.length} fakturierte bleiben stehen.` : ''),
+    `${plan.remove.length} Zeiteinträge löschen, zusammen ${hoursAndMinutes(plan.seconds)}?` +
+      (plan.invoiced.length > 0 ? ` ${plan.invoiced.length} fakturierte bleiben stehen.` : ''),
     { modal: true },
     'Löschen',
   )
   if (answer !== 'Löschen') return
 
-  for (const entry of removable) await session.api.deleteEntry(entry.timeID)
-  void vscode.window.showInformationMessage(`ProSonata: ${removable.length} Zeiteinträge gelöscht.`)
+  for (const entry of plan.remove) await session.api.deleteEntry(entry.timeID)
+  void vscode.window.showInformationMessage(`ProSonata: ${plan.remove.length} Zeiteinträge gelöscht.`)
   reload()
 }
 
@@ -231,15 +233,9 @@ async function askForHours(plan: MergePlan, grid: TimeGrid): Promise<number | nu
     title: `ProSonata: Stunden für den zusammengelegten Eintrag (${plan.date})`,
     prompt: note,
     value: billedTime(proposed, grid),
-    validateInput: (value) => (parseSpan(value) === null ? 'Stunden:Minuten, etwa 1:30' : undefined),
+    validateInput: (value) => (parseHours(value) === null ? '1:30 oder 1,5' : undefined),
   })
   if (given === undefined) return null
-  return parseSpan(given)
+  return parseHours(given)
 }
 
-/** `1:30` as seconds. Null when it is not that. */
-function parseSpan(value: string): number | null {
-  const match = /^(\d{1,3}):([0-5]\d)$/.exec(value.trim())
-  if (!match) return null
-  return Number(match[1]) * 3600 + Number(match[2]) * 60
-}

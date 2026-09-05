@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
-import { hoursToSeconds, parseWorkingTime, toHours, workingTime, EXACT, type TimeGrid } from './working-time.js'
+import { billedTime } from './report.js'
+import { hoursToSeconds, parseHours, parseWorkingTime, toHours, workingTime, EXACT, type TimeGrid } from './working-time.js'
 
 /**
  * This is where measured seconds become the number on the invoice. Untested
@@ -94,5 +95,51 @@ describe('the default grid', () => {
   it('is exact, so nothing rounds up unless a repository asks for it', () => {
     expect(workingTime(2 * 3600 + 300)).toBe(workingTime(2 * 3600 + 300, EXACT))
     expect(workingTime(2 * 3600 + 300)).toBe('2.08')
+  })
+})
+
+/*
+ * These seconds go straight onto an invoice: someone types a number into the
+ * browser and it becomes a billed amount. Getting the notation wrong here is
+ * not a display fault, it is a wrong invoice line.
+ */
+describe('hours as a person types them', () => {
+  it('reads hours and minutes when a colon separates them', () => {
+    expect(parseHours('1:30')).toBe(5400)
+    expect(parseHours('0:05')).toBe(300)
+    expect(parseHours('120:00')).toBe(432_000)
+  })
+
+  // ProSonata shows decimals everywhere; the number read off it must go back in.
+  it('reads decimal hours when a dot or a comma separates them', () => {
+    expect(parseHours('1,5')).toBe(5400)
+    expect(parseHours('1.5')).toBe(5400)
+    expect(parseHours('2.25')).toBe(8100)
+  })
+
+  // The dangerous pair: same digits, different notation, twelve minutes apart.
+  it('keeps the two notations apart', () => {
+    expect(parseHours('1:30')).toBe(5400)
+    expect(parseHours('1.30')).toBe(4680)
+  })
+
+  it('refuses anything it would have to guess at', () => {
+    for (const value of ['', '90', 'abc', '1:60', '-1:00', '1:5', '1:', ':30', '1:30:00']) {
+      expect(parseHours(value), value).toBeNull()
+    }
+  })
+
+  /*
+   * The browser fills the field with the billed time and reads the answer back.
+   * That round trip is lossy — five minutes are 0.08 h on the exact grid, which
+   * reads back as 0:04 — so it must at least be *stable*: filling the field
+   * again with what came back has to show the same thing. Otherwise an entry
+   * would shrink a little every time somebody opened it.
+   */
+  it('is stable across the round trip through the input field', () => {
+    for (const seconds of [300, 1234, 5400, 8100, 36_000]) {
+      const shown = billedTime(seconds, EXACT)
+      expect(billedTime(parseHours(shown)!, EXACT), shown).toBe(shown)
+    }
   })
 })

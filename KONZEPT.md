@@ -156,7 +156,38 @@ trägt seine ganzen Stunden auf dem Tag des letzten Schreibvorgangs.
   endet sein letztes Segment auf `00:00:00` – geschrieben wird dann `23:59`, weil das Feld
   nichts Späteres kann. Verkürzt ist damit die **Anzeige**, nicht die Dauer.
 
-Ausführlich, samt verworfenen Alternativen: [docs/tagesmodus.md](docs/tagesmodus.md).
+  Daraus folgt ein Fall, den es vorher nicht gab: **Die Spanne kann kürzer aussehen als die
+  Dauer.** Wer von 23:30 bis 00:30 arbeitet, bekommt für den ersten Tag `23:30–23:59` bei
+  0,50 h. Bisher war eine Spanne stets länger als die Dauer, weil Pausen darin liegen.
+  Gerechnet wird daraus nichts.
+- **Ausgelöst wird der Wechsel von der ersten Buchung, deren Tag nicht der Tag des Eintrags
+  ist** – kein Zeitgeber, kein Hintergrundprozess. Ein Rechner, der über Nacht steht, holt den
+  Wechsel beim nächsten Start nach.
+
+**Bekannte Grenze:** Wechseln zwei Rechner derselben Person den Tag, bevor sie den Eintrag des
+anderen gesehen haben, entstehen zwei Einträge für denselben Branch-Tag. Dieselbe Klasse wie
+Abschnitt 12, Punkt 4, und mit derselben Voraussetzung: Es misst immer nur einer.
+
+Zwei Dinge sind entworfen und **nicht gebaut**:
+
+- **Eine Repo-Vorgabe `prosonata.mode`**, damit ein ganzes Projekt einmal eingestellt wird statt
+  Branch für Branch – dieselbe Kette wie beim Raster, `readRepoConfig(root).mode ?? config.mode`.
+  Heute fällt `modeFor` ohne Eintrag auf `branch` zurück.
+- **Den endgültigen Text beim Abschluss über die zurückliegenden Tage nachziehen.** Gefunden
+  würden sie über `kennung]` in einem gefilterten GET, der `detail` und `isInvoiced` mitliefert.
+  Zwei Regeln gehörten dazu: nachgezogen wird **nur, wo der Text noch der ist, den das Werkzeug
+  hinterlassen hat** – sonst bräche es das Versprechen, dass ein abgeschlossener Eintrag dem
+  Benutzer gehört –, und **fakturierte Tage bleiben unberührt**, weil ihr Text wahrheitsgemäss
+  sagt, wie der Stand beim Abrechnen war. Ein Zwanzig-Tage-Branch kostete einen GET und bis zu
+  zwanzig PUT; gegen 50 Aufrufe je Viertelstunde machbar, aber ein Stoss, der im Fehlerfall
+  fortsetzbar sein muss. Dass die zurückliegenden Tage bis dahin einen vorläufigen Text tragen,
+  ist kein Mangel: Er sagt, woran an jenem Tag gearbeitet wurde.
+
+**Offen ist die Anzeige nach Mitternacht.** Die Zeile *Läuft* im Panel zeigt Strecke und die
+Sekunden des **Eintrags**; im Tagesmodus fällt die zweite Zahl um Mitternacht auf null zurück.
+Inhaltlich richtig – es ist, was heute auf die Rechnung geht –, aber unerklärt. Vorschlag, noch
+nicht entschieden: *Läuft* zeigt die Branch-Summe über alle Tage, die Zeile *Offener Eintrag*
+den heutigen.
 
 ### Das Segmentprotokoll
 
@@ -412,6 +443,25 @@ nächsten Zeiteintrag.
 11:15 Commit → 1,75 h fliessen in den Zeiteintrag, danach läuft das nächste Segment ab 11:15.
 
 ### Abschluss eines Branch-Eintrags
+
+Der Lebenslauf eines Zeiteintrags, wie ihn die Unterabschnitte davor und danach beschreiben:
+
+```mermaid
+stateDiagram-v2
+    [*] --> offen: Timer läuft — zehn Minuten später<br/>angelegt, notfalls unter dem Platzhalter
+    offen --> offen: ein Trailer ersetzt den Text
+    offen --> abgeschlossen: von Hand, mit dem endgültigen Text —<br/>der Marker verliert das Wort, behält die Kennung
+    offen --> geparkt: ein anderer Rechner hat abgeschlossen
+    geparkt --> abgeschlossen: «hinzufügen» — ein letztes PUT,<br/>das nur workingTime trägt
+    geparkt --> [*]: «neuer Eintrag» — die Restzeit<br/>beginnt einen eigenen
+    abgeschlossen --> [*]
+```
+
+**Nur `offen` und `abgeschlossen` sind Zustände im Code** (`EntryState`). *Geparkt* ist das Feld
+`awaitingDecision`, und *fakturiert* ist überhaupt kein lokaler Zustand, sondern eine Auskunft aus
+ProSonata: Der Eintrag wächst dann nicht mehr, und die Zeit geht in einen Folgeeintrag (unten).
+Ein Bild, das alle vier als gleichrangige Kästen zeigte, behauptete eine Ordnung, die es im Code
+nicht gibt.
 
 **Von Hand**, mit dem endgültigen Text. Der Präfix fällt weg, und auf diese `timeID` schreibt
 das Werkzeug nie wieder – der Zeiteintrag gehört ab dann dem Benutzer, Korrekturen in
@@ -691,6 +741,27 @@ die QuickPick.
 
 **Gesendet wird aufgeschoben:** was älter als etwa zehn Minuten ist, geht beim nächsten
 Ereignis raus. Nicht sofort beim Commit, nicht beim Push.
+
+Der ganze Weg, den dieser Abschnitt zusammen mit Abschnitt 7 und 8 beschreibt, in einem Bild:
+
+```mermaid
+sequenceDiagram
+    participant H as post-commit-Hook
+    participant S as state.json
+    participant E as Extension
+    participant P as ProSonata
+    H->>S: Segment am Commit-Zeitpunkt schneiden, Text aus dem Trailer,<br/>Schreibvorgang vormerken
+    S-->>E: FileSystemWatcher: alle Fenster aktualisieren, ohne einen API-Aufruf
+    Note over E: Zeitgeber, alle 30 s:<br/>was ist älter als zehn Minuten?
+    E->>P: GET über die Kennung
+    P-->>E: Summe drüben und isInvoiced — beides in einem Aufruf
+    E->>P: beim ersten Mal POST, danach PUT mit fremd + eigen
+    E->>S: zusammenführen: timeId als Wert, Zähler als Differenz
+```
+
+Was das Bild trägt: Der Hook **schreibt nur lokal**, der Commit wartet nie auf das Netz. Und
+zwischen Commit und Versand liegen zehn Minuten, in denen ein zurückgerollter Commit ProSonata
+gar nicht erst erreicht.
 
 Auslöser sind **Handlungen und ein Zeitgeber**, nicht der Fensterwechsel:
 
@@ -1690,7 +1761,7 @@ Nicht erneut vorschlagen:
 3. **Schwellwerte der Warnungen** (Abschnitt 3) und des Signals „Zeiteintrag ruht" – aus der
    Praxis festzulegen, nicht vorab zu erfinden.
 4. **Gleichzeitiges Buchen von zwei Rechnern derselben Person auf denselben Branch** ist nicht
-   abgedeckt. Die Regel „fremd + eigen" setzt voraus, dass immer nur einer schreibt. Laufen
+   abgedeckt. Im Tagesmodus gehört der Tageswechsel dazu (Abschnitt 3). Die Regel „fremd + eigen" setzt voraus, dass immer nur einer schreibt. Laufen
    zwei Timer parallel, überholen sich die Schreibzugriffe und der Wert ist zeitweise zu
    niedrig. Bekannte Grenze, kein Fehler. **Gelöst wird sie von den Fächern in `api-comments`**
    (Punkt 1), und zwar als Nebenwirkung: Wo jeder Rechner nur sein eigenes Fach schreibt, gibt
@@ -1724,6 +1795,8 @@ Anspruch vor dem Anlegen (Abschnitt 7).
 | Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
 | Umzug der Maschinendaten nach `api-comments`, samt Rechnerfächern | 7 und 12 |
 | Einmalige Migration alter Hooks über alle bekannten Repositories | 8 |
+| Repo-Vorgabe für den Modus (`prosonata.mode`) | 3, *pro Branch und Tag* |
+| Endgültigen Text über die zurückliegenden Tage nachziehen | 3, *pro Branch und Tag* |
 
 Gebaut sind dagegen die beiden wichtigsten Abschlusssignale: gemergter Branch und
 verschwundene Remote-Ref.

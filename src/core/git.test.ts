@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { describeRepo, rootCommit } from './git.js'
+import { describeRepo, rootCommit, subjectOf, trailerOf } from './git.js'
 
 /**
  * The root commit identifies the repository across all clones, so a branch key
@@ -81,5 +81,53 @@ describe('describeRepo', () => {
     expect(repo).not.toBeNull()
     expect(repo!.headFile.startsWith('/')).toBe(true)
     expect(readFileSync(repo!.headFile, 'utf8')).toContain('ref:')
+  })
+})
+
+/*
+ * These two decide what the customer reads on the invoice, on every single
+ * commit, in a process nobody is watching. Until now neither had a test.
+ */
+describe('the text a commit carries', () => {
+  function repoWith(message: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-trailer-'))
+    execFileSync('git', ['init', '--quiet'], { cwd: dir })
+    writeFileSync(join(dir, 'a.txt'), 'x')
+    execFileSync('git', ['add', '-A'], { cwd: dir })
+    execFileSync('git', ['commit', '--quiet', '-m', message], { cwd: dir })
+    return dir
+  }
+
+  it('reads the trailer out of the last paragraph', () => {
+    const dir = repoWith('fix: Rundungsfehler\n\nTest ergänzt.\n\nProsonata: Rabattberechnung korrigiert')
+
+    expect(trailerOf(dir, 'Prosonata')).toBe('Rabattberechnung korrigiert')
+  })
+
+  // The keyword names the target system, so its spelling must not decide anything.
+  it('does not care how the keyword is capitalised', () => {
+    const dir = repoWith('fix: etwas\n\nPROSONATA: Grossgeschrieben')
+
+    expect(trailerOf(dir, 'Prosonata')).toBe('Grossgeschrieben')
+  })
+
+  // A commit-message convention of its own; it must not become an invoice line.
+  it('is not confused by other trailers in the same paragraph', () => {
+    const dir = repoWith('fix: etwas\n\nProsonata: Der richtige Text\nCo-Authored-By: Jemand <x@y.z>')
+
+    expect(trailerOf(dir, 'Prosonata')).toBe('Der richtige Text')
+  })
+
+  it('answers null when there is no trailer, so the subject can take over', () => {
+    const dir = repoWith('fix: nur ein Betreff')
+
+    expect(trailerOf(dir, 'Prosonata')).toBeNull()
+    expect(subjectOf(dir)).toBe('fix: nur ein Betreff')
+  })
+
+  it('takes the subject alone, never the body', () => {
+    const dir = repoWith('fix: der Betreff\n\nEin Fliesstext, der nicht auf die Rechnung gehört.')
+
+    expect(subjectOf(dir)).toBe('fix: der Betreff')
   })
 })

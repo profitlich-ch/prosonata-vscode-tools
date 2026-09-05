@@ -25,7 +25,14 @@ export function hoursAndMinutes(seconds: number): string {
  * write sends — but nobody reads `1.27` as a quarter past.
  */
 export function billedTime(seconds: number, grid: TimeGrid): string {
-  return hoursAndMinutes(Math.round(toHours(seconds, grid) * 3600))
+  /*
+   * To the nearest minute, not down to it. A measured stretch is floored,
+   * because a timer must not claim a minute it has not reached — but this is a
+   * value already fixed by the grid, and 0.33 h is nearer twenty minutes than
+   * nineteen. Flooring also made the notation unstable: the browser fills its
+   * field with this text, and `0:20` typed back came out as `0:19`.
+   */
+  return hoursAndMinutes(Math.round((toHours(seconds, grid) * 3600) / 60) * 60)
 }
 
 /**

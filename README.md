@@ -49,6 +49,19 @@ Denselben Befehl später erneut aufrufen, um **Key oder Basis-URL zu wechseln** 
 
 ## Einstellungen pro Repository
 
+Die Reihenfolge steht fest, und ein Schritt darin ist eine Sperre:
+
+```mermaid
+flowchart TD
+    A["<b>Konto einrichten</b><br/>Basis-URL und Benutzer-Key nach ~/.prosonata/config.json"] --> B
+    B["<b>Projekt für dieses Repository wählen</b><br/>verknüpft das Repository und installiert den post-commit-Hook"] --> C
+    C{"Zeitkategorie<br/>gewählt?"}
+    C -- "nein" --> D["ProSonata verlangt eine.<br/>Es wird <b>nichts</b> geschrieben,<br/>und das Panel sagt es."]
+    D --> C
+    C -- "ja" --> E["Der Timer kann laufen"]
+    E -.-> F["Jederzeit später: Zeitraster und Modus.<br/>Der Wechsel auf «ein Eintrag pro Commit»<br/>schliesst den offenen Branch-Eintrag."]
+```
+
 Klicke **ProSonata: Projekt für dieses Repository wählen** — es verknüpft das Repository mit einem Projekt und installiert den `post-commit`-Hook. Neben dem Projekt steht danach sein Budget, etwa «15,25 von 20 h». Geholt wird es beim Öffnen des Fensters und jedes Mal, wenn ein abgeschlossener Zeiteintrag in ProSonata angekommen ist — nicht laufend.
 
 Direkt danach fragt die Erweiterung nach der **Zeitkategorie**. ProSonata verlangt sie bei jedem Zeiteintrag; solange keine gewählt ist, wird nichts geschrieben. Ändern lässt sie sich jederzeit über die Zeile *Kategorie* im Panel, und die Änderung greift auch auf die noch offenen Zeiteinträge durch.

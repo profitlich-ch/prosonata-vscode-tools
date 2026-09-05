@@ -1,6 +1,6 @@
 import type { RemoteEntry } from './api.js'
 import type { Segment } from './segments.js'
-import { toHours, type TimeGrid } from './working-time.js'
+import { hoursToSeconds, toHours, type TimeGrid } from './working-time.js'
 
 /**
  * Putting several time entries back into one (KONZEPT.md §3).
@@ -97,4 +97,33 @@ export function joinTexts(texts: string[]): string {
     if (trimmed !== '' && !seen.includes(trimmed)) seen.push(trimmed)
   }
   return seen.join('; ')
+}
+
+/** What deleting a selection would do. */
+export interface RemovalPlan {
+  /** The entries that would actually go. */
+  remove: RemoteEntry[]
+  /** The ones left standing because they are invoiced. */
+  invoiced: RemoteEntry[]
+  /** Their measured total, for the question put before the deletion. */
+  seconds: number
+}
+
+/**
+ * Plans the deletion of a selection, or `null` when nothing may go.
+ *
+ * Invoiced entries are separated out rather than quietly skipped: they belong to
+ * an invoice, not to this tool (KONZEPT.md §3), and a list that silently does
+ * less than it says is worse than one that explains itself. They are handed back
+ * so the question can name them.
+ */
+export function planRemoval(entries: RemoteEntry[]): RemovalPlan | null {
+  const remove = entries.filter((entry) => !entry.isInvoiced)
+  if (remove.length === 0) return null
+
+  return {
+    remove,
+    invoiced: entries.filter((entry) => entry.isInvoiced),
+    seconds: remove.reduce((sum, entry) => sum + hoursToSeconds(entry.hours), 0),
+  }
 }

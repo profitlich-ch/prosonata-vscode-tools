@@ -47,3 +47,27 @@ export function parseWorkingTime(value: unknown): number {
 export function hoursToSeconds(hours: number): number {
   return Math.round(hours * 3600)
 }
+
+/**
+ * Hours as a person types them, in seconds. `null` when it is neither form.
+ *
+ * Two notations, and the separator decides which: a colon means hours and
+ * minutes (`1:30` is ninety minutes), a dot or comma means decimal hours
+ * (`1,5` is the same, `1.30` is 78 minutes). Both are needed because the field
+ * is prefilled as `h:mm` while ProSonata shows decimals everywhere — someone
+ * reading a number off ProSonata and typing it back must not be turned away.
+ *
+ * The number goes straight onto an invoice, so anything else is refused rather
+ * than guessed at: no bare hours, no negative values, minutes below sixty.
+ */
+export function parseHours(value: string): number | null {
+  const text = value.trim()
+
+  const clock = /^(\d{1,3}):([0-5]\d)$/.exec(text)
+  if (clock) return Number(clock[1]) * 3600 + Number(clock[2]) * 60
+
+  const decimal = /^(\d{1,3})[.,](\d{1,2})$/.exec(text)
+  if (decimal) return hoursToSeconds(Number(`${decimal[1]}.${decimal[2]}`))
+
+  return null
+}

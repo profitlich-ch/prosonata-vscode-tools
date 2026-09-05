@@ -11,7 +11,9 @@ import { Journal } from './journal.js'
 import { Session, type RepoContext } from './session.js'
 import { SegmentLog, atLocal } from './segments.js'
 import { StateStore } from './state-store.js'
+import { planMerge } from './merge.js'
 import { openEntry } from './tracking.js'
+import { EXACT } from './working-time.js'
 
 /**
  * Starting a timer is where a machine arrives at a branch (KONZEPT.md §3): the
@@ -708,5 +710,82 @@ describe('what the log says about a stretch', () => {
     expect(rows).toHaveLength(2)
     expect(rows[0]?.entryId).toBe(rows[1]?.entryId)
     expect(session.state().entries).toHaveLength(1)
+  })
+})
+
+/*
+ * Both of these write into an entry ProSonata already holds — the one thing
+ * `close()` promises never to do. A person decides it, once, for one entry
+ * (KONZEPT.md §3), and that makes the order and the paper trail the whole
+ * safeguard.
+ */
+describe('correcting entries that are already in ProSonata', () => {
+  function entryIn(api: FakeApi, hours: string) {
+    return api.createEntry({
+      projectID: 166,
+      category: 70,
+      date: '2026-07-30',
+      detail: '[a3f9c1] Buchungsmodul',
+      workingTime: hours,
+    })
+  }
+
+  it('writes the sum before it deletes anything', async () => {
+    const api = new FakeApi()
+    const keep = await entryIn(api, '1.00')
+    const drop = await entryIn(api, '2.00')
+    const session = sessionWith(api)
+    api.calls.length = 0
+
+    const plan = planMerge([keep, drop], new Map(), EXACT)!
+    await session.applyMerge(plan, 10_800, 'Buchungsmodul', EXACT)
+
+    // An interruption between the two leaves an entry too many, never an hour
+    // too few: the sum stands before its source disappears.
+    const put = api.calls.findIndex((call) => call.startsWith('updateEntry'))
+    const del = api.calls.findIndex((call) => call.startsWith('deleteEntry'))
+    expect(put).toBeGreaterThanOrEqual(0)
+    expect(del).toBeGreaterThan(put)
+
+    expect((await api.listEntries(166)).map((entry) => entry.timeID)).toEqual([plan.keep.timeID])
+  })
+
+  it('notes each deletion in the journal before making it', async () => {
+    const api = new FakeApi()
+    const keep = await entryIn(api, '1.00')
+    const drop = await entryIn(api, '2.00')
+    const session = sessionWith(api)
+
+    const plan = planMerge([keep, drop], new Map(), EXACT)!
+    await session.applyMerge(plan, 10_800, 'Buchungsmodul', EXACT)
+
+    // Without the note, an interruption would leave an entry nobody knows to remove.
+    const notes = session.journal.read().filter((line) => line.message?.includes(String(plan.drop[0]!.timeID)))
+    expect(notes.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('records a correction in the segment log, so report and invoice agree', async () => {
+    const api = new FakeApi()
+    const entry = await entryIn(api, '2.00')
+    const session = sessionWith(api)
+
+    await session.correctHours(entry, 9000, EXACT, context)
+
+    expect((await api.listEntries(166))[0]!.hours).toBe(2.5)
+    const corrections = session.segments.read().filter((segment) => segment.reason === 'correction')
+    expect(corrections).toHaveLength(1)
+    expect(corrections[0]!.seconds).toBe(1800)
+  })
+
+  it('refuses an invoiced entry, because that belongs to the invoice', async () => {
+    const api = new FakeApi()
+    const entry = await entryIn(api, '2.00')
+    api.entries.get(entry.timeID)!.isInvoiced = true
+    const session = sessionWith(api)
+
+    await expect(
+      session.correctHours({ ...entry, isInvoiced: true }, 9000, EXACT, context),
+    ).rejects.toThrow(/fakturiert/)
+    expect(api.entries.get(entry.timeID)!.hours).toBe(2)
   })
 })

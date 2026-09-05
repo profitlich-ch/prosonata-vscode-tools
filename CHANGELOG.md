@@ -6,6 +6,34 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Einen Eintrag zu öffnen und unverändert zu bestätigen, konnte ihm eine
+  Minute nehmen.** Das Stundenfeld wird mit der abgerechneten Zeit gefüllt, und
+  die muss nicht den gemessenen Sekunden entsprechen: Fünf Minuten sind auf dem
+  exakten Raster 0,08 h, was als 0:04 zurückkommt. Verglichen wird jetzt der
+  Text des Feldes, denn was niemand getippt hat, wollte niemand ändern.
+- **Die abgerechnete Zeit wurde auf die Minute abgerundet statt gerundet.** Aus
+  0,33 h wurden 0:19 statt 0:20. Beim gemessenen Wert bleibt es beim Abrunden,
+  denn ein Timer darf keine Minute behaupten, die er nicht erreicht hat.
+
+### Hinzugefügt
+
+- **Stunden lassen sich auch dezimal eingeben.** In der Durchsicht wurde bisher
+  nur `1:30` angenommen, während ProSonata überall Dezimalstunden zeigt. Jetzt
+  gilt beides, und der Doppelpunkt entscheidet: `1:30` sind neunzig Minuten,
+  `1,30` sind achtundsiebzig.
+
+### Geändert
+
+- **Der Entwurf `docs/tagesmodus.md` ist aufgelöst.** Der Modus ist seit 0.14.0
+  gebaut, und ein Entwurf, der von sich sagt «nichts davon gebaut», führt in die
+  Irre. Was noch nicht im Konzept stand, ist dorthin gewandert: die
+  Tageswechsel-Grenze bei zwei Rechnern, die Spanne, die kürzer aussehen kann
+  als die Dauer, die offene Frage zur Panel-Anzeige nach Mitternacht und die
+  zwei entworfenen, nicht gebauten Stücke (Repo-Vorgabe für den Modus, Text über
+  zurückliegende Tage nachziehen).
+
 ## [0.15.0] — 2026-09-06
 
 ### Behoben
