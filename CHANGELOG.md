@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.17.0] — 2026-09-06
+
 ### Geändert
 
 - **Beim Zusammenlegen steht die Summe schon im ersten Dialog**, in dessen
