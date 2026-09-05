@@ -64,6 +64,12 @@ Zeiteintrag. Wie viele, entscheidet Abschnitt 3.
 
 ## 3. Fachliche Semantik
 
+Der Abschnitt folgt dem Lebenslauf eines Zeiteintrags: **woraus er entsteht** (Modi und
+Umschalter), **die Messung** darunter (Segmentprotokoll, Mitternacht), **was er trägt** (Zeit,
+Datum, Raster, Text, Marker), **was mit ihm geschieht** (Commit, Abschluss, Rechnung, Rückroll,
+zweiter Rechner) und zuletzt, **wo ein Mensch eingreift** (Warnungen, Korrektur, Zuschlagen,
+Durchsehen).
+
 ### Woraus ein Zeiteintrag entsteht
 
 | Ort der Arbeit | Zeiteintrag |
@@ -93,7 +99,7 @@ Kleinigkeit ist – und wo die Rechnung ohnehin nach Zeit gestellt wird.
 **Daran hängen die Einzelheiten, und dort erklärt sich, was sonst wie ein Mangel aussieht:**
 
 - **Die Tagesspanne** (`workingTimeStart`/`-End`) fällt bei einem mehrtägigen Eintrag weg, weil
-  sie über Tagesgrenzen nichts Wahres sagen könnte (siehe *Zeitwert und Datum*). Beim Abrechnen
+  sie über Tagesgrenzen nichts Wahres sagen könnte (unten, *Zeitwert und Datum*). Beim Abrechnen
   nach Zeit wäre das ein Verlust – dort ist sie der Nachweis. Beim Abrechnen nach Leistung fehlt
   sie niemandem: Bezahlt wird das Ergebnis, nicht die Anwesenheit.
 - **Das Datum** benennt beim Commit-Eintrag den Arbeitstag, beim Branch-Eintrag nur den Tag der
@@ -152,113 +158,6 @@ trägt seine ganzen Stunden auf dem Tag des letzten Schreibvorgangs.
 
 Ausführlich, samt verworfenen Alternativen: [docs/tagesmodus.md](docs/tagesmodus.md).
 
-### Ein Segment über Mitternacht
-
-Wird an jeder Grenze zerlegt, und zwar **in allen drei Modi**. Der Grund liegt im
-Segmentprotokoll: Es gruppiert nach dem **Ende** eines Segments, also landete eine ungeteilte
-Nacht von 22:00 bis 02:00 vollständig auf dem zweiten Tag, und der erste verlor seine zwei
-Stunden – das Protokoll beantwortete die eine Frage falsch, für die es angelegt ist.
-
-Geteilt wird die **Aufzeichnung** immer, die **Buchung** auf verschiedene Einträge nur im
-Tagesmodus; sonst tragen beide Hälften dieselbe Eintrags-Kennung.
-
-### Zeitwert und Datum
-
-- `workingTime` ist die **absolute Summe in Dezimalstunden**, nicht die Differenz.
-  Damit ist jeder Schreibzugriff idempotent: ein Wiederholungsversuch verdoppelt nichts, und
-  es braucht kein Read-Modify-Write.
-- Das **Zeitraster** ist pro Repo einstellbar; Default ist exakt mit zwei Nachkommastellen
-  (0,01 h = 36 s). Gerundet wird beim Schreiben, damit der angezeigte Wert der abgerechnete
-  ist.
-- `date` wird bei **jedem** Schreibzugriff auf **heute** gesetzt. Das Datum benennt damit die
-  **Fertigstellung**, nicht den Beginn. Ein Zeiteintrag darf sich über mehrere Tage erstrecken;
-  kein Sonderfall um Mitternacht, kein automatisches Schliessen bei Tageswechsel. Die eine
-  Ausnahme ist der Modus *pro Branch und Tag*: Dort trägt der Eintrag seinen Tag (`day`), der
-  Versand schreibt ihn als `date`, und Mitternacht ist die Grenze zum nächsten Eintrag.
-- **„Heute" ist die lokale Zeit des schreibenden Rechners**, nicht UTC. Der Arbeitstag ist
-  durch die eigene Uhr definiert, nicht durch einen Meridian. Eine Umrechnung findet ohnehin
-  nicht statt: `date` ist in der API ein reines Datum ohne Zeitanteil. Die einzige Frage ist,
-  welchen Tag der Client für heute hält – und das ist der, an dem der Benutzer sitzt.
-  Der Randfall bleibt bewusst: Wer über Mitternacht hinaus arbeitet und danach schreibt,
-  bekommt den neuen Tag. Das passt zur Datumssemantik.
-- `workingTimeStart` und `workingTimeEnd` tragen die **Spanne des Arbeitstages**: den Beginn
-  des ersten und das Ende des jüngsten Segments dieses Eintrags, aus dem Segmentprotokoll.
-  ProSonata zeigt beide nur an und rechnet nichts daraus; für die Rechnung zählt die Dauer.
-  **Beide Enden müssen auf denselben Tag fallen** – sonst wird `null` geschrieben, was die
-  Felder löscht. Eine Spanne sagt nur etwas über einen Tag; `08:12–17:40` auf einem Eintrag,
-  der über drei Wochen gewachsen ist, behauptete eine Anwesenheit, die es nie gab. Wächst ein
-  Eintrag über Mitternacht, verliert er seine Spanne also wieder. Mit dem Modus hat das nichts
-  zu tun: Auch ein Commit-Eintrag kann über Mitternacht gehen.
-- **Der laufende Timer steht nicht in diesen Feldern, sondern in der Marke** (Abschnitt 3).
-  Früher trug `workingTimeStart` diesen Zustand – die blosse Anwesenheit hiess „hier läuft ein
-  Timer". Das kostete zweierlei: das Feld selbst, und die Auskunft, *wann*. Eine Uhrzeit ohne
-  Tag lässt einen auf einem schlafenden Rechner vergessenen Timer eine Woche später aussehen
-  wie einen von heute früh. Ein zweiter Rechner **warnt** daran weiterhin – anhalten kann er
-  nichts, ein schlafender Rechner liest nichts, und was diese Stunden waren, weiss nur, wer
-  dabei war.
-- Der Vermerk reist mit einem **ohnehin fälligen** Schreibvorgang, nie mit einem eigenen
-  Aufruf. Er ist damit bis zu zehn Minuten alt; für eine Warnung genügt das. Das Pausieren
-  merkt dafür einen Schreibvorgang vor, damit der Vermerk auch wieder verschwindet – beim
-  Schliessen von VS Code sofort, weil dort ohnehin gesendet wird.
-- **Am Konto gemessen:** Die Kurzform `09:12` wird angenommen und als `09:12:00` gespeichert,
-  `null` löscht wirklich – ein leerer String dagegen schreibt `01:00:00` hinein.
-
-### Der Text
-
-Der Text geht auf die **Kundenrechnung**. Woher er im Einzelnen stammt, steht in „Marker im
-Commit" und in der Tabelle darunter. Zwei Eigenschaften gelten übergreifend:
-
-- **Beim ersten Commit auf einem neuen Branch** fragt das Werkzeug einmal nach einer
-  Bezeichnung. *(Die Rückfrage ist verworfen: Ein Rechnungstext, der beim Start entsteht, ist
-  geraten – formulieren lässt er sich erst, wenn der Commit bereitliegt. An ihre Stelle tritt
-  der Platzhalter aus Abschnitt 4.)* Damit auf einem Branch niemand vergisst, ihn zu ersetzen,
-  zeigt das Panel dort die Zeile **Ohne Text**, die zum Textfeld führt. Auf dem Hauptbranch
-  erscheint sie nicht: Dort bringt der nächste Commit den Text ohnehin mit.
-- **Änderbar bleibt er jederzeit**, über die Oberfläche oder über einen späteren Commit. Oft
-  lässt sich der endgültige Rechnungstext erst bei Fertigstellung sinnvoll schreiben.
-
-### Marker im Commit
-
-Der Beschreibungstext für ProSonata steht in einem **Git-Trailer** als letzter Absatz der
-Commit-Message:
-
-```
-fix: Rundungsfehler in der zweiten Rabattstufe
-
-Test ergänzt, Grenzwerte geprüft.
-
-Prosonata: Korrektur der Rabattberechnung im Shop
-```
-
-- Extraktion per `git interpret-trailers --parse`, kein eigener Parser. Weitere Trailer im
-  selben Absatz (etwa `Co-Authored-By:`) stören nicht.
-- Das Schlüsselwort ist **`Prosonata`**, konfigurierbar. Es benennt das Zielsystem, ist ein
-  Eigenname und braucht deshalb für die veröffentlichte Extension keine Übersetzung – anders
-  als ein deutsches `Zeit`. Und es kollidiert nicht: `Zeit: 3 Stunden` könnte jemand als
-  gewöhnlichen Satz in den letzten Absatz schreiben, und Git läse es als Trailer.
-  Verglichen wird ohne Rücksicht auf Gross- und Kleinschreibung.
-- **Nicht `#` als Markerzeichen** – Git strippt Kommentarzeilen.
-- Auf einem **Branch** ersetzt ein Trailer den Text des Branch-Eintrags. Der letzte gewinnt.
-- Auf dem **Hauptbranch** setzt er den Text des Zeiteintrags, den dieser Commit abschliesst;
-  ohne Trailer gilt das Subject.
-
-Der Fallback auf das Subject ist ein Angebot, kein Freibrief: technische Subjects sind vor dem
-Fakturieren zu prüfen. Der Text ist in ProSonata jederzeit nachbearbeitbar.
-
-### Wirkung eines Commits
-
-| Fall | Wirkung |
-|---|---|
-| **Commit auf einem Branch** | Das laufende Segment wird geschnitten, seine Zeit fliesst in den Branch-Eintrag. Der bleibt **offen**. Ein Trailer ersetzt seinen Text. |
-| **Commit auf dem Hauptbranch** | Das Segment wird geschnitten, seine Zeit wird als eigener Zeiteintrag **abgeschlossen**. `detail` = Trailer, sonst Subject. |
-| **Commit ohne laufenden Timer** | Keine Zeit zu buchen. Hinweis mit Angebot, die Zeit seit dem letzten Commit nachzutragen. *(Angebot noch nicht gebaut; der Hook meldet nur, dass nichts gebucht wurde.)* |
-
-Ein laufender Timer wird durch keinen dieser Fälle angehalten; das nächste Segment gehört zum
-nächsten Zeiteintrag.
-
-**Geschnitten wird am Commit-Zeitpunkt.** Beispiel: 9:00 Start, 10:00 Pause, 10:30 Start,
-11:15 Commit → 1,75 h fliessen in den Zeiteintrag, danach läuft das nächste Segment ab 11:15.
-
 ### Das Segmentprotokoll
 
 `segments.jsonl` hält **jedes gemessene Segment** fest: Beginn, Ende, Dauer, Repository,
@@ -314,31 +213,60 @@ und in ihr steht eine falsche Zeile. Bearbeiten wäre trotzdem falsch:
 
 Was hier korrigiert werden kann, ist das laufende Segment – über die Zeitkorrektur (unten, *Zeit
 vor- und zurückdrehen*). Ein bereits **gesendeter** Eintrag wird nicht über das Protokoll
-berichtigt, sondern als das, was er ist: ein Datensatz in ProSonata (nächster Unterabschnitt).
+berichtigt, sondern als das, was er ist: ein Datensatz in ProSonata (unten, *Zeiteinträge
+durchsehen und berichtigen*).
 
-### Zeiteinträge durchsehen und berichtigen
+### Ein Segment über Mitternacht
 
-Die Zeiteinträge des aktuellen Repositories lassen sich aus dem Editor **durchsehen**: eine
-QuickPick-Liste aus ProSonata, mehrfach wählbar, mit drei Handlungen – **Text und Stunden
-ändern**, **zusammenlegen**, **löschen**. Nur das aktuelle Repository, denn die Frage, die dazu führt, lautet
-immer „was habe ich hier gebucht", nie „was steht in allen Projekten".
+Wird an jeder Grenze zerlegt, und zwar **in allen drei Modi**. Der Grund liegt im
+Segmentprotokoll: Es gruppiert nach dem **Ende** eines Segments, also landete eine ungeteilte
+Nacht von 22:00 bis 02:00 vollständig auf dem zweiten Tag, und der erste verlor seine zwei
+Stunden – das Protokoll beantwortete die eine Frage falsch, für die es angelegt ist.
 
-- **Zusammenlegen ist eine Aussage über die Arbeit**: Wer im Nachhinein drei Einträge zu einem
-  macht, sagt damit, das sei in einem Rutsch entstanden – und ein Rutsch wird **einmal** gerundet,
-  nicht dreimal. *Gerundet wird eine Arbeit, nicht ein Datensatz.* Der Vorschlag für die Stunden
-  kommt deshalb aus den Segmenten, sobald sie die Einträge abdecken, einmal auf das Raster
-  gerundet; decken sie nicht, ist die Summe aus ProSonata die Vorbelegung, mit dem Hinweis, warum.
-  Die überzähligen Einträge werden per `DELETE` entfernt, nachdem die Summe sicher auf dem
-  bleibenden steht – dieselbe Reihenfolge wie beim Zuschlagen.
-- **Fakturierte Einträge** bleiben unberührt, auch beim Löschen einer Auswahl, die sie enthält:
-  Sie gehören der Rechnung, nicht dem Werkzeug.
-- **Das Protokoll wird nicht nachgezogen.** Es bleibt das Archiv der Messung; berichtigt wird die
-  Abrechnung. Dass beide danach verschieden sind, ist kein Widerspruch, sondern der Grund, warum
-  es zwei Ebenen gibt (Abschnitt 2).
+Geteilt wird die **Aufzeichnung** immer, die **Buchung** auf verschiedene Einträge nur im
+Tagesmodus; sonst tragen beide Hälften dieselbe Eintrags-Kennung.
 
-Die Liste selbst ist eine native QuickPick, kein Webview – aus demselben Grund wie alle
-Auswahlen in Abschnitt 8. Gebraucht wird Mehrfachauswahl und ein Knopf je Zeile, und beides hat
-die QuickPick.
+### Zeitwert und Datum
+
+- `workingTime` ist die **absolute Summe in Dezimalstunden**, nicht die Differenz.
+  Damit ist jeder Schreibzugriff idempotent: ein Wiederholungsversuch verdoppelt nichts, und
+  es braucht kein Read-Modify-Write.
+- Das **Zeitraster** ist pro Repo einstellbar; Default ist exakt mit zwei Nachkommastellen
+  (0,01 h = 36 s). Gerundet wird beim Schreiben, damit der angezeigte Wert der abgerechnete
+  ist.
+- `date` wird bei **jedem** Schreibzugriff auf **heute** gesetzt. Das Datum benennt damit die
+  **Fertigstellung**, nicht den Beginn. Ein Zeiteintrag darf sich über mehrere Tage erstrecken;
+  kein Sonderfall um Mitternacht, kein automatisches Schliessen bei Tageswechsel. Die eine
+  Ausnahme ist der Modus *pro Branch und Tag*: Dort trägt der Eintrag seinen Tag (`day`), der
+  Versand schreibt ihn als `date`, und Mitternacht ist die Grenze zum nächsten Eintrag.
+- **„Heute" ist die lokale Zeit des schreibenden Rechners**, nicht UTC. Der Arbeitstag ist
+  durch die eigene Uhr definiert, nicht durch einen Meridian. Eine Umrechnung findet ohnehin
+  nicht statt: `date` ist in der API ein reines Datum ohne Zeitanteil. Die einzige Frage ist,
+  welchen Tag der Client für heute hält – und das ist der, an dem der Benutzer sitzt.
+  Der Randfall bleibt bewusst: Wer über Mitternacht hinaus arbeitet und danach schreibt,
+  bekommt den neuen Tag. Das passt zur Datumssemantik.
+- `workingTimeStart` und `workingTimeEnd` tragen die **Spanne des Arbeitstages**: den Beginn
+  des ersten und das Ende des jüngsten Segments dieses Eintrags, aus dem Segmentprotokoll.
+  ProSonata zeigt beide nur an und rechnet nichts daraus; für die Rechnung zählt die Dauer.
+  **Beide Enden müssen auf denselben Tag fallen** – sonst wird `null` geschrieben, was die
+  Felder löscht. Eine Spanne sagt nur etwas über einen Tag; `08:12–17:40` auf einem Eintrag,
+  der über drei Wochen gewachsen ist, behauptete eine Anwesenheit, die es nie gab. Wächst ein
+  Eintrag über Mitternacht, verliert er seine Spanne also wieder. Mit dem Modus hat das nichts
+  zu tun: Auch ein Commit-Eintrag kann über Mitternacht gehen.
+- **Der laufende Timer steht nicht in diesen Feldern, sondern in der Marke** (unten, *Offene
+  Zeiteinträge*).
+  Früher trug `workingTimeStart` diesen Zustand – die blosse Anwesenheit hiess „hier läuft ein
+  Timer". Das kostete zweierlei: das Feld selbst, und die Auskunft, *wann*. Eine Uhrzeit ohne
+  Tag lässt einen auf einem schlafenden Rechner vergessenen Timer eine Woche später aussehen
+  wie einen von heute früh. Ein zweiter Rechner **warnt** daran weiterhin – anhalten kann er
+  nichts, ein schlafender Rechner liest nichts, und was diese Stunden waren, weiss nur, wer
+  dabei war.
+- Der Vermerk reist mit einem **ohnehin fälligen** Schreibvorgang, nie mit einem eigenen
+  Aufruf. Er ist damit bis zu zehn Minuten alt; für eine Warnung genügt das. Das Pausieren
+  merkt dafür einen Schreibvorgang vor, damit der Vermerk auch wieder verschwindet – beim
+  Schliessen von VS Code sofort, weil dort ohnehin gesendet wird.
+- **Am Konto gemessen:** Die Kurzform `09:12` wird angenommen und als `09:12:00` gespeichert,
+  `null` löscht wirklich – ein leerer String dagegen schreibt `01:00:00` hinein.
 
 ### Das Zeitraster
 
@@ -366,35 +294,47 @@ Gefragt wird im Augenblick des Schreibens, nicht beim Anlegen des Eintrags. Dami
 geändertes Raster jeden noch offenen Eintrag – dieselbe Linie wie bei Projekt und Kategorie, wo
 eine Korrektur ebenfalls alles Unfertige mitzieht.
 
-### Nacharbeit einem geschlossenen Eintrag zuschlagen
+### Der Text
 
-Auf dem Hauptbranch schliesst ein Commit seinen Eintrag, und der Timer läuft in einen neuen
-weiter. Wer danach noch nacharbeitet und nicht mehr committet, misst Zeit, die zum eben
-gemachten Commit gehört – gebucht würde sie aber beim nächsten, unter dessen Text.
+Der Text geht auf die **Kundenrechnung**. Woher er im Einzelnen stammt, steht in *Marker im
+Commit* und in *Wirkung eines Commits*. Zwei Eigenschaften gelten übergreifend:
 
-Deshalb lässt sie sich **von Hand** dem zuletzt abgeschlossenen Eintrag dieses Branches
-zuschlagen. Geschrieben wird dabei nur `workingTime` als neue **Gesamtsumme**; Text, Datum und
-Marker bleiben unberührt – dieselbe Mechanik wie bei der Antwort „hinzufügen" auf einen anderswo
-abgeschlossenen Eintrag.
+- **Beim ersten Commit auf einem neuen Branch** fragt das Werkzeug einmal nach einer
+  Bezeichnung. *(Die Rückfrage ist verworfen: Ein Rechnungstext, der beim Start entsteht, ist
+  geraten – formulieren lässt er sich erst, wenn der Commit bereitliegt. An ihre Stelle tritt
+  der Platzhalter aus Abschnitt 4.)* Damit auf einem Branch niemand vergisst, ihn zu ersetzen,
+  zeigt das Panel dort die Zeile **Ohne Text**, die zum Textfeld führt. Auf dem Hauptbranch
+  erscheint sie nicht: Dort bringt der nächste Commit den Text ohnehin mit.
+- **Änderbar bleibt er jederzeit**, über die Oberfläche oder über einen späteren Commit. Oft
+  lässt sich der endgültige Rechnungstext erst bei Fertigstellung sinnvoll schreiben.
 
-Das biegt bewusst eine Regel: `close()` verspricht, dass eine geschlossene `timeID` nie wieder
-geschrieben wird. Das gilt für alles, was das Werkzeug von sich aus tut. Hier entscheidet ein
-Mensch, einmal, für einen Eintrag. Drei Grenzen bleiben:
+### Marker im Commit
 
-- Ein **fakturierter** Eintrag wird abgelehnt (`isInvoiced`), auch auf Wunsch.
-- Die Ausgangszahl kommt aus **ProSonata**, nicht aus dem lokalen Zustand – dort kann von Hand
-  korrigiert worden sein, und geschrieben wird eine Summe.
-- Ist der offene Eintrag ProSonata bereits bekannt – seit dem Platzhalter der Regelfall –, wird
-  seine **leere Hülle gelöscht**, nachdem die Zeit sicher auf dem anderen Eintrag steht. In
-  dieser Reihenfolge, denn eine Unterbrechung dazwischen kostet eine Löschung, nie eine Stunde.
-  Trägt er einen **fremden Anteil**, bleibt die Absage: Löschen zerstörte die Stunden des
-  anderen Rechners, und die kennt hier niemand.
-- Findet sich lokal kein Ziel, wird in ProSonata gesucht – über die Kennung, die der Marker
-  nach dem Abschluss behält. Damit trägt das Zuschlagen auch über einen Verlust von
-  `state.json` hinweg.
+Der Beschreibungstext für ProSonata steht in einem **Git-Trailer** als letzter Absatz der
+Commit-Message:
 
-Gezeigt wird vorher, was tatsächlich geschrieben wird – **nach** dem Raster, das aufrundet: Fünf
-Minuten machen bei Viertelstunden-Raster aus 2:00 h nicht 2:05 h, sondern 2:15 h.
+```
+fix: Rundungsfehler in der zweiten Rabattstufe
+
+Test ergänzt, Grenzwerte geprüft.
+
+Prosonata: Korrektur der Rabattberechnung im Shop
+```
+
+- Extraktion per `git interpret-trailers --parse`, kein eigener Parser. Weitere Trailer im
+  selben Absatz (etwa `Co-Authored-By:`) stören nicht.
+- Das Schlüsselwort ist **`Prosonata`**, konfigurierbar. Es benennt das Zielsystem, ist ein
+  Eigenname und braucht deshalb für die veröffentlichte Extension keine Übersetzung – anders
+  als ein deutsches `Zeit`. Und es kollidiert nicht: `Zeit: 3 Stunden` könnte jemand als
+  gewöhnlichen Satz in den letzten Absatz schreiben, und Git läse es als Trailer.
+  Verglichen wird ohne Rücksicht auf Gross- und Kleinschreibung.
+- **Nicht `#` als Markerzeichen** – Git strippt Kommentarzeilen.
+- Auf einem **Branch** ersetzt ein Trailer den Text des Branch-Eintrags. Der letzte gewinnt.
+- Auf dem **Hauptbranch** setzt er den Text des Zeiteintrags, den dieser Commit abschliesst;
+  ohne Trailer gilt das Subject.
+
+Der Fallback auf das Subject ist ein Angebot, kein Freibrief: technische Subjects sind vor dem
+Fakturieren zu prüfen. Der Text ist in ProSonata jederzeit nachbearbeitbar.
 
 ### Offene Zeiteinträge: `[LAUFEND:kennung]`
 
@@ -456,6 +396,89 @@ Zwei Fallstricke:
 Auch auf dem Hauptbranch gibt es offene Zeiteinträge – nicht dauerhaft, aber solange ein Timer
 läuft und der nächste Commit auf sich warten lässt. Sie tragen dann den Marker mit `LAUFEND`
 und dem Platzhalter als Text; der Commit schliesst sie und lässt die Kennung stehen.
+
+### Wirkung eines Commits
+
+| Fall | Wirkung |
+|---|---|
+| **Commit auf einem Branch** | Das laufende Segment wird geschnitten, seine Zeit fliesst in den Branch-Eintrag. Der bleibt **offen**. Ein Trailer ersetzt seinen Text. |
+| **Commit auf dem Hauptbranch** | Das Segment wird geschnitten, seine Zeit wird als eigener Zeiteintrag **abgeschlossen**. `detail` = Trailer, sonst Subject. |
+| **Commit ohne laufenden Timer** | Keine Zeit zu buchen. Hinweis mit Angebot, die Zeit seit dem letzten Commit nachzutragen. *(Angebot noch nicht gebaut; der Hook meldet nur, dass nichts gebucht wurde.)* |
+
+Ein laufender Timer wird durch keinen dieser Fälle angehalten; das nächste Segment gehört zum
+nächsten Zeiteintrag.
+
+**Geschnitten wird am Commit-Zeitpunkt.** Beispiel: 9:00 Start, 10:00 Pause, 10:30 Start,
+11:15 Commit → 1,75 h fliessen in den Zeiteintrag, danach läuft das nächste Segment ab 11:15.
+
+### Abschluss eines Branch-Eintrags
+
+**Von Hand**, mit dem endgültigen Text. Der Präfix fällt weg, und auf diese `timeID` schreibt
+das Werkzeug nie wieder – der Zeiteintrag gehört ab dann dem Benutzer, Korrekturen in
+ProSonata bleiben bestehen.
+
+Daraus folgt der Vorbehalt zur absoluten Summe: Korrekturen an einem **offenen** Zeiteintrag
+werden beim nächsten Schreibzugriff überschrieben. Das ist akzeptiert, solange sie erst nach
+dem Abschluss erfolgen.
+
+Das Werkzeug **schlägt** den Abschluss vor, sobald eines von vier Signalen anspricht. Alle
+sind nur Vorschläge, keines schliesst von selbst ab.
+
+| Signal | Erkennung |
+|---|---|
+| Branch ist gemergt | `git merge-base --is-ancestor <branch> <hauptbranch>` |
+| **Remote-Branch verschwunden** | `git fetch --prune`, danach fehlt `refs/remotes/origin/<branch>` |
+| Lokaler Branch gelöscht | Ref existiert nicht mehr, Zeiteintrag aber schon *(noch nicht gebaut)* |
+| Zeiteintrag ruht | Seit längerem keine neue Zeit und kein Commit *(noch nicht gebaut)* |
+
+Das zweite Signal ist das wichtigste, weil Pull Requests auf github.com geschlossen werden und
+VS Code davon nichts mitbekommt. Ein **Squash-Merge** ist über den ersten Weg nämlich nicht
+erkennbar: dabei entsteht ein neuer Commit, der alte Branch-Tip taucht im Hauptbranch nie auf.
+Löscht GitHub den Branch nach dem Merge – die übliche Einstellung –, verschwindet nach einem
+`fetch --prune` aber die Remote-Ref, und genau das ist zuverlässig sichtbar.
+
+`git fetch --prune` hängt deshalb am Zeitgeber der Extension (Abschnitt 4), läuft aber
+seltener als der Versand – etwa stündlich, und nur solange ein Branch-Eintrag offen ist. Es
+ist ein Netzzugriff auf das Git-Remote, kein API-Call an ProSonata.
+
+Das vierte Signal fängt den Rest: Branches, die nie gemergt und nie gelöscht werden. Offene
+Zeiteinträge sind ausserdem jederzeit in der Oberfläche sichtbar, mit ihrem Alter – wer sie
+übersieht, sieht spätestens den `LAUFEND`-Präfix in ProSonata.
+
+### Fakturierte Zeiteinträge
+
+Vor jedem PUT ist `isInvoiced` zu prüfen – im selben GET, der den fremden Anteil liefert (unten,
+*Mehrere Rechner*). Ist
+der Zeiteintrag fakturiert, darf er nicht wachsen. Stattdessen entsteht ein Folgeeintrag mit
+demselben Text und derselben Kennung; er bekommt die Zeit, die seit dem letzten Schreibzugriff
+dazugekommen ist, und beginnt selbst wieder mit fremdem Anteil null.
+
+### Zurückgerollte Commits
+
+**Grundsatz: Ein Rückroll ändert nie den Zeitwert, nur seine Zuordnung.** Gearbeitete Zeit ist
+gearbeitet, unabhängig davon, ob der Commit überlebt. Sie wird nie verworfen und nie doppelt
+gezählt.
+
+**Auf einem Branch** ist der Fall gegenstandslos: der Zeiteintrag hängt am Branch, nicht an
+SHAs. `reset`, `amend`, `rebase` und Squash lassen ihn unberührt – die Zuordnung ist dadurch
+robuster als eine SHA-Verknüpfung. Nur ein Text, der aus dem Trailer des zurückgerollten
+Commits kam, bleibt stehen, bis ein neuer ihn ersetzt.
+
+**Auf dem Hauptbranch** hängt jeder Zeiteintrag an seiner SHA. Ist diese von HEAD nicht mehr
+erreichbar, war der Commit zurückgerollt:
+
+- **Noch nicht gesendet** – durch den aufgeschobenen Versand der Normalfall, auch bei einem
+  `--amend` unmittelbar nach dem Commit: die Sekunden fliessen in den nächsten Zeiteintrag,
+  dessen Commit die Arbeit ersetzt. Keine Rückfrage. In ProSonata ist nie etwas Falsches
+  erschienen.
+- **Schon gesendet** – der Zeiteintrag steht in ProSonata und trägt echte Zeit. Rückfrage im
+  nächsten VS-Code-Fenster, nicht im Hook: **zusammenführen** oder **stehen lassen**.
+  *(Noch nicht gebaut: Ein zurückgerollter, bereits gesendeter Commit bleibt heute stehen, wie
+  er ist – `DELETE` wird nirgends aufgerufen.)*
+  Zusammenführen heisst summieren – ein Zeiteintrag behält die Gesamtzeit und den neuen Text,
+  die übrigen werden per `DELETE /projecttimes/{id}` entfernt. Stehen lassen heisst: der alte
+  bleibt mit seiner Zeit und seinem Text, der neue Commit legt einen eigenen an. Beide Wege
+  erhalten die Summe.
 
 ### Mehrere Rechner
 
@@ -542,47 +565,6 @@ Zwei Antworten:
 Danach ist der lokale Eintrag in beiden Fällen von der alten `timeID` gelöst: Was ab jetzt
 anfällt, gehört zu einem neuen Zeiteintrag, denn der alte ist fertig.
 
-### Abschluss eines Branch-Eintrags
-
-**Von Hand**, mit dem endgültigen Text. Der Präfix fällt weg, und auf diese `timeID` schreibt
-das Werkzeug nie wieder – der Zeiteintrag gehört ab dann dem Benutzer, Korrekturen in
-ProSonata bleiben bestehen.
-
-Daraus folgt der Vorbehalt zur absoluten Summe: Korrekturen an einem **offenen** Zeiteintrag
-werden beim nächsten Schreibzugriff überschrieben. Das ist akzeptiert, solange sie erst nach
-dem Abschluss erfolgen.
-
-Das Werkzeug **schlägt** den Abschluss vor, sobald eines von vier Signalen anspricht. Alle
-sind nur Vorschläge, keines schliesst von selbst ab.
-
-| Signal | Erkennung |
-|---|---|
-| Branch ist gemergt | `git merge-base --is-ancestor <branch> <hauptbranch>` |
-| **Remote-Branch verschwunden** | `git fetch --prune`, danach fehlt `refs/remotes/origin/<branch>` |
-| Lokaler Branch gelöscht | Ref existiert nicht mehr, Zeiteintrag aber schon *(noch nicht gebaut)* |
-| Zeiteintrag ruht | Seit längerem keine neue Zeit und kein Commit *(noch nicht gebaut)* |
-
-Das zweite Signal ist das wichtigste, weil Pull Requests auf github.com geschlossen werden und
-VS Code davon nichts mitbekommt. Ein **Squash-Merge** ist über den ersten Weg nämlich nicht
-erkennbar: dabei entsteht ein neuer Commit, der alte Branch-Tip taucht im Hauptbranch nie auf.
-Löscht GitHub den Branch nach dem Merge – die übliche Einstellung –, verschwindet nach einem
-`fetch --prune` aber die Remote-Ref, und genau das ist zuverlässig sichtbar.
-
-`git fetch --prune` hängt deshalb am Zeitgeber der Extension (Abschnitt 4), läuft aber
-seltener als der Versand – etwa stündlich, und nur solange ein Branch-Eintrag offen ist. Es
-ist ein Netzzugriff auf das Git-Remote, kein API-Call an ProSonata.
-
-Das vierte Signal fängt den Rest: Branches, die nie gemergt und nie gelöscht werden. Offene
-Zeiteinträge sind ausserdem jederzeit in der Oberfläche sichtbar, mit ihrem Alter – wer sie
-übersieht, sieht spätestens den `LAUFEND`-Präfix in ProSonata.
-
-### Fakturierte Zeiteinträge
-
-Vor jedem PUT ist `isInvoiced` zu prüfen – im selben GET, der den fremden Anteil liefert. Ist
-der Zeiteintrag fakturiert, darf er nicht wachsen. Stattdessen entsteht ein Folgeeintrag mit
-demselben Text und derselben Kennung; er bekommt die Zeit, die seit dem letzten Schreibzugriff
-dazugekommen ist, und beginnt selbst wieder mit fremdem Anteil null.
-
 ### Warnungen
 
 Rein informierend. Gebucht wird nie automatisch.
@@ -649,32 +631,59 @@ brauchen: einmal, um die Wirkung zu zeigen, einmal, um sie zu tun.
 Antwortet jemand auf die Frage nach dem lange laufenden Segment mit einer **Dauer**, bleibt davon
 der **Anfang**: Gearbeitet wurde, als der Timer gestartet wurde; vergessen wurde das Anhalten.
 
-### Zurückgerollte Commits
+### Nacharbeit einem geschlossenen Eintrag zuschlagen
 
-**Grundsatz: Ein Rückroll ändert nie den Zeitwert, nur seine Zuordnung.** Gearbeitete Zeit ist
-gearbeitet, unabhängig davon, ob der Commit überlebt. Sie wird nie verworfen und nie doppelt
-gezählt.
+Auf dem Hauptbranch schliesst ein Commit seinen Eintrag, und der Timer läuft in einen neuen
+weiter. Wer danach noch nacharbeitet und nicht mehr committet, misst Zeit, die zum eben
+gemachten Commit gehört – gebucht würde sie aber beim nächsten, unter dessen Text.
 
-**Auf einem Branch** ist der Fall gegenstandslos: der Zeiteintrag hängt am Branch, nicht an
-SHAs. `reset`, `amend`, `rebase` und Squash lassen ihn unberührt – die Zuordnung ist dadurch
-robuster als eine SHA-Verknüpfung. Nur ein Text, der aus dem Trailer des zurückgerollten
-Commits kam, bleibt stehen, bis ein neuer ihn ersetzt.
+Deshalb lässt sie sich **von Hand** dem zuletzt abgeschlossenen Eintrag dieses Branches
+zuschlagen. Geschrieben wird dabei nur `workingTime` als neue **Gesamtsumme**; Text, Datum und
+Marker bleiben unberührt – dieselbe Mechanik wie bei der Antwort „hinzufügen" auf einen anderswo
+abgeschlossenen Eintrag.
 
-**Auf dem Hauptbranch** hängt jeder Zeiteintrag an seiner SHA. Ist diese von HEAD nicht mehr
-erreichbar, war der Commit zurückgerollt:
+Das biegt bewusst eine Regel: `close()` verspricht, dass eine geschlossene `timeID` nie wieder
+geschrieben wird. Das gilt für alles, was das Werkzeug von sich aus tut. Hier entscheidet ein
+Mensch, einmal, für einen Eintrag. Drei Grenzen bleiben:
 
-- **Noch nicht gesendet** – durch den aufgeschobenen Versand der Normalfall, auch bei einem
-  `--amend` unmittelbar nach dem Commit: die Sekunden fliessen in den nächsten Zeiteintrag,
-  dessen Commit die Arbeit ersetzt. Keine Rückfrage. In ProSonata ist nie etwas Falsches
-  erschienen.
-- **Schon gesendet** – der Zeiteintrag steht in ProSonata und trägt echte Zeit. Rückfrage im
-  nächsten VS-Code-Fenster, nicht im Hook: **zusammenführen** oder **stehen lassen**.
-  *(Noch nicht gebaut: Ein zurückgerollter, bereits gesendeter Commit bleibt heute stehen, wie
-  er ist – `DELETE` wird nirgends aufgerufen.)*
-  Zusammenführen heisst summieren – ein Zeiteintrag behält die Gesamtzeit und den neuen Text,
-  die übrigen werden per `DELETE /projecttimes/{id}` entfernt. Stehen lassen heisst: der alte
-  bleibt mit seiner Zeit und seinem Text, der neue Commit legt einen eigenen an. Beide Wege
-  erhalten die Summe.
+- Ein **fakturierter** Eintrag wird abgelehnt (`isInvoiced`), auch auf Wunsch.
+- Die Ausgangszahl kommt aus **ProSonata**, nicht aus dem lokalen Zustand – dort kann von Hand
+  korrigiert worden sein, und geschrieben wird eine Summe.
+- Ist der offene Eintrag ProSonata bereits bekannt – seit dem Platzhalter der Regelfall –, wird
+  seine **leere Hülle gelöscht**, nachdem die Zeit sicher auf dem anderen Eintrag steht. In
+  dieser Reihenfolge, denn eine Unterbrechung dazwischen kostet eine Löschung, nie eine Stunde.
+  Trägt er einen **fremden Anteil**, bleibt die Absage: Löschen zerstörte die Stunden des
+  anderen Rechners, und die kennt hier niemand.
+- Findet sich lokal kein Ziel, wird in ProSonata gesucht – über die Kennung, die der Marker
+  nach dem Abschluss behält. Damit trägt das Zuschlagen auch über einen Verlust von
+  `state.json` hinweg.
+
+Gezeigt wird vorher, was tatsächlich geschrieben wird – **nach** dem Raster, das aufrundet: Fünf
+Minuten machen bei Viertelstunden-Raster aus 2:00 h nicht 2:05 h, sondern 2:15 h.
+
+### Zeiteinträge durchsehen und berichtigen
+
+Die Zeiteinträge des aktuellen Repositories lassen sich aus dem Editor **durchsehen**: eine
+QuickPick-Liste aus ProSonata, mehrfach wählbar, mit drei Handlungen – **Text und Stunden
+ändern**, **zusammenlegen**, **löschen**. Nur das aktuelle Repository, denn die Frage, die dazu führt, lautet
+immer „was habe ich hier gebucht", nie „was steht in allen Projekten".
+
+- **Zusammenlegen ist eine Aussage über die Arbeit**: Wer im Nachhinein drei Einträge zu einem
+  macht, sagt damit, das sei in einem Rutsch entstanden – und ein Rutsch wird **einmal** gerundet,
+  nicht dreimal. *Gerundet wird eine Arbeit, nicht ein Datensatz.* Der Vorschlag für die Stunden
+  kommt deshalb aus den Segmenten, sobald sie die Einträge abdecken, einmal auf das Raster
+  gerundet; decken sie nicht, ist die Summe aus ProSonata die Vorbelegung, mit dem Hinweis, warum.
+  Die überzähligen Einträge werden per `DELETE` entfernt, nachdem die Summe sicher auf dem
+  bleibenden steht – dieselbe Reihenfolge wie beim Zuschlagen.
+- **Fakturierte Einträge** bleiben unberührt, auch beim Löschen einer Auswahl, die sie enthält:
+  Sie gehören der Rechnung, nicht dem Werkzeug.
+- **Das Protokoll wird nicht nachgezogen.** Es bleibt das Archiv der Messung; berichtigt wird die
+  Abrechnung. Dass beide danach verschieden sind, ist kein Widerspruch, sondern der Grund, warum
+  es zwei Ebenen gibt (Abschnitt 2).
+
+Die Liste selbst ist eine native QuickPick, kein Webview – aus demselben Grund wie alle
+Auswahlen in Abschnitt 8. Gebraucht wird Mehrfachauswahl und ein Knopf je Zeile, und beides hat
+die QuickPick.
 
 ---
 
