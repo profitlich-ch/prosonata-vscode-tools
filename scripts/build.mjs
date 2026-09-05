@@ -1,4 +1,4 @@
-import { chmodSync } from 'node:fs'
+import { chmodSync, readFileSync } from 'node:fs'
 import * as esbuild from 'esbuild'
 
 /**
@@ -12,6 +12,14 @@ import * as esbuild from 'esbuild'
 
 const watch = process.argv.includes('--watch')
 
+/*
+ * The version is baked in, not read at runtime. The CLI is copied to a fixed
+ * place for the hooks to call (KONZEPT.md §8), away from the package.json it
+ * was built beside — so it has to carry its own version to be able to say
+ * which one it is.
+ */
+const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
+
 const shared = {
   bundle: true,
   platform: 'node',
@@ -20,6 +28,7 @@ const shared = {
   sourcemap: true,
   minify: !watch,
   logLevel: 'info',
+  define: { __VERSION__: JSON.stringify(version) },
 }
 
 const extension = {

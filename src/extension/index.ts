@@ -83,9 +83,11 @@ export function activate(context: vscode.ExtensionContext): void {
   /*
    * The hook records absolute paths, which break when Node's version changes,
    * for instance through nvm. Repair it quietly instead of failing silently at
-   * the next commit (KONZEPT.md §8).
+   * the next commit (KONZEPT.md §8). This also refreshes the copy of the CLI
+   * that every hook calls, which is how an update reaches repositories that are
+   * never opened here.
    */
-  repairHookIfNeeded(context)
+  repairHookIfNeeded()
 
   /*
    * A FileSystemWatcher on ~/.prosonata/state.json. Two things matter here: the

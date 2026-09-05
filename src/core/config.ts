@@ -78,6 +78,15 @@ export const paths = {
   state: () => join(stateDir(), 'state.json'),
   journal: () => join(stateDir(), 'log.jsonl'),
   segments: () => join(stateDir(), 'segments.jsonl'),
+  /*
+   * The copy of the CLI that every `post-commit` hook calls. It lives here and
+   * not in the extension folder because that folder carries the version number:
+   * a hook written today would still call today's code after five updates, and
+   * `|| true` would never say so (KONZEPT.md §8).
+   */
+  cli: () => join(stateDir(), 'cli.cjs'),
+  /** The version of that copy, so anyone can ask which one the hooks run. */
+  cliVersion: () => join(stateDir(), 'cli-version'),
 }
 
 export class MissingConfig extends Error {

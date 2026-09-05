@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { join } from 'node:path'
 
 /**
  * Everything this tool needs from git (KONZEPT.md §5).
@@ -39,11 +40,20 @@ export function describeRepo(cwd: string): GitRepo | null {
   const root = tryGit(cwd, 'rev-parse', '--show-toplevel')
   if (!root) return null
 
+  /*
+   * `--git-path` answers relatively — plain `.git/HEAD`. In the CLI that still
+   * works, because its working directory is the repository; in the extension
+   * host it is not, and the file would be looked for somewhere else entirely.
+   * `readHead` catches the error and returns null, so the branch switch would
+   * simply never be noticed. Resolved here, the way `hookPath` already does it.
+   */
+  const head = tryGit(cwd, 'rev-parse', '--git-path', 'HEAD') ?? ''
+
   return {
     root,
     rootCommit: rootCommit(cwd) ?? '',
     branch: currentBranch(cwd) ?? 'HEAD',
-    headFile: tryGit(cwd, 'rev-parse', '--git-path', 'HEAD') ?? '',
+    headFile: head === '' || head.startsWith('/') ? head : join(root, head),
   }
 }
 

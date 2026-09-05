@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { rootCommit } from './git.js'
+import { describeRepo, rootCommit } from './git.js'
 
 /**
  * The root commit identifies the repository across all clones, so a branch key
@@ -62,5 +62,24 @@ describe('the root commit', () => {
 
   it('is null outside a repository', () => {
     expect(rootCommit(mkdtempSync(join(tmpdir(), 'prosonata-none-')))).toBeNull()
+  })
+})
+
+describe('describeRepo', () => {
+  /*
+   * `git rev-parse --git-path HEAD` answers relatively. The CLI survives that
+   * because its working directory is the repository; the extension host's is
+   * not, and `readHead` would quietly return null — the branch switch would
+   * never be noticed.
+   */
+  it('reports HEAD with an absolute path, whatever the working directory is', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-head-'))
+    execFileSync('git', ['init', '--quiet'], { cwd: dir })
+
+    const repo = describeRepo(dir)
+
+    expect(repo).not.toBeNull()
+    expect(repo!.headFile.startsWith('/')).toBe(true)
+    expect(readFileSync(repo!.headFile, 'utf8')).toContain('ref:')
   })
 })

@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { hookBlock, hookNeedsRepair, hookPath, installHook, isInstalled } from './hooks.js'
+import { hookBlock, hookNeedsRepair, hookPath, installHook, isInstalled, publishCli, publishedCli } from './hooks.js'
 
 const paths = { node: '/opt/node/v22/bin/node', cli: '/ext/dist/cli.cjs' }
 
@@ -109,5 +109,72 @@ describe('repair', () => {
 
     expect(hookNeedsRepair(dir, paths)).toBe(true)
     expect(installHook(dir, paths).action).toBe('updated')
+  })
+})
+
+describe('publishing the CLI to its fixed place', () => {
+  let home: string
+  let source: string
+  const before = process.env['PROSONATA_HOME']
+
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'prosonata-home-'))
+    process.env['PROSONATA_HOME'] = home
+    source = join(mkdtempSync(join(tmpdir(), 'prosonata-ext-')), 'cli.cjs')
+    writeFileSync(source, '#!/usr/bin/env node\nconsole.log(1)\n')
+  })
+
+  afterEach(() => {
+    if (before === undefined) delete process.env['PROSONATA_HOME']
+    else process.env['PROSONATA_HOME'] = before
+  })
+
+  it('copies the bundle and records which version the hooks now call', () => {
+    expect(publishCli(source, '0.15.0')).toBe(true)
+
+    expect(readFileSync(join(home, 'cli.cjs'), 'utf8')).toContain('console.log(1)')
+    expect(publishedCli()).toEqual({ path: join(home, 'cli.cjs'), version: '0.15.0' })
+  })
+
+  /*
+   * It runs on every window start. Rewriting a file that a hook may be reading
+   * at that moment, for nothing, is exactly the risk not worth taking.
+   */
+  it('does not write again when the copy is already current', () => {
+    publishCli(source, '0.15.0')
+    const written = statSync(join(home, 'cli.cjs')).mtimeMs
+
+    expect(publishCli(source, '0.15.0')).toBe(false)
+    expect(statSync(join(home, 'cli.cjs')).mtimeMs).toBe(written)
+  })
+
+  it('replaces the copy when the bundle changed', () => {
+    publishCli(source, '0.15.0')
+    writeFileSync(source, '#!/usr/bin/env node\nconsole.log(2)\n')
+
+    expect(publishCli(source, '0.16.0')).toBe(true)
+    expect(readFileSync(join(home, 'cli.cjs'), 'utf8')).toContain('console.log(2)')
+    expect(publishedCli()?.version).toBe('0.16.0')
+  })
+
+  it('writes nothing when the bundle is not there', () => {
+    expect(() => publishCli(join(home, 'gibtsnicht.cjs'), '0.15.0')).toThrow()
+
+    expect(existsSync(join(home, 'cli.cjs'))).toBe(false)
+  })
+
+  /*
+   * A hook may start this file at any moment, so a failed copy must not leave a
+   * temp file lying about — the same reason state.json is written this way.
+   */
+  it('clears the temp file when the copy cannot be put in place', () => {
+    mkdirSync(join(home, 'cli.cjs'))
+
+    expect(() => publishCli(source, '0.15.0')).toThrow()
+    expect(readdirSync(home).filter((name) => name.includes('.tmp-'))).toEqual([])
+  })
+
+  it('reports nothing when no copy was ever published', () => {
+    expect(publishedCli()).toBeNull()
   })
 })

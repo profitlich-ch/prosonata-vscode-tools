@@ -6,8 +6,34 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Jeder `post-commit`-Hook rief still die Fassung, mit der er geschrieben
+  wurde.** Der Hook hält absolute Pfade fest, und einer zeigte in den Ordner der
+  Erweiterung — der trägt die Versionsnummer. Bei jedem Update entstand ein
+  neuer daneben, der alte blieb liegen und lief weiter. Auf dem eigenen Rechner
+  rief nach fünf Veröffentlichungen kein einziger von sechs Hooks die
+  installierte Fassung; zwei standen auf einer von vor der Behebung der doppelt
+  angelegten Zeiteinträge und legten also weiter Rechnungspositionen doppelt an.
+  Nichts hat das gemeldet: Der Hook endet auf `|| true`, der Commit gelingt, und
+  gebucht wird nichts.
+
+  Die Erweiterung legt ihre CLI jetzt bei jedem Start nach
+  `~/.prosonata/cli.cjs`, und der Hook zeigt dorthin. Ein Update erreicht damit
+  alle Repositories auf einmal, auch die, die nie im Editor geöffnet werden.
+  Bestehende Hooks werden beim nächsten Öffnen ihres Repositories umgeschrieben.
+- **Ein Branch-Wechsel wurde im Editor nie bemerkt.** `git rev-parse --git-path
+  HEAD` antwortet relativ, und der Pfad wurde ungeprüft übernommen. In der CLI
+  ging das gut, weil dort das Arbeitsverzeichnis das Repository ist; im
+  Extension-Host zeigte er ins Leere, das Lesen schlug fehl, und die Prüfung
+  hielt stillschweigend jeden Branch für unverändert.
+
 ### Hinzugefügt
 
+- **`prosonata status` nennt, welche Fassung die Hooks rufen**, und meldet, wenn
+  die Datei fehlt. Das Panel zeigt dann eine Zeile «Hook bucht nichts». Bisher
+  war ein ausgefallener Hook von einem Arbeitstag ohne Commits nicht zu
+  unterscheiden.
 - **`prosonata mode tag`.** Die CLI kann den Modus „pro Branch und Tag" setzen;
   bisher konnte das nur die Extension.
 

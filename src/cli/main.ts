@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline/promises'
 import { inProsonataOrder, type Project } from '../core/api.js'
 import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
-import { installHook } from '../core/hooks.js'
+import { installHook, isInstalled, publishCli, publishedCli } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import type { EntryMode } from '../core/types.js'
 import { noteFor, readAdjustment } from '../core/adjust.js'
@@ -176,7 +176,8 @@ async function chooseProject(cwd: string): Promise<number> {
 
   session.store.update((state) => applyProject(state, repo.root, project.projectID, categoryId, session.clock.now()))
 
-  const hook = installHook(repo.root, { node: process.execPath, cli: cliPath() })
+  const cli = publishCliOrOwnPath()
+  const hook = installHook(repo.root, { node: process.execPath, cli })
   process.stdout.write(`Hook ${HOOK_ACTION[hook.action]}: ${hook.path}\n`)
   process.stdout.write(`bereit — "${project.projectName}" in ${repo.root}\n`)
   return 0
@@ -493,6 +494,18 @@ async function status(cwd: string): Promise<number> {
   if (state.pending.length > 0) {
     process.stdout.write(`  wartet auf Versand: ${state.pending.length}\n`)
   }
+
+  /*
+   * Which version the hooks actually run. Every silent hook failure so far was
+   * invisible because `|| true` swallows it, so this line exists to be looked
+   * at when a commit books nothing (KONZEPT.md §8).
+   */
+  const published = publishedCli()
+  if (published) {
+    process.stdout.write(`  Hook ruft ${published.path} (${published.version})\n`)
+  } else if (isInstalled(context.repo.root)) {
+    process.stdout.write(`  ${paths.cli()} fehlt — der Hook bucht nichts. Öffne das Repository in VS Code oder rufe "prosonata project".\n`)
+  }
   return 0
 }
 
@@ -708,4 +721,20 @@ function format(seconds: number): string {
 
 function cliPath(): string {
   return process.argv[1] ?? ''
+}
+
+/**
+ * The path a hook should call: the fixed copy, once this CLI has put itself
+ * there. Falls back to the path of the running file if that copy cannot be
+ * written — a hook pointing at where the CLI actually is beats one pointing at
+ * where it should have been (KONZEPT.md §8).
+ */
+function publishCliOrOwnPath(): string {
+  try {
+    publishCli(cliPath())
+    return paths.cli()
+  } catch (error) {
+    process.stderr.write(`die CLI liess sich nicht nach ${paths.cli()} legen: ${(error as Error).message}\n`)
+    return cliPath()
+  }
 }

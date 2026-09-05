@@ -829,6 +829,8 @@ Repos verstreuen und wäre beim Neu-Klonen weg.
   config.json      API-Key, Subdomain, globale Defaults   (Dateirechte 0600)
   state.json       laufende Timer, offene Zeiteinträge,
                    ausstehende Schreibzugriffe            (atomar, mit Version)
+  cli.cjs          die CLI, die jeder post-commit-Hook ruft   (fest, versionslos)
+  cli-version      welche Fassung das ist
   log.jsonl        abgeschlossene Segmente,
                    SHA-Annotationen           (append-only, gekürzt statt archiviert)
   cache.json       Projekte, Kategorien                    (noch nicht gebaut)
@@ -1261,15 +1263,42 @@ absolut in den Hook:
 ```sh
 #!/bin/sh
 git config --local --get prosonata.active >/dev/null 2>&1 || exit 0
-"/Pfad/zu/node" "/Pfad/zu/dist/cli.cjs" post-commit || true
+ELECTRON_RUN_AS_NODE=1 "/Pfad/zu/node" "~/.prosonata/cli.cjs" post-commit || true
 ```
 
 - **Zeile 2 ist der Vorfilter.** In Repos ohne Konfiguration endet der Hook, ohne einen
   Node-Prozess zu starten. Das spart bei jedem fremden Commit den Startaufwand.
 - **`|| true`** – der Hook lässt den Commit nie scheitern.
+- **`ELECTRON_RUN_AS_NODE`** – wurde der Hook aus der Extension installiert, ist der
+  „Node"-Pfad VS Codes Electron-Binary, und das führt ein Skript nur mit dieser Variablen aus.
+  Echtes Node ignoriert sie, deshalb schreiben beide Frontends dieselbe Zeile.
 - **Der absolute Node-Pfad bricht bei einem Versionswechsel**, etwa über nvm. Die Extension
-  prüft beim Start, ob der eingetragene Pfad noch existiert, und repariert den Hook
+  vergleicht beim Start den ganzen Block mit dem, den sie heute schriebe, und repariert
   stillschweigend.
+
+#### Der CLI-Pfad ist fest, nicht versioniert
+
+**Die zweite Zeile zeigt auf `~/.prosonata/cli.cjs`, nicht in den Ordner der Extension.** Der
+trägt die Versionsnummer, und bei jedem Update entsteht ein neuer daneben, während der alte
+liegen bleibt und weiter funktioniert. Ein Hook zeigte damit für immer auf die Fassung des Tages,
+an dem er geschrieben wurde. Am eigenen Rechner gemessen: Nach fünf Veröffentlichungen rief
+**kein einziger** von sechs Hooks die installierte Fassung; zwei standen auf einer Fassung von vor
+der Behebung der doppelt angelegten Zeiteinträge und legten also weiter Rechnungspositionen doppelt
+an.
+
+Die Extension legt ihre CLI deshalb bei jedem Start an diesen festen Ort – atomar, Temp-Datei
+plus `rename`, weil ein Hook die Datei jederzeit starten kann und nie eine halbe sehen darf. Ein
+Update erreicht damit **alle** Repositories auf einmal, auch die, die nie im Editor geöffnet
+werden. Daneben steht die Versionsnummer in `cli-version`; sie beantwortet die Frage, die vorher
+niemand stellen konnte: *welche Fassung ruft der Hook eigentlich?*
+
+**Das ist der dritte stille Ausfall dieses Hooks**, und der Grund für die Umstellung liegt in
+dieser Reihe, nicht im Einzelfall. Vorher: der Electron-Pfad ohne `ELECTRON_RUN_AS_NODE`, und
+eine Reparaturprüfung, die nur die zwei Pfade statt des ganzen Blocks verglich. Jedes Mal
+verschluckte `|| true` den Fehler, der Commit gelang, und es wurde nichts gebucht. Ein Hook ist
+eine **Kopie eines Pfades in einem fremden Repository** – was daran altert, altert unbemerkt.
+Deshalb sagen `prosonata status` und das Panel jetzt, wenn die Datei fehlt: Das Werkzeug schreibt
+in ein Abrechnungssystem, und Schweigen ist dort die teuerste Antwort.
 
 Die Installation muss ein Befehl sein (`prosonata init`) und einen bereits vorhandenen
 `post-commit` respektieren – die eigene Zeile anhängen, nicht überschreiben.
@@ -1530,6 +1559,15 @@ Nicht erneut vorschlagen:
 - **Sofortversand im Hook** und ebenso eine **dauerhafte Sende-Queue**. Der aufgeschobene
   Versand ist keins von beidem: er hält ausstehende Schreibzugriffe im ohnehin vorhandenen
   Zustand, nicht in einem eigenen, rechnergebundenen Kanal.
+- **Den `post-commit`-Hook abschaffen** und stattdessen aus der Git-Historie nachholen, welche
+  Commits seit dem zuletzt gesehenen dazugekommen sind. Ginge im Prinzip – ein Commit trägt seinen
+  Zeitstempel, das Segment liesse sich also nachträglich am richtigen Punkt schneiden, und die
+  Erweiterung liest HEAD ohnehin alle dreissig Sekunden. Verworfen, weil an die Stelle eines
+  Skripts, das genau einmal zum richtigen Zeitpunkt läuft, eine Nachhol-Logik träte, die Rebase,
+  Reset, Squash und Commit-Serien allein aus dem Nachhinein richtig treffen müsste. Und die CLI
+  soll ohne Extension nutzbar bleiben (Abschnitt 10): Ein Nachholen, das nur im Editor stattfindet,
+  liesse den Terminal-Nutzer ohne Zeiterfassung. Der Schwachpunkt des Hooks war nie sein Prinzip,
+  sondern der alternde Pfad – und der ist behoben (Abschnitt 8).
 - **Ein Zeiteintrag pro Tag** oder **pro Commit** als allgemeine Regel. Der Branch ist die
   Klammer; pro Commit gilt nur auf dem Hauptbranch.
 - **Zeiten im Repo speichern**, weder als committete Datei noch als `git notes`. Die Datei
@@ -1685,6 +1723,7 @@ Anspruch vor dem Anlegen (Abschnitt 7).
 | Zusammenführen zurückgerollter, bereits gesendeter Zeiteinträge | 3, *Zurückgerollte Commits* |
 | Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
 | Umzug der Maschinendaten nach `api-comments`, samt Rechnerfächern | 7 und 12 |
+| Einmalige Migration alter Hooks über alle bekannten Repositories | 8 |
 
 Gebaut sind dagegen die beiden wichtigsten Abschlusssignale: gemergter Branch und
 verschwundene Remote-Ref.

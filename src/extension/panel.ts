@@ -1,5 +1,7 @@
 import * as vscode from 'vscode'
 
+import { paths } from '../core/config.js'
+import { isInstalled, publishedCli } from '../core/hooks.js'
 import {
   awaitingDecision,
   currentSeconds,
@@ -238,6 +240,22 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
           trouble === null ? String(state.pending.length) : `${state.pending.length} — ${trouble}`,
           trouble === null ? 'cloud-upload' : 'warning',
           { command: 'prosonata.send', title: 'Jetzt senden' },
+        ),
+      )
+    }
+
+    /*
+     * The hook calls a copy of the CLI at a fixed place. Is it gone, every
+     * commit books nothing and says nothing, because the hook ends in
+     * `|| true` (KONZEPT.md §8). This row is the only place that would show it.
+     */
+    if (isInstalled(context.repo.root) && publishedCli() === null) {
+      rows.push(
+        new PanelRow(
+          'Hook bucht nichts',
+          `${paths.cli()} fehlt`,
+          'warning',
+          { command: 'prosonata.chooseProject', title: 'Hook neu einrichten' },
         ),
       )
     }

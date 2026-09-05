@@ -1,7 +1,9 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
+import { paths } from './config.js'
 import { tryGit } from './git.js'
+import { VERSION } from './version.js'
 
 /**
  * Installing the `post-commit` hook (KONZEPT.md §8).
@@ -81,6 +83,71 @@ export function installHook(repoRoot: string, paths: HookPaths): InstallResult {
   return { path, action: 'updated' }
 }
 
+/**
+ * Puts the bundled CLI where the hooks look for it, and records its version.
+ *
+ * The hook holds absolute paths, and until now one of them pointed into the
+ * extension's own folder — which carries the version number. Every update left
+ * a new folder beside the old one, the old one kept working, and so the hook
+ * kept calling the code of the day it was written. Three times a hook has
+ * failed silently this way, because `|| true` swallows whatever it says
+ * (KONZEPT.md §8).
+ *
+ * A fixed place ends that: the hook never has to be rewritten again for a new
+ * version, and an update reaches every repository at once, including those that
+ * are never opened in the editor.
+ *
+ * Written atomically, because a hook may start this file at any moment and must
+ * never see half of it — the same reason `state.json` is written that way.
+ *
+ * @param source Absolute path of the bundled `cli.cjs` to publish.
+ * @param version Written next to the copy; defaults to this build's version.
+ * @returns Whether the CLI itself was written; `false` means it was current.
+ */
+export function publishCli(source: string, version: string = VERSION): boolean {
+  const target = paths.cli()
+
+  const wanted = readFileSync(source)
+  /*
+   * Unreadable counts as "not what we want", so a damaged target is replaced
+   * rather than turned into an error nobody can act on. This also settles the
+   * case where source and target are the same file — the CLI publishing itself,
+   * started from the fixed place: the contents match, so nothing is written.
+   */
+  const same = readIfPossible(target)?.equals(wanted) === true
+
+  if (!same) {
+    mkdirSync(dirname(target), { recursive: true })
+    const temp = `${target}.tmp-${process.pid}-${Date.now().toString(36)}`
+    try {
+      writeFileSync(temp, wanted, { mode: 0o755 })
+      renameSync(temp, target)
+    } catch (error) {
+      try {
+        unlinkSync(temp)
+      } catch {
+        // The temp file may never have been created; the first error is the one that counts.
+      }
+      throw error
+    }
+  }
+
+  const stamp = paths.cliVersion()
+  const stamped = existsSync(stamp) ? readFileSync(stamp, 'utf8').trim() : null
+  if (stamped !== version) writeFileSync(stamp, `${version}\n`)
+
+  return !same
+}
+
+/** Which version the hooks currently call, or null if none is published. */
+export function publishedCli(): { path: string; version: string } | null {
+  const target = paths.cli()
+  if (!existsSync(target)) return null
+
+  const stamp = paths.cliVersion()
+  return { path: target, version: existsSync(stamp) ? readFileSync(stamp, 'utf8').trim() : 'unbekannt' }
+}
+
 export function isInstalled(repoRoot: string): boolean {
   const path = hookPath(repoRoot)
   return existsSync(path) && readFileSync(path, 'utf8').includes(BEGIN)
@@ -107,6 +174,14 @@ export function hookPath(repoRoot: string): string {
   const dir = tryGit(repoRoot, 'rev-parse', '--git-common-dir') ?? join(repoRoot, '.git')
   const absolute = dir.startsWith('/') ? dir : join(repoRoot, dir)
   return join(absolute, 'hooks', 'post-commit')
+}
+
+function readIfPossible(file: string): Buffer | null {
+  try {
+    return readFileSync(file)
+  } catch {
+    return null
+  }
 }
 
 function replaceBlock(contents: string, block: string): string | null {

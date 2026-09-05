@@ -3,7 +3,7 @@ import * as vscode from 'vscode'
 import { inProsonataOrder, type Category, type Project } from '../core/api.js'
 import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { type GitRepo } from '../core/git.js'
-import { hookNeedsRepair, installHook } from '../core/hooks.js'
+import { hookNeedsRepair, installHook, publishCli } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid } from '../core/repo-config.js'
 import { applyCategory, applyProject } from '../core/tracking.js'
 import type { Session } from '../core/session.js'
@@ -161,8 +161,32 @@ function groupedItems(categories: Category[], current: number | undefined): (vsc
   return items
 }
 
+/**
+ * Copies the bundled CLI to the fixed place the hooks call and answers with
+ * that path. `null` means publishing failed, and then the hook must be left
+ * alone: one pointing at a file that is not there fails silently, which is the
+ * very failure this arrangement exists to end (KONZEPT.md §8).
+ */
+function cliForHook(): string | null {
+  const root = extensionRoot()
+  if (!root) return null
+
+  try {
+    publishCli(vscode.Uri.joinPath(root, 'dist', 'cli.cjs').fsPath)
+    return paths.cli()
+  } catch (error) {
+    void vscode.window.showWarningMessage(
+      `ProSonata: die CLI konnte nicht nach ${paths.cli()} gelegt werden — ${(error as Error).message}. ` +
+        'Der post-commit-Hook bleibt, wie er ist.',
+    )
+    return null
+  }
+}
+
 export function installHookHere(repoRoot: string): void {
-  const cli = vscode.Uri.joinPath(extensionRoot()!, 'dist', 'cli.cjs').fsPath
+  const cli = cliForHook()
+  if (cli === null) return
+
   try {
     installHook(repoRoot, { node: process.execPath, cli })
   } catch (error) {
@@ -181,11 +205,12 @@ export async function chooseGrid(_session: Session, repo: GitRepo): Promise<void
   if (picked) setGrid(repo.root, picked.grid)
 }
 
-export function repairHookIfNeeded(context: vscode.ExtensionContext): void {
+export function repairHookIfNeeded(): void {
   const repo = currentContext()
   if (!repo) return
 
-  const cli = vscode.Uri.joinPath(context.extensionUri, 'dist', 'cli.cjs').fsPath
+  const cli = cliForHook()
+  if (cli === null) return
   if (!hookNeedsRepair(repo.repo.root, { node: process.execPath, cli })) return
 
   try {
