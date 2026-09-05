@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.16.0] — 2026-09-06
+
 ### Behoben
 
 - **Das Zusammenlegen schlug 0:00 Stunden vor, obwohl die Einträge Zeit
