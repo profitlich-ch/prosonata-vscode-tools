@@ -196,14 +196,20 @@ async function mergeEntries(
     return
   }
 
+  /*
+   * The sum belongs in the first step, not only in the second: here is where
+   * somebody decides whether to merge at all, and what lands on the invoice is
+   * the number, not the text.
+   */
+  const proposed = plan.recomputedSeconds ?? plan.addedSeconds
   const text = await vscode.window.showInputBox({
-    title: `ProSonata: ${plan.drop.length + 1} Einträge zusammenlegen`,
-    prompt: 'Text des zusammengelegten Eintrags',
+    title: `ProSonata: ${plan.drop.length + 1} Einträge zusammenlegen zu ${billedTime(proposed, grid)} h`,
+    prompt: 'Text des zusammengelegten Eintrags — die Stunden kommen im nächsten Schritt',
     value: plan.text,
   })
   if (text === undefined) return
 
-  const seconds = await askForHours(plan, grid)
+  const seconds = await askForHours(plan, proposed, grid)
   if (seconds === null) return
 
   await session.applyMerge(plan, seconds, text, grid)
@@ -222,11 +228,10 @@ async function mergeEntries(
  * would have offered the smaller number is left out rather than shown with a
  * caveat nobody reads.
  */
-async function askForHours(plan: MergePlan, grid: TimeGrid): Promise<number | null> {
-  const proposed = plan.recomputedSeconds ?? plan.addedSeconds
+async function askForHours(plan: MergePlan, proposed: number, grid: TimeGrid): Promise<number | null> {
   const note =
     plan.recomputedSeconds === null
-      ? 'aus ProSonata addiert — das Segmentprotokoll kennt nicht alle diese Einträge'
+      ? `${hoursAndMinutes(plan.addedSeconds)} aus ProSonata addiert — das Segmentprotokoll kennt nicht alle diese Einträge`
       : `bisher ${hoursAndMinutes(plan.addedSeconds)} in ${plan.drop.length + 1} Einträgen, hier einmal gerundet`
 
   const given = await vscode.window.showInputBox({

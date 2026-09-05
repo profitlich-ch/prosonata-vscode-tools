@@ -6,6 +6,14 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Geändert
+
+- **Beim Zusammenlegen steht die Summe schon im ersten Dialog**, in dessen
+  Titelzeile. Bisher kam sie erst im zweiten, bei den Stunden — entschieden wird
+  aber im ersten, und auf die Rechnung geht die Zahl, nicht der Text. Wo die
+  Summe aus ProSonata addiert wird, weil das Protokoll nicht alle Einträge
+  kennt, nennt der Hinweis sie jetzt ebenfalls.
+
 ## [0.16.0] — 2026-09-06
 
 ### Behoben
