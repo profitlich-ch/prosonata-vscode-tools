@@ -9,7 +9,7 @@ import { DEFAULTS, type Config } from './config.js'
 import { FakeApi } from './fake-api.js'
 import { Journal } from './journal.js'
 import { isMarkedOpen, readKey } from './marker.js'
-import { adoptForeignShare, applySend, dueWrites, send, type SendDeps } from './sender.js'
+import { adoptForeignShare, applySend, describeTrouble, dueWrites, send, type SendDeps, type SendResult } from './sender.js'
 import { emptyState, type State, type TimeEntry } from './types.js'
 
 const NINE = new Date(2026, 6, 30, 9, 0, 0).getTime()
@@ -425,7 +425,14 @@ describe('an entry without a text', () => {
  * missing and how entries were created twice (KONZEPT.md §7).
  */
 describe('folding a send onto the state as it stands now', () => {
-  const sent = { sent: ['e1'], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [] }
+  const sent: SendResult = {
+    sent: ['e1'],
+    failed: [],
+    tooLong: [],
+    missingCategory: [],
+    awaitingDecision: [],
+    deferred: [],
+  }
 
   it('keeps time another actor booked while the send was in flight', () => {
     const before = stateWith(entry({ seconds: 1000 }))
@@ -542,5 +549,84 @@ describe('claiming the right to create an entry', () => {
 
     expect(result.failed).toHaveLength(1)
     expect(held.has('e1')).toBe(false)
+  })
+})
+
+/*
+ * The account allows 50 calls per fifteen minutes and one entry costs up to two
+ * of them (KONZEPT.md §9). The API reports what is left in every answer; before
+ * this, nothing read it — a burst of commits could spend the whole window and
+ * leave nothing for the panel or for a lookup on arrival.
+ */
+describe('the API budget', () => {
+  function twoDue() {
+    const state = stateWith(entry())
+    state.entries.push(entry({ id: 'e2', text: 'Zweites' }))
+    state.pending.push({ entryId: 'e2', since: NINE, closing: false })
+    return state
+  }
+
+  it('stops the round when the quota is nearly spent, and keeps the rest pending', async () => {
+    const { api, deps } = setup()
+    api.limit = { remaining: 3, resetSeconds: 900 }
+
+    const { state, result } = await send(twoDue(), deps, true)
+
+    expect(api.entries.size).toBe(0)
+    expect(result.sent).toEqual([])
+    expect(result.deferred).toEqual(['e1', 'e2'])
+    // Nothing was written, so nothing leaves the queue.
+    expect(state.pending).toHaveLength(2)
+  })
+
+  it('sends normally while there is room', async () => {
+    const { api, deps } = setup()
+    api.limit = { remaining: 50, resetSeconds: 900 }
+
+    const { result } = await send(twoDue(), deps, true)
+
+    expect(result.sent).toEqual(['e1', 'e2'])
+    expect(result.deferred).toEqual([])
+    expect(api.entries.size).toBe(2)
+  })
+
+  it('gives up the round on a 429 instead of burning calls on refusals', async () => {
+    const { api, deps } = setup()
+    api.failNext = new ApiError(429, 'Too many API requests')
+
+    const { result } = await send(twoDue(), deps, true)
+
+    expect(result.failed).toHaveLength(1)
+    // The second entry was not even attempted.
+    expect(result.deferred).toEqual(['e2'])
+    expect(api.entries.size).toBe(0)
+  })
+})
+
+describe('naming why a queue is stuck', () => {
+  const empty: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [], deferred: [] }
+
+  it('says nothing when the round was uneventful', () => {
+    expect(describeTrouble({ ...empty, sent: ['e1'] })).toBeNull()
+  })
+
+  it('names a refused key rather than swallowing it', () => {
+    const failed = [{ entryId: 'e1', error: new ApiError(403, 'Forbidden') }]
+    expect(describeTrouble({ ...empty, failed })).toMatch(/API-Key oder Rechte/)
+  })
+
+  it('tells a spent quota from a real failure', () => {
+    expect(describeTrouble({ ...empty, deferred: ['e1'] })).toMatch(/Kontingent/)
+    const failed = [{ entryId: 'e1', error: new ApiError(429, 'Too many') }]
+    expect(describeTrouble({ ...empty, failed })).toMatch(/Kontingent/)
+  })
+
+  it('names the length when a text is over the limit', () => {
+    const tooLong = [{ entryId: 'e1', length: 940, limit: 800 }]
+    expect(describeTrouble({ ...empty, tooLong })).toBe('Text zu lang: 940 von 800 Zeichen')
+  })
+
+  it('names the missing category, which no retry would fix', () => {
+    expect(describeTrouble({ ...empty, missingCategory: ['e1'] })).toMatch(/Zeitkategorie/)
   })
 })

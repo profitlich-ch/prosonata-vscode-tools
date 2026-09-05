@@ -207,11 +207,21 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       )
     }
 
+    /*
+     * The reason, not just the count. A key that no longer works, a text over the
+     * limit and a spent quota all used to look the same here: a number that would
+     * not go down, with nothing saying why (KONZEPT.md §10).
+     */
     if (state.pending.length > 0) {
-      rows.push(new PanelRow('Wartet auf Versand', String(state.pending.length), 'cloud-upload', {
-        command: 'prosonata.send',
-        title: 'Jetzt senden',
-      }))
+      const trouble = session.lastTrouble
+      rows.push(
+        new PanelRow(
+          'Wartet auf Versand',
+          trouble === null ? String(state.pending.length) : `${state.pending.length} — ${trouble}`,
+          trouble === null ? 'cloud-upload' : 'warning',
+          { command: 'prosonata.send', title: 'Jetzt senden' },
+        ),
+      )
     }
 
     return rows

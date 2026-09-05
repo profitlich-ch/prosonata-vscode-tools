@@ -10,7 +10,8 @@
   },
   "license": "MIT",
   "categories": [
-    "Other"
+    "Other",
+    "SCM Providers"
   ],
   "keywords": [
     "time tracking",
@@ -135,6 +136,11 @@
       {
         "command": "prosonata.toggleMode",
         "title": "Zwischen einem Eintrag pro Branch und pro Commit wechseln",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.openSettings",
+        "title": "Einstellungen öffnen",
         "category": "ProSonata"
       }
     ],

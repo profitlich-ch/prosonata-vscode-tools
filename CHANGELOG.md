@@ -6,8 +6,27 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Befehl „Einstellungen öffnen"**, der `~/.prosonata/config.json` im Editor
+  zeigt. Bisher musste man den Pfad auswendig kennen. Bewusst keine
+  VS-Code-Einstellungen: Hook und CLI lesen die Datei ohne VS Code, und Settings
+  Sync trüge den API-Key in die Cloud.
+
+### Geändert
+
+- **Das Panel nennt den Grund, wenn der Versand stockt**, statt nur die Anzahl
+  wartender Schreibvorgänge. Ein abgewiesener API-Key, ein zu langer Text und
+  ein aufgebrauchtes Kontingent sahen bisher gleich aus: eine Zahl, die nicht
+  kleiner wurde.
+
 ### Behoben
 
+- **Der Versand lief in die Aufruf-Begrenzung von ProSonata.** Das Kontingent
+  steht in jeder Antwort, wurde aber nirgends gelesen. Bei einer Serie von
+  Commits konnte ein Durchgang das ganze Viertelstunden-Fenster aufbrauchen —
+  danach ging gar nichts mehr, auch nicht der Abgleich beim Öffnen. Jetzt hält
+  der Durchgang vorher an; was übrig ist, geht mit dem nächsten raus.
 - **Ein Branch-Wechsel warf das laufende Segment weg.** Die Meldung sagte, die
   Zeit sei dem alten Branch gutgeschrieben worden — tatsächlich wurde der Timer
   nur angehalten, ohne zu buchen. Wie viel dabei verlorenging, hing davon ab,

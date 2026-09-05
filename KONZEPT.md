@@ -1221,7 +1221,11 @@ Je nach Paket 50 bis 500 Aufrufe pro 15 Minuten. **Gemessen: das eigene Konto ha
 kleinste Kontingent. Damit ist zu rechnen, nicht mit dem oberen Wert.
 
 Jede Antwort trägt in `meta` die Felder `apiLimitRemaining` und `apiLimitReset` (Sekunden bis
-zum neuen Intervall). Danach richtet sich das Werkzeug, statt zu schätzen.
+zum neuen Intervall). Danach richtet sich das Werkzeug, statt zu schätzen: Ein Versanddurchgang
+hält an, sobald weniger als eine Handvoll Aufrufe übrig ist, und lässt den Rest vorgemerkt. Das
+kostet eine Verzögerung — die ohnehin eingebaut ist (Abschnitt 4) — und bewahrt Kontingent für
+den Abgleich beim Öffnen und für ein „jetzt senden" von Hand. Auf ein 429 hin bricht der
+Durchgang ganz ab; weitere Einträge bekämen dieselbe Antwort.
 
 Auch mit 50 bleibt es unkritisch, wegen des aufgeschobenen Versands: Ein offener Zeiteintrag
 schreibt höchstens alle zehn Minuten, also 1,5-mal pro Intervall. Zehn parallele Zeiteinträge

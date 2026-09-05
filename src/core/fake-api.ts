@@ -23,7 +23,8 @@ export class FakeApi implements Api {
   /** Entries of other users; `userID=myself` keeps them out of every search. */
   private readonly foreign = new Set<number>()
   private nextId = 2000
-  private limit: RateLimit = { remaining: 50, resetSeconds: 900 }
+  /** The account's quota, counted down per call. Settable so a test can run it dry. */
+  limit: RateLimit = { remaining: 50, resetSeconds: 900 }
 
   rateLimit(): RateLimit {
     return this.limit

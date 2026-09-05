@@ -8,7 +8,7 @@ import { Journal } from './journal.js'
 import { branchKey, identityTerm, isMarkedOpen } from './marker.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
 import { billedTime } from './report.js'
-import { applySend, send, type SendResult } from './sender.js'
+import { applySend, describeTrouble, send, type SendResult } from './sender.js'
 import { planAdjustment, type Adjustment, type Plan, type Situation } from './adjust.js'
 import type { AttachPlan, Attachment } from './attach.js'
 import { SegmentLog, atLocal, type Segment } from './segments.js'
@@ -668,6 +668,15 @@ export class Session {
       })
   }
 
+  /**
+   * Why the queue is not moving, from the last send — or null while all is well.
+   *
+   * Kept in memory beside `runningElsewhereSince`, for the same reason: it is an
+   * observation about the last round, not part of the state that three processes
+   * share.
+   */
+  lastTrouble: string | null = null
+
   /** Sends everything that is due (KONZEPT.md §4). */
   async flush(force = false): Promise<SendResult> {
     /*
@@ -693,6 +702,7 @@ export class Session {
     if (result.sent.length > 0 || result.awaitingDecision.length > 0) {
       this.store.update((current) => applySend(current, before, after, result))
     }
+    this.lastTrouble = describeTrouble(result)
     return result
   }
 

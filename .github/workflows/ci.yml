@@ -1,0 +1,45 @@
+# Typprüfung, Tests und Bau bei jedem Push. Das Paket schreibt in ein
+# Abrechnungssystem — ein grüner Lauf vor dem Merge ist billiger als eine
+# falsche Rechnungsposition.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Die untere Grenze aus `engines`, dazu die aktuelle LTS. Der
+        # post-commit-Hook läuft mit dem Node, das der Benutzer zufällig hat.
+        node: ['20', '22']
+
+    steps:
+      - uses: actions/checkout@v4
+        # Die Tests legen echte Repositories an und lesen den Root-Commit
+        # entlang der First-Parent-Linie; eine flache Kopie genügt dafür nicht.
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+
+      - run: npm ci
+
+      # git braucht eine Identität, sonst schlagen die Tests fehl, die
+      # committen, um Branch-Erkennung und Root-Commit zu prüfen.
+      - name: Git-Identität für die Tests
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "CI"
+          git config --global init.defaultBranch main
+
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build

@@ -29,7 +29,22 @@ export interface SendResult {
   missingCategory: string[]
   /** Entries closed on another machine; they wait for an answer, not a write. */
   awaitingDecision: string[]
+  /** Left for the next round because the API budget was nearly spent. */
+  deferred: string[]
 }
+
+/**
+ * Calls kept back when a round stops early (KONZEPT.md §9).
+ *
+ * The account's quota is 50 requests per fifteen minutes, and one entry costs up
+ * to two of them — a read for `isInvoiced` and the write itself. A burst of
+ * twenty commits would therefore eat the whole window and leave nothing for the
+ * panel, the lookup on arrival, or the user pressing "send now".
+ *
+ * Sending is deferred anyway (§4), so stopping early costs a delay, never a
+ * booking: what is left stays pending and goes out next round.
+ */
+const RATE_LIMIT_FLOOR = 6
 
 export interface SendDeps {
   api: Api
@@ -79,12 +94,31 @@ export function dueWrites(state: State, clock: Clock, delaySeconds: number): str
  */
 export async function send(state: State, deps: SendDeps, force = false): Promise<{ state: State; result: SendResult }> {
   const { clock, config, journal } = deps
-  const result: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [] }
+  const result: SendResult = {
+    sent: [],
+    failed: [],
+    tooLong: [],
+    missingCategory: [],
+    awaitingDecision: [],
+    deferred: [],
+  }
 
   const due = force ? state.pending.map((write) => write.entryId) : dueWrites(state, clock, config.sendDelaySeconds)
   let next = structuredClone(state)
 
-  for (const entryId of due) {
+  for (const [index, entryId] of due.entries()) {
+    /*
+     * What the account has left, from the last answer — the API reports it in
+     * every `meta` (KONZEPT.md §9). Stopping here leaves the rest pending, which
+     * is where it already was; hammering on would earn a 429 and still not send
+     * anything.
+     */
+    const budget = deps.api.rateLimit()
+    if (budget !== null && budget.remaining <= RATE_LIMIT_FLOOR) {
+      result.deferred.push(...due.slice(index))
+      break
+    }
+
     const entry = findEntry(next, entryId)
     if (!entry) {
       next.pending = next.pending.filter((write) => write.entryId !== entryId)
@@ -157,6 +191,13 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       if (!(error instanceof ApiError) || !error.transient) {
         journal.append({ kind: 'note', entryId, message: (error as Error).message })
       }
+      // The quota is spent. Every further entry this round would earn the same
+      // answer, so the rest waits rather than burning calls on refusals.
+      // `finally` below still gives the claim back — a `break` does not skip it.
+      if (error instanceof ApiError && error.status === 429) {
+        result.deferred.push(...due.slice(index + 1))
+        break
+      }
     } finally {
       // Also after a failure: the claim is a lease on the call, not on the
       // outcome. Holding it would only delay the retry.
@@ -165,6 +206,34 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
   }
 
   return { state: next, result }
+}
+
+/**
+ * Why a queue is not moving, in one line — or null when the last round was
+ * uneventful (KONZEPT.md §10).
+ *
+ * The panel used to show the number of waiting writes and nothing else, so a
+ * wrong key, a text over the limit or a spent quota all looked the same: a count
+ * that would not go down. Naming the reason is what §10 asks for when it says
+ * 403 and 429 must be reported rather than swallowed.
+ *
+ * In `core` because the panel and the terminal have to say it the same way.
+ */
+export function describeTrouble(result: SendResult): string | null {
+  const [tooLong] = result.tooLong
+  if (tooLong) return `Text zu lang: ${tooLong.length} von ${tooLong.limit} Zeichen`
+  if (result.missingCategory.length > 0) return 'ohne Zeitkategorie wird nicht gesendet'
+  if (result.deferred.length > 0) return 'ProSonata-Kontingent aufgebraucht — geht später raus'
+
+  const [failure] = result.failed
+  if (!failure) return null
+
+  const error = failure.error
+  if (!(error instanceof ApiError)) return error.message
+  if (error.status === 429) return 'ProSonata-Kontingent aufgebraucht — geht später raus'
+  if (error.status === 403) return 'ProSonata verweigert den Zugriff — API-Key oder Rechte prüfen'
+  if (error.status === 401) return 'ProSonata weist den API-Key ab'
+  return error.message
 }
 
 /**
