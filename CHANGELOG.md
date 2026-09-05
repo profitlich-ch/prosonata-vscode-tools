@@ -6,6 +6,23 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Zeiteinträge durchsehen und richtigstellen.** Ein neuer Befehl zeigt die
+  Zeiteinträge dieses Projekts mit Stunden, Datum, Nummer und
+  Fakturierungsstand. Mehrere ankreuzen und **löschen** oder **zusammenlegen**;
+  beim Zusammenlegen stehen die Texte verbunden in einem Feld, das sich ändern
+  lässt, und die Stunden ebenso. Je Zeile ausserdem ein Stift für Text und
+  Stunden eines einzelnen Eintrags. Fakturierte bleiben unangetastet.
+
+  **Zusammenlegen rundet einmal.** Wer zusammenlegt, erklärt damit, dass es eine
+  Arbeit war — drei Commits zu zwanzig Minuten kosten bei Viertelstunden-Raster
+  je eine halbe Stunde, zusammen 1:30; als ein Eintrag ist dieselbe Arbeit 1:00.
+  Vorgeschlagen wird die aus dem Segmentprotokoll gerechnete Zahl, daneben steht,
+  was bisher in ProSonata stand. Kennt das Protokoll nicht alle beteiligten
+  Einträge — etwa weil ein Teil auf einem anderen Rechner gemessen wurde —, wird
+  addiert statt gerechnet und gesagt, warum.
+
 ## [0.12.0] — 2026-09-05
 
 ### Hinzugefügt

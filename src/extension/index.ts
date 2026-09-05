@@ -4,6 +4,7 @@ import { paths } from '../core/config.js'
 import { LOG_SCHEME, logDocuments, showLog } from './log-view.js'
 import { Panel } from './panel.js'
 import { adjustTime, discardRunning } from './adjust-ui.js'
+import { browseEntries } from './browse.js'
 import {
   askAboutClosedElsewhere,
   attachToLast,
@@ -75,6 +76,7 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.resolveClosedElsewhere', withContext(askAboutClosedElsewhere))
   register(context, 'prosonata.attachToLast', withContext(attachToLast))
   register(context, 'prosonata.log', withRepo(showLog))
+  register(context, 'prosonata.browse', withContext(browseEntries))
   register(context, 'prosonata.adjust', withContext(adjustTime))
   register(context, 'prosonata.discard', withContext((s, c) => discardRunning(s, c, true)))
 

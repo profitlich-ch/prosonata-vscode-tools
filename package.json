@@ -147,6 +147,12 @@
         "command": "prosonata.resolveSleep",
         "title": "Schlafzeit des Rechners abziehen oder behalten",
         "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.browse",
+        "title": "Zeiteinträge durchsehen",
+        "icon": "$(list-flat)",
+        "category": "ProSonata"
       }
     ],
     "menus": {

@@ -103,6 +103,14 @@ export interface Api {
    * the word, any of a branch by the bare key.
    */
   findByDetail(projectId: number, term: string): Promise<RemoteEntry[]>
+  /**
+   * Every entry of a project this user owns, newest first — invoiced ones
+   * included, because a list that hides them would suggest they can be changed.
+   *
+   * One call, not one per entry: the list already carries `detail`, `hours` and
+   * `isInvoiced` (KONZEPT.md §9), and the quota is 50 requests per quarter hour.
+   */
+  listEntries(projectId: number): Promise<RemoteEntry[]>
   createEntry(draft: EntryDraft): Promise<RemoteEntry>
   updateEntry(timeId: number, patch: Partial<EntryDraft>): Promise<RemoteEntry>
   deleteEntry(timeId: number): Promise<void>
@@ -190,6 +198,14 @@ export class HttpApi implements Api {
       `/projecttimes?projectID=${projectId}&isInvoiced=0&userID=myself&detail=${encodeURIComponent(term)}&perPage=100`,
     )
     return (rows ?? []).map(toEntry)
+  }
+
+  async listEntries(projectId: number): Promise<RemoteEntry[]> {
+    const rows = await this.request<Record<string, unknown>[]>(
+      'GET',
+      `/projecttimes?projectID=${projectId}&userID=myself&perPage=1000`,
+    )
+    return (rows ?? []).map(toEntry).sort((a, b) => b.timeID - a.timeID)
   }
 
   async createEntry(draft: EntryDraft): Promise<RemoteEntry> {

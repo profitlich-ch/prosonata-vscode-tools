@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto'
 
-import { HttpApi, type Api } from './api.js'
+import { HttpApi, type Api, type RemoteEntry } from './api.js'
 import { localDate, systemClock, type Clock } from './clock.js'
 import { paths, readConfig, type Config } from './config.js'
 import { describeRepo, mainBranch, type GitRepo } from './git.js'
 import { Journal } from './journal.js'
 import { branchKey, identityTerm, isMarkedOpen } from './marker.js'
+import { measuredPerEntry, type MergePlan } from './merge.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
 import { billedTime } from './report.js'
 import { applySend, describeTrouble, send, type SendResult } from './sender.js'
@@ -737,6 +738,77 @@ export class Session {
   /** Keeps it: the machine slept, the person did not (KONZEPT.md §3). */
   keepSleep(): void {
     this.sleepGaps = []
+  }
+
+  /**
+   * The project's entries as ProSonata holds them, plus what this machine
+   * measured into each (KONZEPT.md §3).
+   *
+   * One call for the list — it already carries `detail`, `hours` and
+   * `isInvoiced` (§9) — and the local join comes from the segment log, which
+   * knows the entry a segment went into.
+   */
+  async browse(context: RepoContext): Promise<{ entries: RemoteEntry[]; measured: Map<number, number> }> {
+    const entries = await this.api.listEntries(context.projectId)
+    const timeIdOf = new Map<string, number>()
+    for (const entry of this.state().entries) {
+      if (entry.timeId !== null) timeIdOf.set(entry.id, entry.timeId)
+    }
+    const mine = this.segments.read().filter((segment) => segment.repoPath === context.scope.repoPath)
+    return { entries, measured: measuredPerEntry(mine, timeIdOf) }
+  }
+
+  /**
+   * Writes a merge: the sum and the text onto the entry that stays, then the
+   * others away.
+   *
+   * In that order, and it is the same rule as everywhere else here: an
+   * interruption in between leaves an entry too many, never an hour too few. A
+   * leftover row is visible on the invoice; missing hours are visible nowhere.
+   * What is still to be deleted goes into the journal first, so the next run can
+   * finish what this one started.
+   */
+  async applyMerge(plan: MergePlan, seconds: number, text: string, grid: TimeGrid): Promise<void> {
+    for (const entry of plan.drop) {
+      this.journal.append({ kind: 'note', entryId: '-', message: `verdichtet: ${entry.timeID} wird gelöscht` })
+    }
+
+    await this.api.updateEntry(plan.keep.timeID, {
+      workingTime: workingTime(seconds, grid),
+      detail: text,
+      date: plan.date,
+    })
+
+    for (const entry of plan.drop) {
+      await this.api.deleteEntry(entry.timeID)
+      this.journal.append({ kind: 'note', entryId: '-', message: `verdichtet: ${entry.timeID} gelöscht` })
+    }
+  }
+
+  /**
+   * Corrects the hours of an entry ProSonata already holds.
+   *
+   * This bends the promise that `close` makes — a closed `timeID` is never
+   * written to again — the same way adding follow-up time does: a person
+   * decides, once, for one entry. The segment log gets a correction row, so the
+   * report and ProSonata do not drift apart (KONZEPT.md §3).
+   */
+  async correctHours(entry: RemoteEntry, seconds: number, grid: TimeGrid, context: RepoContext): Promise<void> {
+    if (entry.isInvoiced) throw new Error('der Eintrag ist bereits fakturiert')
+
+    await this.api.updateEntry(entry.timeID, { workingTime: workingTime(seconds, grid) })
+
+    const before = Math.round(entry.hours * 3600)
+    const local = this.state().entries.find((candidate) => candidate.timeId === entry.timeID)
+    this.segments.append({
+      until: atLocal(this.clock.now()),
+      seconds: seconds - before,
+      repoPath: context.scope.repoPath,
+      branch: local?.scope.branch ?? context.scope.branch,
+      projectId: context.projectId,
+      entryId: local?.id ?? '-',
+      reason: 'correction',
+    })
   }
 
   /** Sends everything that is due (KONZEPT.md §4). */

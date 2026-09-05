@@ -50,6 +50,13 @@ export class FakeApi implements Api {
     return this.matching(projectId, searchTerm(key, markerWord))
   }
 
+  async listEntries(projectId: number): Promise<RemoteEntry[]> {
+    this.record(`listEntries ${projectId}`)
+    return [...this.entries.values()]
+      .filter((entry) => entry.projectID === projectId && !this.foreign.has(entry.timeID))
+      .sort((a, b) => b.timeID - a.timeID)
+  }
+
   async findByDetail(projectId: number, term: string): Promise<RemoteEntry[]> {
     this.record(`findByDetail ${projectId} ${term}`)
     return this.matching(projectId, term)
