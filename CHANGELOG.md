@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.12.0] — 2026-09-05
+
 ### Hinzugefügt
 
 - **Schlafzeit des Rechners wird erkannt und angeboten.** Lief ein Timer,
