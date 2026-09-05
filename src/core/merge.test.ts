@@ -159,3 +159,57 @@ describe('planning a deletion', () => {
     expect(planRemoval([])).toBeNull()
   })
 })
+
+/*
+ * The bug this guards against reached the screen: two entries holding 0:13
+ * together were offered for merging with 0:00 prefilled. Confirming it would
+ * have written 0.00 h and deleted the other entry — thirteen minutes gone, on
+ * an invoice, silently.
+ */
+describe('what counts as measured', () => {
+  function segment(entryId: string, seconds: number, reason: Segment['reason']): Segment {
+    return { until: '2026-09-05T10:00:00', seconds, repoPath: '/work/shop', branch: 'main', projectId: 166, entryId, reason }
+  }
+
+  // It carries seconds: 0 on purpose — its time is already in the lines above.
+  it('does not take the line that closes an entry for a measurement', () => {
+    const measured = measuredPerEntry([segment('e1', 0, 'entry')], new Map([['e1', 2477]]))
+
+    expect(measured.has(2477)).toBe(false)
+  })
+
+  it('still counts everything that was actually measured', () => {
+    const rows = [segment('e1', 600, 'pause'), segment('e1', 180, 'commit'), segment('e1', 0, 'entry')]
+
+    expect(measuredPerEntry(rows, new Map([['e1', 2477]])).get(2477)).toBe(780)
+  })
+
+  /*
+   * The other door to the same fault: discarding a running segment leaves a
+   * `trimmed` line, and it may legitimately carry nothing. Present with zero is
+   * not coverage — whatever the log knows about that entry, it is not where its
+   * hours came from.
+   */
+  it('does not call an entry covered whose only line carries no time', () => {
+    const measured = measuredPerEntry(
+      [segment('e1', 600, 'pause'), segment('e2', 0, 'trimmed')],
+      new Map([['e1', 1], ['e2', 2]]),
+    )
+
+    expect(planMerge([remote(1, 0.17), remote(2, 0.11)], measured, EXACT)!.recomputedSeconds).toBeNull()
+  })
+
+  it('proposes the ProSonata sum when an entry has no measured time here', () => {
+    const entries = [remote(1, 0.11), remote(2, 0.11)]
+    // The log knows both entries, but only as closing lines.
+    const measured = measuredPerEntry(
+      [segment('e1', 0, 'entry'), segment('e2', 0, 'entry')],
+      new Map([['e1', 1], ['e2', 2]]),
+    )
+
+    const plan = planMerge(entries, measured, EXACT)!
+
+    expect(plan.recomputedSeconds).toBeNull()
+    expect(plan.addedSeconds).toBe(792)
+  })
+})

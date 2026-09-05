@@ -8,6 +8,17 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ### Behoben
 
+- **Das Zusammenlegen schlug 0:00 Stunden vor, obwohl die Einträge Zeit
+  trugen.** Wer bestätigt hätte, hätte 0,00 h geschrieben und die übrigen
+  Einträge gelöscht — die Zeit wäre weg gewesen, auf einer Rechnungsposition,
+  ohne Meldung. Ursache war die Zeile, mit der das Protokoll einen Eintrag
+  abschliesst: Sie trägt absichtlich null Sekunden, weil ihre Zeit schon in den
+  Zeilen darüber steht. Beim Nachrechnen galt sie trotzdem als Messung, und
+  damit sah «nicht gemessen» aus wie «null gemessen». Genau diese Verwechslung
+  schliesst der Kommentar der Funktion aus, den Code tat sie trotzdem. Beide
+  Fälle sind jetzt getrennt, und ohne gemessene Zeit wird die Summe aus
+  ProSonata vorgeschlagen, mit dem Hinweis, warum.
+
 - **Einen Eintrag zu öffnen und unverändert zu bestätigen, konnte ihm eine
   Minute nehmen.** Das Stundenfeld wird mit der abgerechneten Zeit gefüllt, und
   die muss nicht den gemessenen Sekunden entsprechen: Fünf Minuten sind auf dem

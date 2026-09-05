@@ -49,10 +49,18 @@ function withoutMarker(detail: string): string {
  * A segment carries the **local** entry id, so the join runs over the state,
  * which knows both. An entry missing from the map was never measured on this
  * machine — that is "unknown", not "zero", and the two must not be confused.
+ *
+ * **The closing line is left out**, and that is the whole point of this
+ * function. It carries `seconds: 0` on purpose — its time already stands in the
+ * segments above it — so counting it would put the entry in the map without
+ * contributing anything measured. "Unknown" would then look like "zero", and a
+ * merge would propose 0:00 for entries that hold real hours.
  */
 export function measuredPerEntry(segments: Segment[], timeIdOf: Map<string, number>): Map<number, number> {
   const seconds = new Map<number, number>()
   for (const segment of segments) {
+    if (segment.reason === 'entry') continue
+
     const timeId = timeIdOf.get(segment.entryId)
     if (timeId === undefined) continue
     seconds.set(timeId, (seconds.get(timeId) ?? 0) + Math.max(0, segment.seconds))
@@ -69,9 +77,13 @@ export function planMerge(entries: RemoteEntry[], measured: Map<number, number>,
 
   const addedSeconds = usable.reduce((sum, entry) => sum + Math.round(entry.hours * 3600), 0)
 
-  // Recomputing is only allowed when every entry is covered; otherwise the
-  // result would not be an honest rounding but an incomplete sum.
-  const covered = usable.every((entry) => measured.has(entry.timeID))
+  /*
+   * Recomputing is only allowed when the log holds measured time for **every**
+   * entry; otherwise the result is not an honest rounding but an incomplete sum.
+   * Present with zero is not coverage: whatever the log knows about that entry,
+   * it is not where its hours came from.
+   */
+  const covered = usable.every((entry) => (measured.get(entry.timeID) ?? 0) > 0)
   const rawSeconds = usable.reduce((sum, entry) => sum + (measured.get(entry.timeID) ?? 0), 0)
 
   return {

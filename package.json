@@ -141,6 +141,7 @@
       {
         "command": "prosonata.openSettings",
         "title": "Einstellungen öffnen",
+        "icon": "$(gear)",
         "category": "ProSonata"
       },
       {
@@ -158,9 +159,19 @@
     "menus": {
       "view/title": [
         {
+          "command": "prosonata.browse",
+          "when": "view == prosonata.panel && prosonata.hasProject",
+          "group": "navigation@1"
+        },
+        {
           "command": "prosonata.log",
           "when": "view == prosonata.panel",
-          "group": "navigation"
+          "group": "navigation@2"
+        },
+        {
+          "command": "prosonata.openSettings",
+          "when": "view == prosonata.panel && prosonata.hasAccount",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
