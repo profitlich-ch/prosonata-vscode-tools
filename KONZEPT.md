@@ -1035,6 +1035,19 @@ nicht, steht in [docs/ki-anbindung.md](docs/ki-anbindung.md).
 
 ### Extension
 
+Aufgeteilt in Module, seit die Einstiegsdatei über tausend Zeilen trug: `view.ts` hält den
+Fensterzustand und die Handvoll Zugriffe, die alle brauchen — `currentSession`, `currentContext`,
+`reload`. Daneben liegen `setup.ts` (Konto, Projekt, Kategorie, Raster), `entries.ts` (was mit
+einem Zeiteintrag geschehen kann), `adjust-ui.ts` (Zeitkorrektur), `watch.ts` (die Takte und was
+sie beobachten), `log-view.ts` und `panel.ts`. `index.ts` bleibt die Anmeldung: Befehle
+registrieren, Zeitgeber starten, sonst nichts.
+
+**Die Abhängigkeit läuft in eine Richtung.** Nichts in `view.ts` importiert einen Befehl, sonst
+entstünde ein Ring. Und keine Regel wird im Frontend nachgebaut, sondern aufgerufen — der Fehler,
+bei dem `watchHead` die Branch-Wechsel-Regel ein zweites Mal führte und dabei falsch, ist genau
+das gewesen.
+
+
 - **Panel in der Seitenleiste** – ein eigener View-Container mit `TreeDataProvider`, keine
   Webview. Es zeigt für das geöffnete Repo dauerhaft:
 
