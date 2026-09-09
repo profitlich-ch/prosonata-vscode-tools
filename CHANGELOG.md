@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.18.0] — 2026-09-09
+
 ### Hinzugefügt
 
 - **Taucht ein Branch zum ersten Mal auf, fragt die Erweiterung, ob der Timer
