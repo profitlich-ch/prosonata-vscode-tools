@@ -94,7 +94,7 @@ function watchHead(active: Session, context: RepoContext): void {
    * claimed it had gone to the old branch.
    */
   const from = active.reconcileBranchSwitch(context)
-  if (from === null) return
+  if (from === null) return askAboutNewBranch(active, context)
 
   void vscode.window
     .showInformationMessage(
@@ -104,6 +104,39 @@ function watchHead(active: Session, context: RepoContext): void {
     )
     .then((answer) => {
       if (answer === 'Hier weiterzählen') void vscode.commands.executeCommand('prosonata.start')
+    })
+}
+
+/** Branches already asked about in this window; see `askAboutNewBranch`. */
+const askedAbout = new Set<string>()
+
+/**
+ * A branch nobody has ever measured, arrived at without a timer running: the
+ * moment somebody starts on something new, and the one branch switch worth a
+ * question (KONZEPT.md §3).
+ *
+ * A question, not a start — that line is the whole point. §11 rules out
+ * starting a timer from a branch switch, and this does not: it asks, and the
+ * answer is a person's.
+ *
+ * Asked **once** per branch. Every other switch is silent, because a switch
+ * means many things — a review, a rebase, a quick look — and a question on each
+ * of them would be clicked away unread within two days.
+ */
+function askAboutNewBranch(active: Session, context: RepoContext): void {
+  if (!active.config.askOnNewBranch) return
+  if (context.scope.branch === context.mainBranch) return
+  if (askedAbout.has(context.key) || !active.neverMeasured(context)) return
+
+  askedAbout.add(context.key)
+  void vscode.window
+    .showInformationMessage(
+      `ProSonata: ${context.scope.branch} ist neu. Timer starten?`,
+      'Timer starten',
+      'Nicht jetzt',
+    )
+    .then((answer) => {
+      if (answer === 'Timer starten') void vscode.commands.executeCommand('prosonata.start')
     })
 }
 

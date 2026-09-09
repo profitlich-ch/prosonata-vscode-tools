@@ -54,6 +54,15 @@ export interface Config {
    * closed for two minutes is not worth a question.
    */
   sleepGapSeconds: number
+  /**
+   * Ask whether to start the timer when a branch turns up for the first time.
+   *
+   * A question, never a start: the answer is a person's (KONZEPT.md §1). It is
+   * asked at most once per branch, because a branch the tool has measured is no
+   * longer new — a question on every switch would be clicked away unread, and
+   * then it would be worse than none.
+   */
+  askOnNewBranch: boolean
 }
 
 export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
@@ -66,6 +75,7 @@ export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
   longRunWarningSeconds: 6 * 3600,
   pauseOnWindowClose: true,
   sleepGapSeconds: 5 * 60,
+  askOnNewBranch: true,
 }
 
 export function stateDir(): string {

@@ -6,6 +6,17 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Taucht ein Branch zum ersten Mal auf, fragt die Erweiterung, ob der Timer
+  laufen soll.** Nur dann: kein laufender Timer, kein Zeiteintrag und keine
+  Segmentzeile für diesen Branch, nicht auf dem Hauptbranch. Damit kommt die
+  Frage höchstens einmal je Branch, denn ein gemessener Branch ist nicht mehr
+  neu. Abschaltbar über `askOnNewBranch` in `~/.prosonata/config.json`.
+
+  Gestartet wird weiterhin nichts von selbst. Das Werkzeug bemerkt den
+  Zeitpunkt und legt ihn vor, angefangen wird er durch eine Antwort.
+
 ## [0.17.2] — 2026-09-09
 
 ### Behoben

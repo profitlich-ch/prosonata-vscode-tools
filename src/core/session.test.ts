@@ -789,3 +789,52 @@ describe('correcting entries that are already in ProSonata', () => {
     expect(api.entries.get(entry.timeID)!.hours).toBe(2)
   })
 })
+
+/*
+ * The one branch switch worth a question: a branch nobody has ever measured.
+ * A branch that carries an entry or a single segment line is not new, and
+ * asking again there would turn a useful question into noise.
+ */
+describe('a branch the tool has never measured', () => {
+  it('is new when neither an entry nor a segment mentions it', () => {
+    expect(sessionWith(new FakeApi()).neverMeasured(context)).toBe(true)
+  })
+
+  it('is not new once a timer has run on it', async () => {
+    const session = sessionWith(new FakeApi())
+    await session.start(context)
+
+    expect(session.neverMeasured(context)).toBe(false)
+  })
+
+  // The entry may be long gone from the state; the log keeps the branch.
+  it('is not new when only the segment log remembers it', () => {
+    const session = sessionWith(new FakeApi())
+    session.segments.append({
+      until: atLocal(NINE),
+      seconds: 600,
+      repoPath: scope.repoPath,
+      branch: scope.branch,
+      projectId: 166,
+      entryId: 'weg',
+      reason: 'pause',
+    })
+
+    expect(session.neverMeasured(context)).toBe(false)
+  })
+
+  it('is still new when another branch of the same repository was measured', () => {
+    const session = sessionWith(new FakeApi())
+    session.segments.append({
+      until: atLocal(NINE),
+      seconds: 600,
+      repoPath: scope.repoPath,
+      branch: 'fix/login',
+      projectId: 166,
+      entryId: 'anderer',
+      reason: 'pause',
+    })
+
+    expect(session.neverMeasured(context)).toBe(true)
+  })
+})

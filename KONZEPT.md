@@ -40,6 +40,11 @@ Der Timer misst. Der Commit beschreibt.
 Keine Automatik aus Editor-Aktivität, Branch-Wechseln oder Dateiänderungen. Das Werkzeug
 **warnt** bei erkennbarer Fehlbedienung (Abschnitt 3), aber es bucht nie von selbst.
 
+**Die Linie liegt zwischen Fragen und Tun, nicht zwischen Erkennen und Nichterkennen.** Das
+Werkzeug darf einen Zeitpunkt bemerken und ihn zur Sprache bringen; was daraus folgt, entscheidet
+ein Mensch. Ein Dialog mit zwei Knöpfen ist deshalb kein Verstoss gegen diesen Grundsatz, sondern
+seine Anwendung – ein Timer, der ohne Antwort zu laufen beginnt, wäre einer.
+
 **Der Code wird geschrieben, als würde er veröffentlicht.**
 Das Repo ist öffentlich. Eine Marketplace-Extension ist **nicht** beschlossen, aber möglich –
 und die Anforderungen aus Abschnitt 10 kosten während der Entwicklung fast nichts, während
@@ -652,6 +657,14 @@ Rein informierend. Gebucht wird nie automatisch.
   Frage: Ein gesperrter Bildschirm heisst nicht, dass niemand arbeitet. Was diese Lücke misst,
   ist genau das Gewünschte. Der eine Fall, den sie nicht sieht, ist der gesperrte Bildschirm
   auf einem wachen Rechner.
+- **Ein Branch, der zum ersten Mal auftaucht** – Timer starten? Gefragt wird, wenn kein Timer
+  läuft und weder ein Zeiteintrag noch eine Segmentzeile diesen Branch kennt; das ist der
+  Augenblick, in dem jemand etwas Neues anfängt. **Höchstens einmal je Branch**, denn ein Branch,
+  auf dem gemessen wurde, ist nicht mehr neu. Auf dem Hauptbranch gar nicht, und abschaltbar über
+  `askOnNewBranch`. Ein Wechsel bedeutet vielerlei – ein Review, ein Rebase, ein kurzer Blick –,
+  und eine Frage bei jedem davon wäre binnen zwei Tagen ungelesen weggeklickt. Der teurere der
+  beiden Fehler ist der vergessene Start, weil diese Zeit unwiederbringlich ist; deshalb überhaupt
+  eine Frage.
 - **Beim Schliessen des letzten VS-Code-Fensters wird pausiert** (abschaltbar über
   `pauseOnWindowClose`). Anhalten ist die vorsichtige Richtung; ein Timer, der das Schliessen
   des Editors überlebt, ist der klassische Weg, eine Nacht zu verbuchen. Starten bleibt
@@ -1658,7 +1671,9 @@ Nicht erneut vorschlagen:
   ohnehin nicht deckungsgleich mit abrechenbarer Zeit. Die Warnungen aus Abschnitt 3 sind kein
   Widerspruch: sie melden, sie buchen nicht.
 - **Automatischer Timer-Start** durch `post-checkout`, `post-merge`, Editor-Öffnen oder
-  Branch-Wechsel.
+  Branch-Wechsel. Verworfen ist das **Starten**, nicht das Fragen: Seit einer Rückfrage bei einem
+  erstmals gesehenen Branch (Abschnitt 3) bemerkt das Werkzeug den Zeitpunkt und legt ihn vor –
+  begonnen wird der Timer erst durch eine Antwort. Diese Unterscheidung trägt Abschnitt 1.
 - **Manuelles Beenden eines Timers.** Ein Timer kennt Start und Pause. Abgeschlossen werden
   Zeiteinträge, nicht Timer.
 - **Versand beim Push (`pre-push`).** Bindet an ein Remote, versagt bei tagelanger lokaler

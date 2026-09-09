@@ -169,6 +169,27 @@ export class Session {
   }
 
   /**
+   * Whether this branch is one the tool has never measured.
+   *
+   * Neither an entry nor a single segment line — then arriving at it is the
+   * moment somebody starts working on something new, and the only moment at
+   * which a question about the timer is worth asking (KONZEPT.md §3).
+   */
+  neverMeasured(context: RepoContext): boolean {
+    const known = this.state().entries.some(
+      (entry) => entry.scope.repoPath === context.scope.repoPath && entry.scope.branch === context.scope.branch,
+    )
+    if (known) return false
+
+    return !this.segments
+      .read()
+      .some(
+        (segment) =>
+          segment.repoPath === context.scope.repoPath && segment.branch === context.scope.branch,
+      )
+  }
+
+  /**
    * Starts the timer. Arriving at a branch with no entry of its own is exactly
    * the moment to look whether ProSonata already holds one — from the other
    * machine, or from a state file that was lost (KONZEPT.md §3).
