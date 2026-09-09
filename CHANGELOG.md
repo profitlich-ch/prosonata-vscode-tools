@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.17.2] — 2026-09-09
+
 ### Behoben
 
 - **In Repositories mit `core.hooksPath` lief der Hook nie.** Wer eigene Hooks
