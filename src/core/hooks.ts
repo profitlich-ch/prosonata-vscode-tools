@@ -1,8 +1,8 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, relative } from 'node:path'
 
 import { paths } from './config.js'
-import { tryGit } from './git.js'
+import { isTracked, tryGit } from './git.js'
 import { VERSION } from './version.js'
 
 /**
@@ -52,6 +52,16 @@ export function hookBlock({ node, cli }: HookPaths): string {
 export interface InstallResult {
   path: string
   action: 'created' | 'appended' | 'updated' | 'unchanged'
+  /** Set when the hook had to go into the working tree and was excluded locally. */
+  excluded?: boolean
+}
+
+/** Thrown rather than changing a file the project itself ships. */
+export class HookIsTracked extends Error {
+  constructor(public readonly path: string) {
+    super(`${path} gehört zum Repository — dort schreibt dieses Werkzeug nicht hinein`)
+    this.name = 'HookIsTracked'
+  }
 }
 
 /**
@@ -62,10 +72,24 @@ export function installHook(repoRoot: string, paths: HookPaths): InstallResult {
   const path = hookPath(repoRoot)
   const block = hookBlock(paths)
 
+  /*
+   * A hook the project ships is the project's, and appending to it would show
+   * up as a change to the customer's repository — with absolute paths of this
+   * machine in it. Better to say so than to write and hope nobody commits.
+   */
+  const inWorkTree = hookIsInWorkTree(repoRoot)
+  if (inWorkTree && isTracked(repoRoot, path)) throw new HookIsTracked(path)
+
+  const exclude = (result: InstallResult): InstallResult => {
+    if (!inWorkTree) return result
+    keepOutOfCommits(repoRoot, path)
+    return { ...result, excluded: true }
+  }
+
   if (!existsSync(path)) {
     mkdirSync(dirname(path), { recursive: true })
     writeFileSync(path, `#!/bin/sh\n${block}\n`, { mode: 0o755 })
-    return { path, action: 'created' }
+    return exclude({ path, action: 'created' })
   }
 
   const current = readFileSync(path, 'utf8')
@@ -73,14 +97,14 @@ export function installHook(repoRoot: string, paths: HookPaths): InstallResult {
   if (replaced === null) {
     writeFileSync(path, `${current.replace(/\n*$/, '\n')}\n${block}\n`)
     chmodSync(path, 0o755)
-    return { path, action: 'appended' }
+    return exclude({ path, action: 'appended' })
   }
 
   if (replaced === current) return { path, action: 'unchanged' }
 
   writeFileSync(path, replaced)
   chmodSync(path, 0o755)
-  return { path, action: 'updated' }
+  return exclude({ path, action: 'updated' })
 }
 
 /**
@@ -169,11 +193,59 @@ export function hookNeedsRepair(repoRoot: string, expected: HookPaths): boolean 
   return !readFileSync(path, 'utf8').includes(hookBlock(expected))
 }
 
+/**
+ * Where git will look for the hook — asked of git, not assembled by hand.
+ *
+ * `core.hooksPath` moves the whole directory, and repositories do set it: a
+ * project that ships its own hooks points it at a tracked folder so everyone
+ * gets them. Writing to `.git/hooks` there produces a file git never runs, and
+ * because the repair check looked in the same wrong place, the hook counted as
+ * healthy for ever. Measured at one account: six commits in a day, none of them
+ * booked, nothing said.
+ *
+ * `--git-path hooks` answers with the configured directory and resolves
+ * worktrees on the way, which is why nothing here is built from `.git`.
+ */
 export function hookPath(repoRoot: string): string {
-  // Worktrees share the hooks of the common directory, which is what we want.
-  const dir = tryGit(repoRoot, 'rev-parse', '--git-common-dir') ?? join(repoRoot, '.git')
+  const dir = tryGit(repoRoot, 'rev-parse', '--git-path', 'hooks') ?? join(repoRoot, '.git', 'hooks')
   const absolute = dir.startsWith('/') ? dir : join(repoRoot, dir)
-  return join(absolute, 'hooks', 'post-commit')
+  return join(absolute, 'post-commit')
+}
+
+/**
+ * Whether the hook lands in the working tree rather than inside `.git`.
+ *
+ * Then it lies in the customer's repository, and it carries absolute paths of
+ * this machine. It must never be committed — see `keepOutOfCommits`.
+ */
+export function hookIsInWorkTree(repoRoot: string): boolean {
+  const gitDir = tryGit(repoRoot, 'rev-parse', '--git-common-dir')
+  if (gitDir === null) return false
+
+  const absolute = gitDir.startsWith('/') ? gitDir : join(repoRoot, gitDir)
+  return !hookPath(repoRoot).startsWith(`${absolute}/`)
+}
+
+/**
+ * Adds the hook to `.git/info/exclude`, the ignore list that stays local.
+ *
+ * Not `.gitignore`: that one is tracked, so ignoring our file would itself be a
+ * change to the customer's repository. `info/exclude` belongs to this clone
+ * alone and is exactly the place for "this file is mine, not the project's".
+ */
+function keepOutOfCommits(repoRoot: string, hook: string): void {
+  const gitDir = tryGit(repoRoot, 'rev-parse', '--git-common-dir')
+  if (gitDir === null) return
+
+  const absolute = gitDir.startsWith('/') ? gitDir : join(repoRoot, gitDir)
+  const file = join(absolute, 'info', 'exclude')
+  const pattern = `/${relative(repoRoot, hook)}`
+
+  const current = existsSync(file) ? readFileSync(file, 'utf8') : ''
+  if (current.split('\n').some((line) => line.trim() === pattern)) return
+
+  mkdirSync(dirname(file), { recursive: true })
+  writeFileSync(file, `${current.replace(/\n*$/, '\n')}${pattern}\n`)
 }
 
 function readIfPossible(file: string): Buffer | null {

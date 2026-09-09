@@ -215,7 +215,10 @@ export function repairHookIfNeeded(): void {
 
   try {
     installHook(repo.repo.root, { node: process.execPath, cli })
-  } catch {
-    void vscode.window.showWarningMessage('ProSonata: der post-commit-Hook konnte nicht repariert werden.')
+  } catch (error) {
+    // The message names the file, and for a tracked hook that is the whole point.
+    void vscode.window.showWarningMessage(
+      `ProSonata: der post-commit-Hook konnte nicht repariert werden — ${(error as Error).message}`,
+    )
   }
 }

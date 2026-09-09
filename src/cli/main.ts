@@ -179,6 +179,9 @@ async function chooseProject(cwd: string): Promise<number> {
   const cli = publishCliOrOwnPath()
   const hook = installHook(repo.root, { node: process.execPath, cli })
   process.stdout.write(`Hook ${HOOK_ACTION[hook.action]}: ${hook.path}\n`)
+  if (hook.excluded) {
+    process.stdout.write('  liegt im Arbeitsverzeichnis (core.hooksPath) und steht in .git/info/exclude\n')
+  }
   process.stdout.write(`bereit — "${project.projectName}" in ${repo.root}\n`)
   return 0
 }

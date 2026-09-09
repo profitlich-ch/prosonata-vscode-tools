@@ -118,6 +118,11 @@ export function trailerOf(cwd: string, key: string, sha = 'HEAD'): string | null
   return null
 }
 
+/** Whether git already tracks this file. A tracked file is not ours to change. */
+export function isTracked(cwd: string, file: string): boolean {
+  return tryGit(cwd, 'ls-files', '--error-unmatch', file) !== null
+}
+
 /** Whether `branch` has been merged into `into` (KONZEPT.md §3). */
 export function isMerged(cwd: string, branch: string, into: string): boolean {
   return tryGit(cwd, 'merge-base', '--is-ancestor', branch, into) !== null

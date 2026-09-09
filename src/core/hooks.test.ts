@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { hookBlock, hookNeedsRepair, hookPath, installHook, isInstalled, publishCli, publishedCli } from './hooks.js'
+import { HookIsTracked, hookBlock, hookNeedsRepair, hookPath, installHook, isInstalled, publishCli, publishedCli } from './hooks.js'
 
 const paths = { node: '/opt/node/v22/bin/node', cli: '/ext/dist/cli.cjs' }
 
@@ -176,5 +176,76 @@ describe('publishing the CLI to its fixed place', () => {
 
   it('reports nothing when no copy was ever published', () => {
     expect(publishedCli()).toBeNull()
+  })
+})
+
+/*
+ * `core.hooksPath` moves the whole hooks directory, and projects that ship
+ * their own hooks do set it. Writing to `.git/hooks` there leaves a file git
+ * never runs — and since the repair check looked in the same wrong place, the
+ * hook counted as healthy for ever. At one account six commits in a day booked
+ * nothing, and nothing said so.
+ */
+describe('a repository that moves its hooks', () => {
+  function repoWithHooksPath(where: string): string {
+    const dir = repo()
+    execFileSync('git', ['config', '--local', 'core.hooksPath', where], { cwd: dir })
+    return dir
+  }
+
+  it('looks where git looks, not where the hooks usually are', () => {
+    const dir = repoWithHooksPath('.githooks')
+
+    expect(hookPath(dir)).toBe(join(dir, '.githooks', 'post-commit'))
+  })
+
+  it('installs there, and git would run it', () => {
+    const dir = repoWithHooksPath('.githooks')
+
+    const result = installHook(dir, paths)
+
+    expect(result.path).toBe(join(dir, '.githooks', 'post-commit'))
+    expect(readFileSync(result.path, 'utf8')).toContain('post-commit || true')
+    expect(isInstalled(dir)).toBe(true)
+  })
+
+  /*
+   * The hook now lies in the customer's repository and carries absolute paths of
+   * this machine. `info/exclude` keeps it out of commits and is itself local —
+   * unlike `.gitignore`, which would be a change to the project.
+   */
+  it('keeps the hook out of commits when it lands in the working tree', () => {
+    const dir = repoWithHooksPath('.githooks')
+
+    expect(installHook(dir, paths).excluded).toBe(true)
+
+    expect(readFileSync(join(dir, '.git', 'info', 'exclude'), 'utf8')).toContain('/.githooks/post-commit')
+    expect(execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' })).toBe('')
+  })
+
+  it('does not write the same exclude line twice', () => {
+    const dir = repoWithHooksPath('.githooks')
+    installHook(dir, paths)
+    installHook(dir, { ...paths, node: '/opt/node/v24/bin/node' })
+
+    const lines = readFileSync(join(dir, '.git', 'info', 'exclude'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() === '/.githooks/post-commit')
+    expect(lines).toHaveLength(1)
+  })
+
+  it('excludes nothing when the hooks stay inside .git', () => {
+    expect(installHook(repo(), paths).excluded).toBeUndefined()
+  })
+
+  // A hook the project ships belongs to the project.
+  it('refuses to touch a hook the repository tracks', () => {
+    const dir = repoWithHooksPath('.githooks')
+    mkdirSync(join(dir, '.githooks'))
+    writeFileSync(join(dir, '.githooks', 'post-commit'), '#!/bin/sh\necho projekt\n', { mode: 0o755 })
+    execFileSync('git', ['add', '.githooks/post-commit'], { cwd: dir })
+
+    expect(() => installHook(dir, paths)).toThrow(HookIsTracked)
+    expect(readFileSync(join(dir, '.githooks', 'post-commit'), 'utf8')).not.toContain('prosonata')
   })
 })

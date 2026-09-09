@@ -6,6 +6,20 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **In Repositories mit `core.hooksPath` lief der Hook nie.** Wer eigene Hooks
+  mitliefert, verschiebt damit das ganze Verzeichnis; unser `post-commit` lag in
+  `.git/hooks` und wurde von Git nie aufgerufen. Sechs Commits an einem Tag
+  buchten dadurch nichts, und weil die Reparaturprüfung am selben falschen Ort
+  nachsah, galt der Hook durchgehend als gesund. Gefragt wird jetzt Git selbst.
+
+  Weil ein solches Verzeichnis im Arbeitsverzeichnis liegt, also im Repository
+  des Kunden, gelten dort zwei Regeln: Einen Hook, den das Projekt mitliefert,
+  fasst das Werkzeug nicht an, sondern bricht ab und sagt es. Und die eigene
+  Datei wird über `.git/info/exclude` von Commits ausgenommen — lokal, ohne die
+  verfolgte `.gitignore` anzufassen.
+
 ## [0.17.1] — 2026-09-06
 
 ### Behoben

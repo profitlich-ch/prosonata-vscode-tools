@@ -1388,6 +1388,28 @@ in ein Abrechnungssystem, und Schweigen ist dort die teuerste Antwort.
 Die Installation muss ein Befehl sein (`prosonata init`) und einen bereits vorhandenen
 `post-commit` respektieren – die eigene Zeile anhängen, nicht überschreiben.
 
+#### Wo der Hook hingehört, sagt Git
+
+**`core.hooksPath` verschiebt das ganze Hook-Verzeichnis**, und Projekte setzen das: Wer eigene
+Hooks mitliefert, zeigt damit auf einen verfolgten Ordner, damit alle sie bekommen. Der Pfad wird
+deshalb nicht aus `.git` zusammengesetzt, sondern erfragt – `git rev-parse --git-path hooks`
+beantwortet ihn und löst nebenbei Worktrees auf.
+
+Am eigenen Rechner gemessen, und es ist der vierte stille Ausfall dieses Hooks: In einem
+Repository mit `core.hooksPath = .githooks` lag unser Hook in `.git/hooks` und wurde nie
+ausgeführt. Sechs Commits an einem Tag buchten nichts. Weil die Reparaturprüfung am selben
+falschen Ort nachsah, galt der Hook dabei durchgehend als gesund.
+
+Daraus folgen zwei Regeln, denn ein solches Verzeichnis liegt im **Arbeitsverzeichnis**, also im
+Repository des Kunden:
+
+- **Ein Hook, den das Projekt mitliefert, wird nicht angefasst.** Ist die Datei verfolgt, bricht
+  die Installation ab und sagt es. Unseren Block anzuhängen wäre eine Änderung am Kundenrepo, mit
+  absoluten Pfaden dieses Rechners darin.
+- **Sonst wird die Datei lokal von Commits ausgenommen**, über `.git/info/exclude`. Nicht über
+  `.gitignore`: Die ist selbst verfolgt, und sie zu ändern wäre schon der Eingriff, der vermieden
+  werden soll. `info/exclude` gehört diesem Klon allein.
+
 ---
 
 ## 9. ProSonata API – relevante Fakten
