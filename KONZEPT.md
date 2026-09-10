@@ -1409,6 +1409,14 @@ in ein Abrechnungssystem, und Schweigen ist dort die teuerste Antwort.
 Die Installation muss ein Befehl sein (`prosonata init`) und einen bereits vorhandenen
 `post-commit` respektieren – die eigene Zeile anhängen, nicht überschreiben.
 
+**Ein Merge geht daran vorbei.** Git ruft für einen Merge-Commit `post-merge` auf, nicht
+`post-commit`; auf dem Hauptbranch bleibt der Eintrag deshalb offen, und der Trailer des
+Merge-Commits kommt nie an. Ein zweiter Hook wäre die Abhilfe, aber er darf nicht einfach wie ein
+Commit wirken: Fast-Forward erzeugt keinen Commit, Squash hat `post-commit` schon behandelt, und
+Merge-Betreffzeilen sind maschinell erzeugt und taugen nicht als Rechnungstext. Ausgearbeitet,
+samt Messungen und der offenen Entscheidung: [docs/post-merge.md](docs/post-merge.md).
+*(Noch nicht gebaut.)*
+
 #### Wo der Hook hingehört, sagt Git
 
 **`core.hooksPath` verschiebt das ganze Hook-Verzeichnis**, und Projekte setzen das: Wer eigene
@@ -1855,6 +1863,7 @@ Anspruch vor dem Anlegen (Abschnitt 7).
 | Umzug der Maschinendaten nach `api-comments`, samt Rechnerfächern | 7 und 12 |
 | Einmalige Migration alter Hooks über alle bekannten Repositories | 8 |
 | Repo-Vorgabe für den Modus (`prosonata.mode`) | 3, *pro Branch und Tag* |
+| `post-merge`-Hook, damit ein Merge-Commit den Eintrag abschliesst | 8, *Hook* |
 | Endgültigen Text über die zurückliegenden Tage nachziehen | 3, *pro Branch und Tag* |
 
 Gebaut sind dagegen die beiden wichtigsten Abschlusssignale: gemergter Branch und

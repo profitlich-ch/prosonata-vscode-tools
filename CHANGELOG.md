@@ -6,6 +6,14 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Geändert
+
+- **Dokumentiert, warum ein Merge an der Zeiterfassung vorbeigeht.** Git ruft
+  für einen Merge-Commit `post-merge` auf, nicht `post-commit`, und das Werkzeug
+  installiert nur den zweiten. Der Entwurf für die Abhilfe steht in
+  `docs/post-merge.md`, samt der Messung, welcher Hook bei welcher Merge-Art
+  feuert, und den drei Fällen, in denen er nichts tun darf.
+
 ## [0.18.1] — 2026-09-10
 
 ### Behoben
