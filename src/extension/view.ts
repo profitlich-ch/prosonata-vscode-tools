@@ -133,8 +133,21 @@ function readContext(path: string): RepoContext | null {
   }
 }
 
-export function withContext(action: (session: Session, context: RepoContext) => Promise<void> | void): () => Promise<void> {
-  return async () => {
+/**
+ * Wraps a command so it gets session and repository context, and **passes on
+ * what VS Code handed it**.
+ *
+ * The arguments matter more than they look. A panel row may name the entry it
+ * stands for (`arguments: [entry.id]`), and a wrapper that swallowed them left
+ * the command to fall back on "the entry of the current branch". Clicking the
+ * row of an entry on another branch then closed a different entry than the one
+ * clicked — and for an entry on a branch since deleted, that row was the only
+ * way to reach it at all.
+ */
+export function withContext<A extends unknown[]>(
+  action: (session: Session, context: RepoContext, ...args: A) => Promise<void> | void,
+): (...args: A) => Promise<void> {
+  return async (...args: A) => {
     const active = currentSession()
     if (!active) {
       void vscode.window.showWarningMessage('ProSonata: noch kein Konto eingerichtet — führe "prosonata init" aus.')
@@ -146,7 +159,7 @@ export function withContext(action: (session: Session, context: RepoContext) => 
       return
     }
     try {
-      await action(active, context)
+      await action(active, context, ...args)
     } catch (error) {
       void vscode.window.showErrorMessage(`ProSonata: ${(error as Error).message}`)
     }
@@ -158,8 +171,11 @@ export function withContext(action: (session: Session, context: RepoContext) => 
  * For commands that set a repository up. They must not require a configured
  * project — choosing one is exactly what they are for.
  */
-export function withRepo(action: (session: Session, repo: GitRepo) => Promise<void> | void): () => Promise<void> {
-  return async () => {
+/** As `withContext`, but for commands that need no project yet. */
+export function withRepo<A extends unknown[]>(
+  action: (session: Session, repo: GitRepo, ...args: A) => Promise<void> | void,
+): (...args: A) => Promise<void> {
+  return async (...args: A) => {
     const active = currentSession()
     if (!active) {
       void vscode.window.showWarningMessage('ProSonata: noch kein Konto eingerichtet — richte es zuerst ein.')
@@ -174,7 +190,7 @@ export function withRepo(action: (session: Session, repo: GitRepo) => Promise<vo
     }
 
     try {
-      await action(active, repo)
+      await action(active, repo, ...args)
     } catch (error) {
       void vscode.window.showErrorMessage(`ProSonata: ${(error as Error).message}`)
     }

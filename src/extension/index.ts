@@ -151,6 +151,15 @@ export function deactivate(): void {
  * every miss, so running "prosonata init" takes effect without reloading the
  * window.
  */
-function register(context: vscode.ExtensionContext, id: string, handler: () => Promise<void> | void): void {
+/*
+ * `unknown[]` on purpose: VS Code hands a command whatever the caller passed —
+ * a tree item, an entry id — and the wrappers in `view.ts` forward it. A
+ * signature without parameters would drop it at this last step instead.
+ */
+function register(
+  context: vscode.ExtensionContext,
+  id: string,
+  handler: (...args: never[]) => Promise<void> | void,
+): void {
   context.subscriptions.push(vscode.commands.registerCommand(id, handler))
 }
