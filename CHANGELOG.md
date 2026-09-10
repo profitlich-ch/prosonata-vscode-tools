@@ -8,6 +8,19 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [0.18.1] — 2026-09-10
 
+### Behoben
+
+- **Ein Klick auf die Zeile eines offenen Eintrags traf den falschen Eintrag.**
+  Die Zeile gibt die Kennung ihres Eintrags mit, aber der Wrapper, der Sitzung
+  und Kontext einsetzt, nahm keine Argumente an und liess sie fallen. Der Befehl
+  fiel damit auf «der Eintrag des aktuellen Branches» zurück: Wer die Zeile
+  eines Eintrags auf einem anderen Branch anklickte, schloss den eigenen — und
+  vergab dessen Text an den falschen.
+
+  Der gemeinte Eintrag war dadurch überhaupt nicht erreichbar. Ist jener Branch
+  nach dem Merge gelöscht, war diese Zeile der einzige Zugang, und es gab keinen
+  zweiten Weg, ihn abzuschliessen.
+
 ## [0.18.0] — 2026-09-09
 
 ### Hinzugefügt

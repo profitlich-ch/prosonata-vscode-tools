@@ -1296,6 +1296,14 @@ das gewesen.
   | Wartet auf Versand | vorgemerkte Schreibvorgänge, mit dem Grund, falls es hakt | jetzt senden |
   | Hook bucht nichts | `~/.prosonata/cli.cjs` fehlt, der Hook liefe ins Leere | Hook neu einrichten |
 
+  **Eine Zeile, die einen bestimmten Eintrag benennt, muss ihn auch weitergeben.** Die Zeile
+  *Offen · branch* führt die Kennung ihres Eintrags im Befehl mit, und der Wrapper, der Sitzung
+  und Kontext einsetzt, hat die Argumente durchzureichen. Fehlt das, fällt der Befehl auf „der
+  Eintrag des aktuellen Branches" zurück, und ein Klick ändert einen anderen Eintrag als den
+  angeklickten – bei einem Eintrag auf einem inzwischen gelöschten Branch war diese Zeile
+  zugleich der einzige Zugang. TypeScript deckt den Fehler nicht ab: Eine Funktion mit optionalem
+  Parameter ist dort zuweisbar, wo eine ohne erwartet wird.
+
   Der Modus steht in einer **eigenen Zeile**, nicht hinter dem Branchnamen: Namen wie
   `167-startseite-mobile-tablet-expertise-layout` schieben in einer schmalen Seitenleiste
   alles Nachfolgende aus dem Bild – ausgerechnet die Einstellung, die bestimmt, was auf der
