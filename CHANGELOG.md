@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.19.0] — 2026-09-11
+
 ### Behoben
 
 - **Die Frage nach der Schlafzeit blieb in den anderen Fenstern stehen.** Jedes
