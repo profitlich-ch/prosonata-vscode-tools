@@ -68,7 +68,7 @@ export async function openSettings(): Promise<void> {
  */
 export async function resolveSleep(): Promise<void> {
   const active = currentSession()
-  if (!active || active.sleepGaps.length === 0) return
+  if (!active || active.openSleepGaps().length === 0) return
 
   const slept = clock(active.sleptSeconds())
   const answer = await vscode.window.showInformationMessage(
@@ -79,8 +79,17 @@ export async function resolveSleep(): Promise<void> {
   if (answer === undefined) return
 
   if (answer === 'Abziehen') {
-    active.skipSleep()
-    void vscode.window.showInformationMessage(`ProSonata: ${slept} abgezogen, der Timer läuft weiter.`)
+    /*
+     * What came off, not what was asked about. Every window runs the beat and
+     * notices the same sleep; another one may have answered while this dialog
+     * stood open, and then there is nothing left to take.
+     */
+    const removed = active.skipSleep()
+    void vscode.window.showInformationMessage(
+      removed > 0
+        ? `ProSonata: ${clock(removed)} abgezogen, der Timer läuft weiter.`
+        : 'ProSonata: nichts abzuziehen — die Schlafzeit war bereits entschieden.',
+    )
   } else {
     active.keepSleep()
   }

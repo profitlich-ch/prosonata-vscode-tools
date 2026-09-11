@@ -746,9 +746,31 @@ export class Session {
    */
   sleepGaps: { from: number; until: number }[] = []
 
-  /** What the gaps add up to, for the question that names a number. */
+  /**
+   * The gaps still to be decided about.
+   *
+   * Another window may have answered already — for «subtract» the state shows
+   * it, for «keep» nothing else would. `sleepDecidedUntil` carries both.
+   */
+  openSleepGaps(): { from: number; until: number }[] {
+    const decided = this.state().sleepDecidedUntil ?? 0
+    return this.sleepGaps.filter((gap) => gap.until > decided)
+  }
+
+  /** What the open gaps add up to, for the question that names a number. */
   sleptSeconds(): number {
-    return this.sleepGaps.reduce((sum, gap) => sum + Math.floor((gap.until - gap.from) / 1000), 0)
+    return this.openSleepGaps().reduce((sum, gap) => sum + Math.floor((gap.until - gap.from) / 1000), 0)
+  }
+
+  /** Records that everything up to the latest gap has been answered. */
+  #recordDecision(gaps: { until: number }[]): void {
+    if (gaps.length === 0) return
+
+    const latest = Math.max(...gaps.map((gap) => gap.until))
+    this.store.update((state) => ({
+      ...state,
+      sleepDecidedUntil: Math.max(state.sleepDecidedUntil ?? 0, latest),
+    }))
   }
 
   /**
@@ -758,10 +780,15 @@ export class Session {
    * Each cut is written to the log with its cause. Time that disappears on
    * purpose must not disappear silently as well (KONZEPT.md §3); the gap itself
    * stays a hole between two rows, because nothing happened in it.
+   *
+   * @returns The seconds actually taken off — zero when another window was
+   *   quicker, so the message can say what happened instead of what was planned.
    */
-  skipSleep(): State {
-    const gaps = [...this.sleepGaps].sort((a, b) => a.from - b.from)
+  skipSleep(): number {
+    const gaps = [...this.openSleepGaps()].sort((a, b) => a.from - b.from)
     this.sleepGaps = []
+    this.#recordDecision(gaps)
+    let removed = 0
 
     for (const gap of gaps) {
       for (const timer of this.state().timers.filter((candidate) => candidate.startedAt !== null)) {
@@ -771,6 +798,7 @@ export class Session {
         const worked = Math.max(startedAt, Math.min(gap.from, gap.until))
         const entry = findEntry(this.state(), timer.entryId)
         this.store.update((state) => skipGap(state, timer.scope, gap.from, gap.until))
+        removed = Math.max(removed, Math.floor((gap.until - worked) / 1000))
 
         if (entry && worked > startedAt) {
           this.segments.append({
@@ -786,11 +814,12 @@ export class Session {
         }
       }
     }
-    return this.state()
+    return removed
   }
 
   /** Keeps it: the machine slept, the person did not (KONZEPT.md §3). */
   keepSleep(): void {
+    this.#recordDecision(this.openSleepGaps())
     this.sleepGaps = []
   }
 

@@ -6,6 +6,19 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Behoben
+
+- **Die Frage nach der Schlafzeit blieb in den anderen Fenstern stehen.** Jedes
+  VS-Code-Fenster hat einen eigenen Takt und bemerkt dieselbe Schlafphase
+  selbst; beantwortet wurde sie aber nur dort, wo man antwortete. Nach einem
+  «Behalten» blieb die Zeile sogar dauerhaft, weil das sonst nichts ändert,
+  woran ein anderes Fenster es erkennen könnte. Die Antwort steht jetzt im
+  Zustand, und alle Fenster übernehmen sie.
+
+  Doppelt abgezogen wurde nie — eine bereits verrechnete Lücke wurde
+  übersprungen. Die Meldung behauptete es allerdings trotzdem; sie nennt jetzt,
+  was tatsächlich abgezogen wurde, und sagt es, wenn nichts mehr übrig war.
+
 ### Geändert
 
 - **Dokumentiert, warum ein Merge an der Zeiterfassung vorbeigeht.** Git ruft

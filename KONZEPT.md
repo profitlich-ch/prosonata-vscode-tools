@@ -648,6 +648,16 @@ Rein informierend. Gebucht wird nie automatisch.
 
   Angezeigt wird das als **Zeile im Panel**, nicht als Meldung: Wer an einen aufgewachten
   Rechner zurückkommt, findet sie dort, während eine Benachrichtigung ins Leere gelaufen wäre.
+
+  **Beobachtet wird je Fenster, entschieden wird einmal.** Jedes VS-Code-Fenster hat einen
+  eigenen Extension-Host und damit einen eigenen Takt; alle bemerken dieselbe Schlafphase
+  derselben Maschine. Die Lücken bleiben deshalb im Fenster, die Antwort aber wandert in den
+  Zustand (`sleepDecidedUntil`), und die übrigen Fenster lassen fallen, was darunter liegt.
+  Ohne das stünde die Frage in jedem Fenster einzeln – und nach einem «Behalten» für immer, denn
+  das ändert sonst nichts, woran ein anderes Fenster es erkennen könnte. Abgezogen wurde auch
+  vorher nie doppelt: Eine Lücke, die schon verrechnet ist, liegt vor dem Beginn der laufenden
+  Strecke und wird übersprungen. Was die Antwort meldet, ist deshalb das tatsächlich Abgezogene
+  und nicht das Geplante.
   Die Schwelle ist konfigurierbar (`sleepGapSeconds`, Vorgabe fünf Minuten) – ein kurz
   zugeklappter Deckel ist keine Frage wert.
 

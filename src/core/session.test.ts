@@ -838,3 +838,68 @@ describe('a branch the tool has never measured', () => {
     expect(session.neverMeasured(context)).toBe(true)
   })
 })
+
+/*
+ * Every window runs the beat, so every window notices the same machine
+ * sleeping — the observation is per window, the decision is not. Without a
+ * shared mark, answering in one window left the question standing in all the
+ * others, and after a «keep» nothing else in the state would ever tell them.
+ */
+describe('deciding about sleeping time', () => {
+  const TEN = NINE + 3600_000
+
+  function slept(session: Session) {
+    session.sleepGaps.push({ from: NINE + 600_000, until: TEN })
+    return session
+  }
+
+  it('takes the sleeping time off and says how much', async () => {
+    const session = sessionWith(new FakeApi())
+    await session.start(context)
+    slept(session)
+
+    expect(session.skipSleep()).toBe(3000)
+  })
+
+  // What the second window would do, with the same gap in its own memory.
+  it('reports nothing when another window decided already', async () => {
+    const first = sessionWith(new FakeApi())
+    await first.start(context)
+    const second = new Session(first.config, {
+      api: new FakeApi(),
+      clock: first.clock,
+      store: first.store,
+      journal: first.journal,
+      segments: first.segments,
+    })
+    slept(first).skipSleep()
+    slept(second)
+
+    expect(second.openSleepGaps()).toEqual([])
+    expect(second.skipSleep()).toBe(0)
+  })
+
+  // «Keep» changes nothing else at all — without the mark it would be invisible.
+  it('marks a kept gap as decided, so other windows stop asking', async () => {
+    const session = sessionWith(new FakeApi())
+    await session.start(context)
+    slept(session)
+
+    session.keepSleep()
+
+    expect(session.state().sleepDecidedUntil).toBe(TEN)
+    slept(session)
+    expect(session.openSleepGaps()).toEqual([])
+  })
+
+  it('still asks about a gap that came after the decision', async () => {
+    const session = sessionWith(new FakeApi())
+    await session.start(context)
+    slept(session)
+    session.keepSleep()
+
+    session.sleepGaps.push({ from: TEN, until: TEN + 600_000 })
+
+    expect(session.openSleepGaps()).toHaveLength(1)
+  })
+})

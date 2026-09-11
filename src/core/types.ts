@@ -108,6 +108,16 @@ export interface State {
   timers: Timer[]
   entries: TimeEntry[]
   pending: PendingWrite[]
+  /**
+   * Up to when sleeping time has been decided about, as epoch milliseconds.
+   *
+   * The observation belongs to a window — every one of them runs the beat and
+   * notices the same machine sleeping. The **decision** does not: the machine
+   * slept once, so it is answered once. Kept here so the other windows learn of
+   * it, which they cannot otherwise do after a «keep» — that changes nothing
+   * else, and their question would stand until each was answered separately.
+   */
+  sleepDecidedUntil?: number
 }
 
 export const FORMAT_VERSION = 1

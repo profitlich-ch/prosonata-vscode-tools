@@ -214,9 +214,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
      * notification: whoever comes back to a woken machine finds it here, and a
      * popup fired while nobody was there is gone by then (KONZEPT.md §3).
      */
-    if (session.sleepGaps.length > 0) {
+    const gaps = session.openSleepGaps()
+    if (gaps.length > 0) {
       const slept = session.sleptSeconds()
-      const since = new Date(session.sleepGaps[0]!.from)
+      const since = new Date(gaps[0]!.from)
       rows.push(
         new PanelRow(
           'Rechner schlief',
