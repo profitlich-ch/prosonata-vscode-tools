@@ -1,0 +1,20 @@
+meta {
+  name: Aufräumen – Eintrag aus 13 löschen
+  type: http
+  seq: 20
+}
+
+delete {
+  url: {{baseUrl}}/projecttimes/{{commentsId}}
+  body: none
+  auth: none
+}
+
+assert {
+  res.status: eq 200
+}
+
+docs {
+  Löscht den Eintrag aus `13`. **Immer laufen lassen.** Wurde `13` mehrfach ausgeführt,
+  bleiben die früheren Einträge stehen – `15` zeigt sie alle.
+}

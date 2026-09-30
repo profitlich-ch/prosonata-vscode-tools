@@ -1,0 +1,26 @@
+meta {
+  name: Übersteht apiComments einen Teilrumpf?
+  type: http
+  seq: 17
+}
+
+put {
+  url: {{baseUrl}}/projecttimes/{{commentsId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "workingTime": 2.5
+  }
+}
+
+docs {
+  Geschickt wird **nur `workingTime`** – so wie beim Zuschlagen zu einem anderswo
+  abgeschlossenen Eintrag (KONZEPT.md §3). Danach `14 Nachsehen`:
+
+  - **`apiComments` unverändert, `workingTime` 2.5** → wie zugesagt.
+  - **`apiComments` leer** → ein Teilrumpf setzt das Feld zurück. Dann muss jeder PUT es
+    mitschicken, und die Textkorrektur im Panel (`browse.ts`) ebenso.
+}

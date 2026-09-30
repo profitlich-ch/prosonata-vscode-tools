@@ -1,0 +1,23 @@
+meta {
+  name: Lässt sich apiComments leeren?
+  type: http
+  seq: 19
+}
+
+put {
+  url: {{baseUrl}}/projecttimes/{{commentsId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "apiComments": ""
+  }
+}
+
+docs {
+  Danach `14 Nachsehen`. Steht `""` oder `null` da → leeren geht. Steht der alte Wert noch
+  da → ein leerer String wird als „nicht geschickt" gelesen. Das braucht die Extension
+  heute nicht, aber es gehört zum Bild des Feldes.
+}

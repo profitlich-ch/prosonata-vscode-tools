@@ -215,6 +215,7 @@
   "devDependencies": {
     "@types/node": "^22.10.2",
     "@types/vscode": "^1.75.0",
+    "@usebruno/cli": "^4.2.0",
     "esbuild": "^0.28.1",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

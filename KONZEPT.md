@@ -1545,6 +1545,26 @@ liegen in [bruno/](bruno/).
   jeweils plus das Leerzeichen vor dem Text.
 - `timeViaApi` markiert per API erzeugte Einträge (nur lesend) – **kein** Statusfeld für
   „offen/fertig" vorhanden. Deshalb der Marker im Text.
+- **`apiComments`: das Feld für Maschinendaten (Abschnitt 12, Punkt 1).** Nicht in der
+  Herstellerdokumentation, am 30. September 2026 am eigenen Konto gemessen
+  (`bruno/zeiterfassung/13` bis `20`):
+  - **Ein String, Zeichen für Zeichen.** Ein JSON-Text mit einem Leerzeichen nach `"v":1,`
+    kam beim GET unverändert zurück – als Zeichenkette, nicht als Objekt, und ohne
+    Normalisierung. Die Teilstringsuche über den selbst gebauten Text trägt also.
+  - **Filterbar als Teilstring, kombinierbar.** `apiComments=%22key%22%3A%22a3f9c1%22`
+    zusammen mit `projectID`, `isInvoiced=0` und `userID=myself` lieferte genau den
+    Testeintrag. Die Gegenprobe mit einer nicht vorhandenen Kennung lieferte **204** ohne
+    Rumpf – der Filter wirkt, er wird nicht übergangen. 204 ist dieselbe leere Antwort wie
+    beim `detail`-Filter.
+  - **Ein Teilrumpf lässt es stehen.** Ein PUT mit nur `workingTime` änderte die Summe und
+    liess `apiComments` unverändert, durch erneutes Lesen bestätigt.
+  - **Ohne Wert ist es `null`**, der Schlüssel ist aber immer da. Ein PUT mit `""` leert es
+    zu `""`, nicht zu `null` – der Leser muss beides als „nichts da" nehmen.
+  - **Länge: mindestens 900 Zeichen.** Zugesagt waren 800; gespeichert wurden 900 ohne
+    Kürzung. Wo die Grenze liegt, ist offen. Für die eigenen Daten ohne Belang, sie sind
+    rund 80 Zeichen lang.
+  - Nicht gemessen, sondern zugesagt: Das Feld erscheint auf keiner Auswertung und keiner
+    Rechnung.
 - Rechte: Benutzer bis Stufe »Zeiterfasser 1« sehen und bearbeiten **nur ihre eigenen**
   Zeiten. Für dieses Werkzeug ist das die richtige Sicht.
 
@@ -1744,10 +1764,11 @@ Nicht erneut vorschlagen:
 
 ## 12. Offene Punkte
 
-1. **`api-comments`: ein Feld für Maschinendaten.** Der Hersteller hat es **zugesagt**, mit
-   **800 Zeichen** wie bei `detail`; es kommt mit einem regulären Programm-Update samt
-   Datenbank-Änderung. Heute stehen diese Daten am Anfang des `detail` und damit auf der
-   Rechnungszeile (Abschnitt 3). *(Noch nicht gebaut – wartet auf das Feld.)*
+1. **`api-comments`: ein Feld für Maschinendaten.** Der Hersteller hat es **geliefert**, unter
+   dem Namen **`apiComments`**; die fünf Eigenschaften unten sind am Konto gemessen bzw. für
+   die Rechnung zugesagt (Abschnitt 9). Heute stehen diese Daten noch am Anfang des `detail`
+   und damit auf der Rechnungszeile (Abschnitt 3). *(Noch nicht gebaut – das Feld ist da,
+   der Umbau steht aus.)*
 
    Vorgesehener Inhalt, ein JSON-Objekt:
 

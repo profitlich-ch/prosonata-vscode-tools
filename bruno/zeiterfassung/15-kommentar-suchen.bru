@@ -1,0 +1,26 @@
+meta {
+  name: Sucht der apiComments-Filter als Teilstring?
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/projecttimes?projectID={{projectId}}&isInvoiced=0&userID=myself&apiComments=%22key%22%3A%22a3f9c1%22
+  body: none
+  auth: none
+}
+
+docs {
+  Das Gegenstück zu `04` für das neue Feld, und wieder die Prüfung mit der grössten
+  Tragweite: Daran hängt das Wiederfinden eines Eintrags auf einem anderen Rechner.
+
+  Gesucht wird `"key":"a3f9c1"`, URL-kodiert. Der Wert in `13` ist länger, das hier ist
+  nur ein Teil davon. Die Parameter stehen von Hand kodiert in der URL, damit Bruno sie
+  nicht noch einmal kodiert – genau so schickt sie `encodeURIComponent` aus der Extension.
+
+  - **Genau der Eintrag aus `13`** → Teilstringsuche, kombiniert mit `userID=myself`. So
+    setzt es der Umbau voraus.
+  - **Leer** → entweder sucht der Filter exakt, oder die Kodierung der Anführungszeichen
+    übersteht den Weg nicht. Mit dem vollständigen Wert aus `13` gegenprüfen.
+  - **Alle Einträge des Projekts** → der Filter wird ignoriert. Das zeigt erst `16`.
+}

@@ -1,0 +1,36 @@
+meta {
+  name: apiComments über 800 Zeichen
+  type: http
+  seq: 18
+}
+
+put {
+  url: {{baseUrl}}/projecttimes/{{commentsId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "apiComments": "{{langerKommentar}}"
+  }
+}
+
+script:pre-request {
+  bru.setVar("langerKommentar", "0123456789".repeat(90));
+}
+
+docs {
+  900 Zeichen. Zugesagt sind 800, wie bei `detail` (`06`: dort wird ohne Meldung gekürzt).
+  Danach `14 Nachsehen`.
+
+  **Gemessen am 30.09.2026:** vollständig gespeichert, 900 Zeichen.
+
+  - **Fehler** → gut, die Extension reicht ihn weiter.
+  - **Auf 800 gekürzt** → wie bei `detail`. Unkritisch, solange der eigene Teil kurz
+    bleibt: Kaputtes JSON liest die Extension als „nichts da" und fällt auf den Text
+    zurück. Die Länge prüft sie trotzdem selbst.
+  - **Vollständig gespeichert** → die Grenze liegt höher. Festhalten.
+
+  Überschreibt den Wert aus `13`. Für `15` danach `13` neu anlegen.
+}

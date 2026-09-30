@@ -1,0 +1,28 @@
+meta {
+  name: Nachsehen (apiComments-Eintrag)
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/projecttimes/{{commentsId}}
+  body: none
+  auth: none
+}
+
+docs {
+  Liest den Eintrag aus `13`. Nach `13`, `17`, `18` und `19` jeweils laufen lassen.
+
+  Nach `13` drei Fragen:
+
+  - **String oder Objekt?** Kommt `apiComments` als Zeichenkette zurück (`"{\"profitlich…"`)
+    → so vorgesehen. Kommt es als verschachteltes Objekt → die Spalte ist ein JSON-Typ, die
+    Teilstringsuche ist fraglich, und der Umbau geht zurück in den Entwurf (§12.1:
+    Pfad-Filter statt Teilstring).
+  - **Zeichen für Zeichen?** Steht das Leerzeichen nach `"v":1,` noch da, und die
+    Schlüssel in der gesendeten Reihenfolge? Nur dann findet `"key":"a3f9c1"` den Eintrag
+    zuverlässig.
+  - **Und ein Eintrag ohne das Feld?** Mit `12 Nachsehen` einen alten Eintrag lesen: Steht
+    dort `null`, `""`, oder fehlt der Schlüssel ganz? Der Leser muss alle drei vertragen,
+    aber es lohnt sich zu wissen, welcher es ist.
+}

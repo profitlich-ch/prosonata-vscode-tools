@@ -1,0 +1,23 @@
+meta {
+  name: Gegenprobe – wirkt der Filter überhaupt?
+  type: http
+  seq: 16
+}
+
+get {
+  url: {{baseUrl}}/projecttimes?projectID={{projectId}}&isInvoiced=0&userID=myself&apiComments=%22key%22%3A%22ffffff%22
+  body: none
+  auth: none
+}
+
+docs {
+  Dieselbe Anfrage wie `15`, mit einer Kennung, die es nicht gibt.
+
+  Ein unbekannter Parameter wird von vielen APIs stillschweigend übergangen. Dann lieferte
+  `15` einen Treffer, aber nur, weil alle Einträge kommen – und die Extension übernähme
+  fremde Stunden in den falschen Branch.
+
+  - **Leer** → der Filter wirkt. `15` ist damit belegt.
+  - **Einträge** → der Filter wird ignoriert. Der Parametername ist bei ProSonata zu
+    erfragen.
+}

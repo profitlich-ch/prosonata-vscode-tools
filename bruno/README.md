@@ -68,6 +68,17 @@ cp .env.example .env
 nichts einzutragen – die Umgebung liest alle Werte über `process.env` aus dieser Datei.
 Bruno liest sie beim Laden der Sammlung; nach einer Änderung die Sammlung neu laden.
 
+Ohne die Oberfläche laufen die Anfragen über das CLI, das als devDependency im Repo liegt –
+aus diesem Verzeichnis heraus, damit es `bruno.json` und `.env` findet:
+
+```
+../node_modules/.bin/bru run zeiterfassung/13-kommentar-anlegen.bru zeiterfassung/14-kommentar-nachsehen.bru --env demo
+```
+
+Laufzeitvariablen wie `commentsId` gelten nur innerhalb eines Aufrufs. Wer auf mehrere
+Aufrufe verteilt, übergibt sie mit `--env-var commentsId=…`. Ein `--reporter-json` enthält
+die Kopfzeilen der Anfragen und damit den Key – nicht weitergeben.
+
 Die Datei ist über die `.gitignore` des Repos ausgeschlossen. Das Repo ist öffentlich, und
 KONZEPT.md §10 verlangt, dass keine Kontodaten darin liegen.
 
@@ -84,6 +95,8 @@ KONZEPT.md §10 verlangt, dass keine Kontodaten darin liegen.
 6. `zeiterfassung/04` bis `08`.
 7. `projecttimes/06 Löschen` – **immer**. Für die Einträge aus `zeiterfassung/06` und `08`
    mit `overlongId` bzw. `dateTestId` wiederholen.
+8. Für `apiComments`: `zeiterfassung/13` bis `19` in dieser Reihenfolge, `14` nach jedem
+   Schreibzugriff, am Ende **immer** `20`.
 
 ## Eine Ausnahme von der Vollständigkeit
 
@@ -102,6 +115,10 @@ API angelegtes Projekt liesse sich nicht wieder entfernen – die Ressource kenn
 | 5 | Welches Datumsformat gilt – die Doku widerspricht sich | `zeiterfassung/08` |
 | 6 | Bleiben eckige Klammern im `detail` erhalten? | fällt bei `zeiterfassung/04` mit ab |
 | 7 | Liefert `linkedCustomerID` auch die allgemeinen Kategorien? | `zeiterfassung/02` |
+| 8 | Kommt `apiComments` als String zurück, Zeichen für Zeichen? | `zeiterfassung/13`, `14` |
+| 9 | Sucht der `apiComments`-Filter als Teilstring – und wirkt er überhaupt? | `zeiterfassung/15`, `16` |
+| 10 | Übersteht `apiComments` einen Teilrumpf? | `zeiterfassung/17` |
+| 11 | `apiComments` über 800 Zeichen, und lässt es sich leeren? | `zeiterfassung/18`, `19` |
 
 ## Was die Dokumentation bereits klärt
 

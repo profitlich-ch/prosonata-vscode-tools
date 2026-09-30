@@ -259,3 +259,16 @@ DELETE /api/v1/projecttimes/{id}
 
 
 Es müssen keine weiteren Parameter übergeben werden.
+
+Nachtrag: `apiComments` (nicht aus der Herstellerdokumentation)
+----------------------------------------------------------------
+
+Das Feld steht noch nicht in der Dokumentation des Herstellers. Am eigenen Konto gemessen am
+30.09.2026, siehe KONZEPT.md §9 und `bruno/zeiterfassung/13` bis `20`.
+
+* Parameter: apiComments
+  * Beschreibung: Freitext für Anbindungen, nicht auf Rechnungen. Wird als String
+    gespeichert und unverändert zurückgegeben; `null`, solange nichts gesetzt ist.
+    Beim GET, POST und PUT verfügbar.
+  * Als Filter beim GET: Teilstringsuche, kombinierbar mit den übrigen Filtern.
+    Ohne Treffer antwortet die API mit 204.

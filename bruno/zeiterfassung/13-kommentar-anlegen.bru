@@ -1,0 +1,51 @@
+meta {
+  name: Eintrag mit apiComments anlegen
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/projecttimes
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "projectID": {{projectId}},
+    "category": {{categoryId}},
+    "workingTime": 1.75,
+    "date": "{{heute}}",
+    "detail": "[LAUFEND] Testeintrag für apiComments",
+    "apiComments": "{\"profitlich.prosonata-vscode-tools\":{\"v\":1, \"key\":\"a3f9c1\",\"open\":true,\"running\":\"2026-09-30T08:12\"}}"
+  }
+}
+
+script:pre-request {
+  const d = new Date();
+  const iso = d.getFullYear() + "-" +
+    String(d.getMonth() + 1).padStart(2, "0") + "-" +
+    String(d.getDate()).padStart(2, "0");
+  bru.setVar("heute", iso);
+}
+
+assert {
+  res.status: eq 201
+}
+
+vars:post-response {
+  commentsId: res.body.data.timeID
+}
+
+docs {
+  Legt einen Zeiteintrag an, der die Maschinendaten so trägt, wie KONZEPT.md §12.1 sie
+  vorsieht: im Feld `apiComments` statt am Anfang von `detail`.
+
+  Geschickt wird ein **String**, kein Objekt, und zwar absichtlich unsauber: nach `"v":1,`
+  steht ein Leerzeichen. Ein JSON-Typ in der Datenbank würde es beim Speichern entfernen.
+
+  Nachsehen mit `14 Nachsehen`, nicht in dieser Antwort – beim `detail`-Limit spiegelte die
+  Antwort das Gesendete, gespeichert war etwas anderes.
+
+  Setzt `commentsId` für `14` bis `20`. **Am Ende `20 Aufräumen` laufen lassen.**
+}
