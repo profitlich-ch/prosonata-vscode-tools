@@ -1,8 +1,10 @@
 import { ApiError, type Api, type EntryDraft } from './api.js'
+import { buildComments, type OwnComments } from './api-comments.js'
 import type { Clock } from './clock.js'
 import type { Config } from './config.js'
 import type { Journal } from './journal.js'
-import { isMarkedOpen, stripMarker, withIdentity, withMarker } from './marker.js'
+import { entryIsOpen } from './identity.js'
+import { stripMarker, withMarker } from './marker.js'
 import { findEntry, parkClosedElsewhere, runningInto } from './tracking.js'
 import type { State, TimeEntry } from './types.js'
 import { workingTime, type TimeGrid } from './working-time.js'
@@ -139,7 +141,7 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
      *
      * An open one goes out under a placeholder instead of waiting. That is what
      * makes it findable from the second machine before the first commit — the
-     * search runs over the marker, and a marker only exists once something has
+     * search runs over `apiComments`, and that only exists once something has
      * been written (KONZEPT.md §3). The first trailer replaces the placeholder.
      */
     if (entry.state === 'closed' && entry.text === '') continue
@@ -152,7 +154,7 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       continue
     }
 
-    const detail = detailFor(entry, config, runningSinceOf(next, entry.id))
+    const detail = detailFor(entry, config)
     if (detail.length > config.detailLimit) {
       // ProSonata truncates silently, so we refuse instead of letting a cut
       // sentence reach an invoice. The write stays pending until the text is
@@ -175,7 +177,8 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
 
     try {
       const running = runningInto(next, entry, clock.now())
-      const closedElsewhere = await writeEntry(next, entry, detail, deps.spanFor?.(entry) ?? null, running, deps)
+      const own = commentsFor(entry, runningSinceOf(next, entry.id))
+      const closedElsewhere = await writeEntry(next, entry, detail, own, deps.spanFor?.(entry) ?? null, running, deps)
       if (closedElsewhere !== null) {
         next = parkClosedElsewhere(next, entryId, closedElsewhere)
         result.awaitingDecision.push(entryId)
@@ -295,26 +298,29 @@ export function applySend(current: State, before: State, after: State, result: S
 }
 
 /**
- * The text as it goes out: with the marker while open, without once closed. The
- * marker carries the moment the timer started, so another machine sees not only
- * *that* someone is measuring but since when — including the day, which is what
- * tells a running timer from one forgotten last week (KONZEPT.md §2).
+ * The text as it goes out: with the marker while open, the bare text once
+ * closed. The marker is for the person preparing the invoice; everything a
+ * machine needs goes into `apiComments` (KONZEPT.md §3).
  */
-export function detailFor(entry: TimeEntry, config: Config, runningSince: number | null = null): string {
-  // Closed: the word goes, the key stays. It is what makes the entry findable
-  // later — for follow-up time, for a lost state, for a rolled-back commit.
-  if (entry.state !== 'open') return withIdentity(stripMarker(entry.text, config.markerWord), entry.key)
+export function detailFor(entry: TimeEntry, config: Config): string {
+  // Stripped as well, so a text adopted from an old entry loses its marker.
+  if (entry.state !== 'open') return stripMarker(entry.text, config.markerWord)
   // The placeholder lives on the wire, never in the entry: locally it stays
   // text-less, so the panel keeps asking for a text and nothing mistakes the
   // stand-in for the line a customer will read.
-  return withMarker(entry.text || config.placeholderText, entry.key, config.markerWord, runningSince)
+  return withMarker(entry.text || config.placeholderText, config.markerWord)
 }
 
 /**
- * Writes one entry. Returns null when it went out, or the seconds ProSonata
- * holds when the entry turned out to be closed on another machine — then
- * nothing is written and the caller parks it.
+ * Our part of `apiComments`. It carries the moment the timer started, so another
+ * machine sees not only *that* someone is measuring but since when — including
+ * the day, which is what tells a running timer from one forgotten last week
+ * (KONZEPT.md §2).
  */
+export function commentsFor(entry: TimeEntry, runningSince: number | null): OwnComments {
+  return { key: entry.key, open: entry.state === 'open', running: entry.state === 'open' ? runningSince : null }
+}
+
 /**
  * When a timer began measuring into this entry, or null while none runs.
  *
@@ -327,10 +333,16 @@ function runningSinceOf(state: State, entryId: string): number | null {
   return timer?.startedAt ?? null
 }
 
+/**
+ * Writes one entry. Returns null when it went out, or the seconds ProSonata
+ * holds when the entry turned out to be closed on another machine — then
+ * nothing is written and the caller parks it.
+ */
 async function writeEntry(
   state: State,
   entry: TimeEntry,
   detail: string,
+  own: OwnComments,
   span: { start: string; end: string } | null,
   /** Seconds of the running stretch that fall into this entry — read, not booked. */
   running: number,
@@ -352,6 +364,8 @@ async function writeEntry(
     // span that has become multi-day takes the old one away again.
     workingTimeStart: span?.start ?? null,
     workingTimeEnd: span?.end ?? null,
+    // Every create starts from an empty field; a PUT below keeps what others wrote.
+    apiComments: buildComments(null, own),
   }
 
   if (entry.timeId === null) {
@@ -373,11 +387,11 @@ async function writeEntry(
   }
 
   /*
-   * The marker is gone while we still consider the entry open: somebody closed
-   * it on another machine. Writing now would put the marker back and overwrite
-   * the final text — the entry belongs to whoever closed it (KONZEPT.md §3).
+   * Closed over there while we still consider it open: somebody closed it on
+   * another machine. Writing now would reopen it and overwrite the final text —
+   * the entry belongs to whoever closed it (KONZEPT.md §3).
    */
-  if (entry.state === 'open' && !isMarkedOpen(remote.detail, config.markerWord)) {
+  if (entry.state === 'open' && !entryIsOpen(remote, config.markerWord)) {
     return Math.round(remote.hours * 3600)
   }
 
@@ -412,7 +426,11 @@ async function writeEntry(
   adoptForeignShare(entry, remote.hours)
 
   const corrected = entry.foreignSeconds + entry.seconds + running
-  await api.updateEntry(entry.timeId, { ...draft, workingTime: workingTime(corrected, grid) })
+  await api.updateEntry(entry.timeId, {
+    ...draft,
+    workingTime: workingTime(corrected, grid),
+    apiComments: buildComments(remote.apiComments, own),
+  })
   entry.lastWritten = corrected
   return null
 }

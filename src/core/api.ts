@@ -1,4 +1,3 @@
-import { searchTerm } from './marker.js'
 import { parseWorkingTime } from './working-time.js'
 
 /**
@@ -8,8 +7,8 @@ import { parseWorkingTime } from './working-time.js'
  *   Responses are wrapped in `{ meta, data }`; errors carry `meta.message`.
  *   `workingTime` is a string when read and a number when written, `timeID` the
  *   other way round — so nothing relies on either type.
- *   The `detail` filter matches substrings, which is what makes finding an open
- *   entry of a branch a single call.
+ *   The `detail` and `apiComments` filters match substrings, which is what makes
+ *   finding the entries of a branch a single call.
  *   `detail` is truncated silently, so length is checked before sending.
  */
 
@@ -63,10 +62,15 @@ export interface RemoteEntry {
   /**
    * `HH:MM:SS` or null. ProSonata only displays the pair; nothing is derived
    * from it there. We write the span of the day the entry was worked
-   * (KONZEPT.md §2) — the running status lives in the marker, not here.
+   * (KONZEPT.md §2) — the running status lives in `apiComments`, not here.
    */
   workingTimeStart: string | null
   workingTimeEnd: string | null
+  /**
+   * Machine data, as a string exactly as it was written (api-comments.ts).
+   * Null while nothing was ever written; an emptied field reads `""`.
+   */
+  apiComments: string | null
 }
 
 export interface EntryDraft {
@@ -83,6 +87,7 @@ export interface EntryDraft {
    */
   workingTimeStart?: string | null
   workingTimeEnd?: string | null
+  apiComments?: string
 }
 
 /** How much of the rate limit is left, from every response (KONZEPT.md §9). */
@@ -95,12 +100,14 @@ export interface Api {
   listProjects(): Promise<Project[]>
   listCategories(): Promise<Category[]>
   getEntry(timeId: number): Promise<RemoteEntry | null>
-  /** Open entries of a project whose `detail` contains the branch key. */
-  findByKey(projectId: number, key: string, markerWord: string): Promise<RemoteEntry[]>
   /**
-   * Entries whose `detail` contains this text. Measured: the filter matches
-   * substrings, so a marker fragment finds exactly its entries — open ones by
-   * the word, any of a branch by the bare key.
+   * Not yet invoiced entries whose `apiComments` contain this text. Measured:
+   * the filter matches substrings and combines with the others.
+   */
+  findByComments(projectId: number, term: string): Promise<RemoteEntry[]>
+  /**
+   * Not yet invoiced entries whose `detail` contains this text. Measured: the
+   * filter matches substrings, so a fragment of an old marker finds its entries.
    */
   findByDetail(projectId: number, term: string): Promise<RemoteEntry[]>
   /**
@@ -179,23 +186,26 @@ export class HttpApi implements Api {
     }
   }
 
-  /**
-   * The open entry of a branch — the caller's own one.
-   *
-   * `userID=myself` matters as much as the marker: the branch key is a hash of
-   * the repository's root commit and the branch name, so every clone computes
-   * the same one, including the clone of a colleague. Without the filter, two
-   * people on one branch would find each other's entry and write into it — the
-   * hours of one landing in the time sheet of the other (KONZEPT.md §3).
-   */
-  async findByKey(projectId: number, key: string, markerWord: string): Promise<RemoteEntry[]> {
-    return this.findByDetail(projectId, searchTerm(key, markerWord))
+  async findByComments(projectId: number, term: string): Promise<RemoteEntry[]> {
+    return this.search(projectId, 'apiComments', term)
   }
 
   async findByDetail(projectId: number, term: string): Promise<RemoteEntry[]> {
+    return this.search(projectId, 'detail', term)
+  }
+
+  /**
+   * The caller's own entries only. `userID=myself` matters as much as the key:
+   * the branch key is a hash of the repository's root commit and the branch
+   * name, so every clone computes the same one, including the clone of a
+   * colleague. Without the filter, two people on one branch would find each
+   * other's entry and write into it — the hours of one landing in the time
+   * sheet of the other (KONZEPT.md §3).
+   */
+  private async search(projectId: number, field: 'apiComments' | 'detail', term: string): Promise<RemoteEntry[]> {
     const rows = await this.request<Record<string, unknown>[]>(
       'GET',
-      `/projecttimes?projectID=${projectId}&isInvoiced=0&userID=myself&detail=${encodeURIComponent(term)}&perPage=100`,
+      `/projecttimes?projectID=${projectId}&isInvoiced=0&userID=myself&${field}=${encodeURIComponent(term)}&perPage=100`,
     )
     return (rows ?? []).map(toEntry)
   }
@@ -336,5 +346,6 @@ function toEntry(row: Record<string, unknown>): RemoteEntry {
     workingTimeStart: typeof row['workingTimeStart'] === 'string' ? row['workingTimeStart'] : null,
     workingTimeEnd: typeof row['workingTimeEnd'] === 'string' ? row['workingTimeEnd'] : null,
     notInvoiceable: Number(row['notInvoiceable'] ?? 0) === 1,
+    apiComments: typeof row['apiComments'] === 'string' ? row['apiComments'] : null,
   }
 }

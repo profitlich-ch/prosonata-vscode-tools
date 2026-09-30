@@ -372,29 +372,45 @@ Prosonata: Korrektur der Rabattberechnung im Shop
 Der Fallback auf das Subject ist ein Angebot, kein Freibrief: technische Subjects sind vor dem
 Fakturieren zu prüfen. Der Text ist in ProSonata jederzeit nachbearbeitbar.
 
-### Offene Zeiteinträge: `[LAUFEND:kennung]`
+### Offene Zeiteinträge: `[LAUFEND]` und `apiComments`
 
-Ein Branch-Eintrag ist wochenlang offen. Solange steht am Anfang seines Textes ein Marker:
+Ein Branch-Eintrag ist wochenlang offen. Was das Werkzeug über ihn wissen muss, steht in
+ProSonatas Feld **`apiComments`**, das auf keiner Rechnung erscheint (Abschnitt 9):
+
+```json
+{"profitlich.prosonata-vscode-tools":{"v":1,"key":"a3f9c1","open":true,"running":"2026-08-02T08:12"}}
+```
+
+Im Text steht nur ein kurzer Hinweis für den Menschen:
 
 ```
-[LAUFEND:a3f9c1][260802-08:12] Buchungsmodul
+[LAUFEND] Buchungsmodul
 ```
 
-Er leistet dreierlei:
+Die beiden Kanäle bedienen verschiedene Leser und hängen nicht voneinander ab:
 
-- **Er sagt, seit wann gemessen wird.** Die zweite Klammer `[JJMMTT-HH:MM]` steht nur, solange
-  ein Timer läuft; Pausieren entfernt sie. Sie ist der Statusanzeiger, der früher
-  `workingTimeStart` war – im eigenen Namensraum, und mit dem Tag, den eine Uhrzeit allein
-  nicht hat. Eine **eigene** Klammer, keine erweiterte erste: Ein älterer Stand liest
-  `^\[LAUFEND:([0-9a-f]+)\]` und fände eine Marke mit Zeit *innerhalb* der Klammer nicht mehr –
-  er schlösse daraus „anderswo abgeschlossen" und parkte laufende Stunden. Daneben greift sein
-  Muster weiter.
-- **Er macht den Eintrag als unfertig sichtbar.** Die API hat **kein Statusfeld** –
-  `timeViaApi` ist nur lesend. Der Text ist der einzige Kanal dafür. Bleibt der Abschluss
-  einmal aus, fällt der Marker beim Fakturieren auf – genau dort, wo es darauf ankommt.
-- **Er macht den Eintrag über Rechnergrenzen wiederfindbar.** Die Kennung identifiziert den
+- **`key` macht den Eintrag über Rechnergrenzen wiederfindbar.** Die Kennung identifiziert den
   **Branch**, nicht den Eintrag – die `timeID` steht ja bereits im Eintrag selbst. Ein anderer
-  Rechner erkennt daran, welcher der offenen Zeiteinträge zu seinem Branch gehört.
+  Rechner erkennt daran, welcher Zeiteintrag zu seinem Branch gehört.
+- **`open` trägt den Zustand, und zwar ausdrücklich.** Ihn aus der Abwesenheit von `running` zu
+  lesen, ginge nicht: Ein pausierter und ein abgeschlossener Eintrag sähen gleich aus. An dieser
+  Unterscheidung hängt der Mehrrechner-Abschluss – fehlt sie, parkt der zweite Rechner entweder
+  nie oder dauernd.
+- **`running` sagt, seit wann gemessen wird**, mit dem Tag, den eine Uhrzeit allein nicht hat.
+  Es steht nur, solange ein Timer läuft; Pausieren und Abschliessen entfernen es. Früher war das
+  `workingTimeStart`, danach eine zweite Klammer im Text.
+- **`[LAUFEND]` macht einen unfertigen Eintrag beim Fakturieren sichtbar** – genau dort, wo ein
+  ausgebliebener Abschluss auffallen muss. Maschinell gelesen wird er nicht mehr: Wer ihn in
+  ProSonata entfernt, schliesst den Eintrag damit nicht, der nächste Schreibvorgang setzt ihn
+  wieder. Beim Abschluss fällt er weg, auf der Rechnungszeile steht dann nur der Text.
+
+**Der äussere Schlüssel ist die Kennung der Extension**, `publisher.name`, kleingeschrieben wie
+VS Code sie normalisiert (Abschnitt 10). Als Schlüssel, nicht als Wert, damit mehrere Anbindungen
+dasselbe Feld nutzen können: Geschrieben wird nur der eigene Teil, alles daneben bleibt stehen.
+Das kostet keinen Aufruf, denn vor jedem PUT wird ohnehin gelesen. Der eigene Teil wird in
+**fester Reihenfolge** geschrieben – gesucht wird er als Teilstring `"key":"a3f9c1"`, und das Feld
+speichert Zeichen für Zeichen, was ankommt (Abschnitt 9). Ein Treffer wird trotzdem noch einmal
+geprüft, denn eine andere Anbindung könnte ein eigenes `key` führen. `v` ist die Formatversion.
 
 Die Kennung ist ein kurzer Hash aus **Root-Commit-SHA des Repos** und **Branchname**. Beides
 ist auf jedem Klon identisch, die Kennung lässt sich also überall ohne Absprache berechnen.
@@ -407,31 +423,31 @@ auffindbar.
 Der Branchname selbst erscheint dadurch nicht in ProSonata (Abschnitt 5). Das Wort `LAUFEND`
 ist konfigurierbar.
 
-**Beim Abschluss fällt das Wort weg, nicht die Klammer**: Aus `[LAUFEND:a3f9c1] Text` wird
-`[a3f9c1] Text`. Das Wort trägt den Zustand – auf einem fertigen Eintrag wäre `LAUFEND` eine
-Lüge –, der Schlüssel trägt die Identität, und die soll den Abschluss überleben.
+**Die Kennung überlebt den Abschluss.** Ohne sie wäre ein geschlossener Eintrag in ProSonata
+anonym, und genau daran hingen drei Dinge: das Zuschlagen ohne `state.json`, die
+Wiederherstellung abgeschlossener Einträge und die Zuordnung eines zurückgerollten Commits.
 
-Ohne sie ist ein geschlossener Eintrag in ProSonata **anonym**, und genau daran hängen drei
-Einschränkungen: Das Zuschlagen muss sich auf `state.json` verlassen, die Wiederherstellung
-findet nur offene Einträge, und ein zurückgerollter Commit lässt sich seinem Eintrag nicht mehr
-zuordnen. Der Preis sind sieben technische Zeichen auf einer Rechnungszeile; er wird bewusst
-gezahlt, bis ProSonatas eigenes Kommentarfeld existiert. Dann ziehen Kennung und Zeitklammer
-dorthin um, und gelesen wird übergangsweise weiter aus dem Text.
+**Einträge aus der Zeit vor dem Feld** tragen alles im Text: `[LAUFEND:a3f9c1][260802-08:12] Text`
+solange offen, `[a3f9c1] Text` nach dem Abschluss – das Wort trug den Zustand, die Kennung die
+Identität, die zweite Klammer die Startzeit. Gelesen wird deshalb zuerst das Feld und ersatzweise
+der Text. Der erste Schreibvorgang dieser Fassung stellt einen solchen Eintrag um. Gesucht wird
+zuerst im Feld; nur wenn dort nichts ist, sucht ein zweiter Aufruf im Text nach `kennung]`. Die
+schliessende Klammer gehört dazu, weil der Filter Teilstrings sucht und sechs Hexzeichen sonst
+mitten in einem Wort stünden. Der zweite Aufruf fällt nur dort an, wo der lokale Zustand keinen
+Eintrag kennt – selten genug für das Kontingent.
 
-Gesucht wird entsprechend zweifach: `LAUFEND:kennung` findet die **offenen** Einträge eines
-Branches, `kennung]` findet **alle**. Die schliessende Klammer gehört zum zweiten Begriff, weil
-der Filter Teilstrings sucht und sechs Hexzeichen sonst mitten in einem Wort stünden.
+**Alle Rechner müssen zugleich umgestellt werden.** Eine Fassung vor dem Feld liest ein
+`[LAUFEND]` ohne Kennung als „anderswo abgeschlossen" und parkte laufende Stunden. Bewusst in Kauf
+genommen statt einer Übergangsfassung, die die Kennung weiter in den Text schreibt: Alle Rechner
+gehören einer Person, und installiert wird ohnehin jede Fassung (`CLAUDE.md`).
 
-Zwei Fallstricke:
-
-- Wird `detail` in ProSonata von Hand geändert und der Marker dabei zerstört, ist die
-  Verknüpfung weg. Daran darf das Werkzeug nicht scheitern: fehlt die Kennung, legt es einen
-  neuen Zeiteintrag an, statt zu raten.
-- Ein umbenannter Branch ergibt eine neue Kennung und damit einen neuen Zeiteintrag.
+Ein Fallstrick bleibt: Ein umbenannter Branch ergibt eine neue Kennung und damit einen neuen
+Zeiteintrag. Der zweite von früher ist entfallen – wer den Text in ProSonata von Hand ändert,
+zerstört die Verknüpfung nicht mehr, denn sie steht in einem Feld, das niemand von Hand anfasst.
 
 Auch auf dem Hauptbranch gibt es offene Zeiteinträge – nicht dauerhaft, aber solange ein Timer
-läuft und der nächste Commit auf sich warten lässt. Sie tragen dann den Marker mit `LAUFEND`
-und dem Platzhalter als Text; der Commit schliesst sie und lässt die Kennung stehen.
+läuft und der nächste Commit auf sich warten lässt. Sie tragen dann `[LAUFEND]` und den
+Platzhalter als Text; der Commit schliesst sie, die Kennung bleibt im Feld.
 
 ### Wirkung eines Commits
 
@@ -451,7 +467,7 @@ nächsten Zeiteintrag.
 
 Der Lebenslauf eines Zeiteintrags, wie ihn die Unterabschnitte davor und danach beschreiben.
 Angelegt wird er, sobald ein Timer für ihn läuft, notfalls unter dem Platzhalter; beim Abschluss
-verliert der Marker das Wort und behält die Kennung; «hinzufügen» ist ein letztes PUT, das nur
+fällt `[LAUFEND]` aus dem Text, und das Feld sagt `open: false` bei gleicher Kennung; «hinzufügen» ist ein letztes PUT, das nur
 `workingTime` trägt.
 
 ```mermaid
@@ -501,7 +517,7 @@ ist ein Netzzugriff auf das Git-Remote, kein API-Call an ProSonata.
 
 Das vierte Signal fängt den Rest: Branches, die nie gemergt und nie gelöscht werden. Offene
 Zeiteinträge sind ausserdem jederzeit in der Oberfläche sichtbar, mit ihrem Alter – wer sie
-übersieht, sieht spätestens den `LAUFEND`-Präfix in ProSonata.
+übersieht, sieht spätestens das `[LAUFEND]` in ProSonata.
 
 ### Fakturierte Zeiteinträge
 
@@ -545,11 +561,11 @@ eigener Zeiteintrag – ein Branch, zwei Rechnungszeilen, beide offen. Zwei Schr
 das:
 
 1. **Finden.** Trifft ein Rechner auf einen Branch, zu dem er lokal keinen Eintrag hat, sucht
-   er ihn per `GET /projecttimes?projectID=…&isInvoiced=0&userID=myself&detail=LAUFEND:kennung`
-   – ein gezielter Aufruf, kein Durchsuchen einer Liste. Findet er ihn, übernimmt er die
-   `timeID` ohne Rückfrage. Findet er ihn nicht, legt er einen neuen Zeiteintrag an.
-   Dass der `detail`-Filter als Teilstring sucht, ist am Konto belegt (Abschnitt 9).
-   **`userID=myself` wiegt so schwer wie der Marker.** Die Kennung ist ein Hash aus
+   er ihn per `GET /projecttimes?projectID=…&isInvoiced=0&userID=myself&apiComments="key":"kennung"`
+   – ein gezielter Aufruf, kein Durchsuchen einer Liste – und nimmt davon den offenen. Findet er
+   ihn, übernimmt er die `timeID` ohne Rückfrage. Findet er ihn nicht, legt er einen neuen
+   Zeiteintrag an. Dass der Filter als Teilstring sucht, ist am Konto belegt (Abschnitt 9).
+   **`userID=myself` wiegt so schwer wie die Kennung.** Die Kennung ist ein Hash aus
    Root-Commit und Branchname, also in jedem Klon gleich – auch im Klon einer Kollegin.
    Ohne den Filter fänden zwei Personen am selben Branch den Eintrag der jeweils anderen und
    schrieben hinein: Die Stunden der einen erschienen in der Zeiterfassung der anderen, denn
@@ -602,13 +618,13 @@ arbeitet – Büro tagsüber, zu Hause abends. Zwei Personen stören einander ni
 einen eigenen Eintrag; zwei Rechner **einer** Person, die gleichzeitig buchen, sind nicht
 abgedeckt (Abschnitt 12).
 
-Der Abschluss trägt über Rechnergrenzen mit: Schliesst du im Büro ab, verschwindet der Marker.
+Der Abschluss trägt über Rechnergrenzen mit: Schliesst du im Büro ab, sagt das Feld `open: false`.
 Der Heimrechner sieht das beim nächsten GET – entweder im Abgleich oder vor dem nächsten
 Schreibvorgang, denn dort wird ohnehin gelesen.
 
 **Was dann mit der Zeit geschieht, die hier noch nicht geschrieben ist, entscheidet der
 Benutzer.** Der abgeschlossene Zeiteintrag gehört dem, der ihn abgeschlossen hat: Der
-endgültige Text steht, der Marker ist weg, Korrekturen in ProSonata sollen bleiben. Ein
+endgültige Text steht, der Eintrag ist als abgeschlossen markiert, Korrekturen in ProSonata sollen bleiben. Ein
 weiterer Schreibzugriff würde alle drei zunichtemachen. Die hier gemessene Zeit ist aber echt
 und muss irgendwohin. Deshalb wird der Eintrag **geparkt** – nichts wird geschrieben, der
 Timer läuft weiter hinein, die Antwort deckt am Ende alles Angefallene ab – und gefragt wird
@@ -618,7 +634,8 @@ dort, wo jemand antworten kann: im Editor oder mit `prosonata resume`. Nicht im
 Zwei Antworten:
 
 - **Hinzufügen** – ein letztes `PUT` auf die alte `timeID`, das **nur** `workingTime` trägt.
-  Ohne `detail` bleibt der endgültige Text unberührt und der Marker kommt nicht zurück.
+  Ohne `detail` und `apiComments` bleibt der endgültige Text unberührt, und der Eintrag wird nicht
+  wieder geöffnet.
 - **Neuer Eintrag** – auf die alte `timeID` wird nichts geschrieben; die Restzeit wird beim
   nächsten Schreibvorgang ein eigener Zeiteintrag.
 
@@ -717,7 +734,7 @@ gemachten Commit gehört – gebucht würde sie aber beim nächsten, unter desse
 
 Deshalb lässt sie sich **von Hand** dem zuletzt abgeschlossenen Eintrag dieses Branches
 zuschlagen. Geschrieben wird dabei nur `workingTime` als neue **Gesamtsumme**; Text, Datum und
-Marker bleiben unberührt – dieselbe Mechanik wie bei der Antwort „hinzufügen" auf einen anderswo
+`apiComments` bleiben unberührt – dieselbe Mechanik wie bei der Antwort „hinzufügen" auf einen anderswo
 abgeschlossenen Eintrag.
 
 Das biegt bewusst eine Regel: `close()` verspricht, dass eine geschlossene `timeID` nie wieder
@@ -732,7 +749,7 @@ Mensch, einmal, für einen Eintrag. Drei Grenzen bleiben:
   dieser Reihenfolge, denn eine Unterbrechung dazwischen kostet eine Löschung, nie eine Stunde.
   Trägt er einen **fremden Anteil**, bleibt die Absage: Löschen zerstörte die Stunden des
   anderen Rechners, und die kennt hier niemand.
-- Findet sich lokal kein Ziel, wird in ProSonata gesucht – über die Kennung, die der Marker
+- Findet sich lokal kein Ziel, wird in ProSonata gesucht – über die Kennung, die das Feld
   nach dem Abschluss behält. Damit trägt das Zuschlagen auch über einen Verlust von
   `state.json` hinweg.
 
@@ -808,8 +825,8 @@ Branches verwaist sind.
 
 - Ein Zeiteintrag wird geschrieben, **sobald ein Timer für ihn läuft** – notfalls unter einem
   Platzhalter, `(in Arbeit)`, konfigurierbar. Zu warten, bis ein Commit einen Text liefert,
-  kostete zwei Dinge: Ein zweiter Rechner findet den Eintrag nicht, denn gesucht wird über den
-  Marker, den es erst nach dem ersten Schreibvorgang gibt – beide legten dann einen eigenen an.
+  kostete zwei Dinge: Ein zweiter Rechner findet den Eintrag nicht, denn gesucht wird über die
+  Kennung, die es erst nach dem ersten Schreibvorgang gibt – beide legten dann einen eigenen an.
   Und ein Verlust von `state.json` nähme den ganzen Eintrag mit, statt nur das laufende Segment.
   Der Platzhalter steht **nur in ProSonata**; lokal bleibt der Eintrag textlos, sodass die
   Oberfläche weiter nach einem Text fragt und nichts den Behelf für die Rechnungszeile hält.
@@ -859,8 +876,7 @@ Worktrees, das ist richtig so. Nur der Scope-Schlüssel unterscheidet sich, weil
 Branch je Worktree verschieden sind.
 
 Der Branchname selbst wird **nicht** an ProSonata übertragen. Er bestimmt die Klammer des
-Zeiteintrags, nicht seinen Text – in den Marker offener Einträge geht nur sein Hash
-(Abschnitt 3).
+Zeiteintrags, nicht seinen Text – in `apiComments` geht nur sein Hash (Abschnitt 3).
 
 ---
 
@@ -1148,7 +1164,7 @@ Branch-Kennung, einmal zufällig gezogen und danach unverändert *(noch nicht ge
 { "formatVersion": 1, "version": 47, "machine": "a3f9c1", "timers": [...] }
 ```
 
-Sie beschriftet das Fach dieses Rechners in `api-comments` (Abschnitt 12) und hat genau eine
+Sie beschriftet das Fach dieses Rechners in `apiComments` (Abschnitt 12) und hat genau eine
 Anforderung: auf diesem Rechner immer dieselbe zu sein. Etwas Sprechendes muss sie nicht sein,
 denn niemand liest sie; und weil `userID=myself` die Einträge ohnehin einer Person zuordnet,
 zählen nur Kollisionen unter den eigenen Rechnern – bei sechs Hexzeichen und einer Handvoll
@@ -1211,7 +1227,7 @@ Eine `sync()`-Funktion gleicht den lokalen Zustand mit ProSonata ab: sie sucht o
 Zeiteinträge zur Kennung des aktuellen Branches, übernimmt gefundene `timeID`s und aktualisiert
 den fremden Anteil (Abschnitt 3). Aufgerufen wird sie vor jedem Schreibzugriff, beim ersten
 Segment auf einem unbekannten Branch und bei Rückkehr nach langer Abwesenheit. Dass auf einem
-anderen Rechner gemessen wird, erkennt sie an der Zeitklammer im Marker – eine Timer-API gibt
+anderen Rechner gemessen wird, erkennt sie an `running` in `apiComments` – eine Timer-API gibt
 es nicht.
 
 **Kein DDEV, kein PHP, keine Datenbank, kein Webserver.** Ein Node-Prozess und ein paar
@@ -1503,7 +1519,7 @@ liegen in [bruno/](bruno/).
   `myself`), `isInvoiced`, `notInvoiceable`.
 - **Gemessen: Der `detail`-Filter sucht als Teilstring.** Acht Zeichen aus der Mitte eines
   vorhandenen Textes lieferten genau den zugehörigen Eintrag. Damit ist die Suche nach dem
-  Marker (Abschnitt 3) ein gezielter Aufruf statt einer durchsuchten Liste.
+  alten Marker (Abschnitt 3) ein gezielter Aufruf statt einer durchsuchten Liste.
 - **Gemessen: Die Liste enthält `detail` und `isInvoiced`.** Für die Prüfung vor einem PUT
   ist also kein Einzelabruf nötig – ein gefilterter Listenaufruf genügt.
 - **Gemessen: Ein PUT ersetzt `workingTime`, es addiert nicht.** 1,75 plus ein PUT mit 3,5
@@ -1541,11 +1557,11 @@ liegen in [bruno/](bruno/).
   warnen und den Text unverändert lassen. Auf eine Ablehnung durch die API ist kein Verlass –
   ein abgeschnittener Satz auf einer Kundenrechnung entstünde sonst unbemerkt. Die
   anzunehmende Grenze bleibt konfigurierbar, für Konten mit anderen Zusagen.
-  Der Marker verbraucht davon 16 Zeichen, mit der Zeitklammer 30, nach dem Abschluss 8 –
-  jeweils plus das Leerzeichen vor dem Text.
+  `[LAUFEND]` verbraucht davon 9 Zeichen plus das Leerzeichen vor dem Text, ein
+  abgeschlossener Eintrag nichts.
 - `timeViaApi` markiert per API erzeugte Einträge (nur lesend) – **kein** Statusfeld für
-  „offen/fertig" vorhanden. Deshalb der Marker im Text.
-- **`apiComments`: das Feld für Maschinendaten (Abschnitt 12, Punkt 1).** Nicht in der
+  „offen/fertig" vorhanden. Den Zustand trägt deshalb `apiComments` (Abschnitt 3).
+- **`apiComments`: das Feld für Maschinendaten (Abschnitt 3).** Nicht in der
   Herstellerdokumentation, am 30. September 2026 am eigenen Konto gemessen
   (`bruno/zeiterfassung/13` bis `20`):
   - **Ein String, Zeichen für Zeichen.** Ein JSON-Text mit einem Leerzeichen nach `"v":1,`
@@ -1604,7 +1620,7 @@ einbauen.
 **Gemessen:** Bei Zugriff über eine App-Integration trägt `meta` die Felder `requestAppID`
 und `requestIntegration` – aber **weder `requestUserID` noch `usergroupName`**. Die
 Integration ist kein Benutzer. Damit wäre offen, wem ein erzeugter Zeiteintrag gehört, und
-der Filter `userID=myself`, auf den sich Projektliste und Markersuche stützen, hätte keinen
+der Filter `userID=myself`, auf den sich Projektliste und Suche nach der Kennung stützen, hätte keinen
 Bezugspunkt.
 
 **Mit einem persönlichen Benutzer-Key stimmt es:** `meta` trägt `requestUserID`,
@@ -1697,7 +1713,7 @@ abgelöst.
 
 **Was fehlt, falls doch veröffentlicht wird:** ein Publisher bei Azure DevOps, registriert als
 `profitlich`, und dort der Anzeigename. Die Kennung ist ab der ersten Veröffentlichung
-unveränderlich – sie steht später als Schlüssel in `api-comments` (Abschnitt 12), wo als
+unveränderlich – sie steht als Schlüssel in `apiComments` (Abschnitt 3), wo als
 Teilstring gesucht wird; eine Umbenennung fände die alten Einträge nicht mehr.
 
 Der Name **trägt das fremde Produkt und soll es**: „ProSonata Tools" sagt, wofür das Werkzeug
@@ -1764,80 +1780,14 @@ Nicht erneut vorschlagen:
 
 ## 12. Offene Punkte
 
-1. **`api-comments`: ein Feld für Maschinendaten.** Der Hersteller hat es **geliefert**, unter
-   dem Namen **`apiComments`**; die fünf Eigenschaften unten sind am Konto gemessen bzw. für
-   die Rechnung zugesagt (Abschnitt 9). Heute stehen diese Daten noch am Anfang des `detail`
-   und damit auf der Rechnungszeile (Abschnitt 3). *(Noch nicht gebaut – das Feld ist da,
-   der Umbau steht aus.)*
-
-   Vorgesehener Inhalt, ein JSON-Objekt:
+1. **Rechnerfächer in `apiComments`.** Das Feld selbst ist geliefert und in Gebrauch – Kennung,
+   Zustand und Startzeit stehen dort (Abschnitt 3), gemessen ist es in Abschnitt 9. Offen ist
+   seine zweite Aufgabe: **je Rechner die Sekunden, die er beigetragen hat.**
 
    ```json
    {"profitlich.prosonata-vscode-tools":{"v":1,"key":"a0a05e","open":true,
     "running":"2026-05-06T12:02","m":{"a3f9c1":10800,"7b2e04":3600}}}
    ```
-
-   - **Der äussere Schlüssel ist die Kennung der Extension** – `publisher.name` aus der
-     `package.json`, **kleingeschrieben**. Nicht der GitHub-Pfad: Der benennt den Ort, an dem
-     der Code heute liegt, und das ist die unbeständigste Eigenschaft überhaupt – eine
-     Umbenennung oder ein Umzug machte die Kennung falsch, während sie in tausend Zeiteinträgen
-     steht. Die Extension-Kennung dagegen ist im Marketplace registriert und steht ohnehin schon
-     in der `package.json`, kann also nicht auseinanderlaufen. Als **Schlüssel**, nicht als
-     Wert, damit mehrere Anbindungen dasselbe Feld nutzen können, ohne einander zu
-     überschreiben.
-
-     **Kleingeschrieben, weil VS Code selbst so normalisiert** (Abschnitt 10): Aus dem Feld
-     `"publisher": "Profitlich"` wird dort die Kennung `profitlich.prosonata-vscode-tools`. Die
-     Schreibweise im Feld ist damit folgenlos – nur hier wäre sie es nicht, denn gesucht wird
-     als Teilstring, und der ist gross oder klein. Der Schlüssel muss deshalb an der Form
-     hängen, die VS Code erzwingt, nicht an der, die jemand in die `package.json` tippt.
-   - `v` ist die Formatversion – ein Zeichen, das später erlaubt, das Format zu ändern, ohne
-     alte Einträge falsch zu lesen.
-   - `key` ist die Branch-Kennung, `running` der Beginn der laufenden Messung; beim Pausieren
-     entfällt `running`.
-   - **`open` sagt den Zustand, und zwar ausdrücklich.** Ihn aus der Abwesenheit von `running`
-     zu lesen, ginge nicht: Ein pausierter und ein abgeschlossener Eintrag sähen gleich aus.
-     Genau diese Unterscheidung trägt heute das Wort `LAUFEND`, und an ihr hängt der
-     Mehrrechner-Abschluss – fehlt sie, parkt der zweite Rechner entweder nie oder dauernd
-     (Abschnitt 3).
-   - **`m` sind die Fächer: je Rechner die Sekunden, die er beigetragen hat.** Siehe unten.
-
-   Damit es trägt, braucht das Feld fünf Eigenschaften, und die gehören dem Hersteller vor dem
-   Bau gesagt:
-
-   - **Filterbar im GET** wie `detail`, als **Teilstring**. Ohne das müssten Listen geholt und
-     lokal durchsucht werden, bei 50 Aufrufen je Viertelstunde keine Option. Es sind **zwei**
-     Suchen, nicht eine: `"key":"a0a05e"` findet alle Einträge des Branches, zusammen mit
-     `"open":true` die offenen (Abschnitt 3). Die heutige Krücke, die schliessende Klammer an
-     den Suchbegriff zu hängen, entfällt dabei – im JSON ist der Treffer von selbst eindeutig.
-   - **Unverändert gespeichert, Zeichen für Zeichen.** Das gibt es bei `detail` gratis und bei
-     einem JSON-Feld nicht: Liegt die Spalte als echter JSON-Typ in der Datenbank, normalisiert
-     diese beim Speichern – Leerzeichen fallen weg, Schlüssel werden umsortiert. Dann steht dort
-     nicht mehr die Zeichenkette, die geschickt wurde, und die Teilstringsuche findet nichts,
-     obwohl der Wert da ist. Erbeten ist deshalb **`TEXT`/`VARCHAR`, durchgereicht**; ein
-     JSON-Typ hätte für uns keinen Nutzen, das Objekt wird auf unserer Seite gebaut und gelesen.
-     Zieht der Hersteller ihn vor, bräuchte es stattdessen einen Pfad-Filter
-     (`apiComments.key=a0a05e`) – auch gangbar, aber eine andere Zusage.
-   - **Kombinierbar mit den übrigen Filtern**, insbesondere mit `userID=myself`. Dieser Filter
-     hält zwei Personen am selben Branch auseinander; wirkt der neue alternativ statt zusätzlich,
-     sieht jede die Stunden der anderen.
-   - **Unverändert bei einem PUT mit Teilrumpf**, weil regelmässig nur `workingTime` geschrieben
-     wird – und beim Zuschlagen zu einem anderswo abgeschlossenen Eintrag ausschliesslich das.
-     Zu prüfen ist das durch erneutes Lesen: Antworten belegen nicht, was gespeichert wurde
-     (Abschnitt 9).
-   - **Nicht sichtbar auf Auswertungen und Rechnungen.**
-
-   Nebenbei muss der Suchbegriff die URL-Kodierung überstehen: `"key":"a0a05e"` wird zu
-   `%22key%22%3A%22a0a05e%22`. Beim heutigen `LAUFEND:a0a05e` kam die Frage nie auf.
-
-   Der Umstieg ist dann ein Ortswechsel, keine Neuerfindung: Gelesen wird das Feld, ersatzweise
-   der Text; geschrieben nur noch das Feld. Ein kurzes **`[LAUFEND]` ohne Kennung bleibt im
-   Text** – es ist das Einzige, was einen vergessenen Abschluss beim Fakturieren auffallen
-   lässt, und kostet neun Zeichen statt neunundzwanzig. Die beiden Kanäle bedienen dann
-   verschiedene Leser und hängen nicht mehr voneinander ab: `open` im Feld trägt den Zustand
-   für die Maschine, `[LAUFEND]` im Text den Hinweis für den Menschen. Damit fällt auch der
-   erste Fallstrick aus Abschnitt 3 weg – wer den Text von Hand ändert, zerstört die
-   Verknüpfung nicht mehr, denn sie steht in einem Feld, das niemand von Hand anfasst.
 
    **Die Fächer lösen den vierten Punkt dieser Liste.** Statt den fremden Anteil aus
    `lastWritten` zu erschliessen, steht er lesbar da: fremd ist die Summe aller Fächer ausser
@@ -1848,6 +1798,10 @@ Nicht erneut vorschlagen:
    verlorener Schreibzugriff sich selbst: Überschreibt A gerade das Fach von B mit einem
    veralteten Wert, setzt B es beim nächsten Schreiben aus seiner eigenen Wahrheit wieder
    gerade. Woher ein Rechner seine Fachkennung nimmt, steht in Abschnitt 7.
+
+   Das Format lässt `m` ohne neue Version zu: Ein Leser, der es nicht kennt, übergeht es. Ein
+   **Schreiber** der heutigen Fassung baut seinen Teil dagegen neu und liesse `m` fallen – mit
+   den Fächern gilt deshalb wieder, dass alle Rechner zugleich umgestellt werden.
 
    Bei 800 Zeichen kostet ein Fach fünfzehn; die Länge ist keine Grösse, über die nachzudenken
    wäre. **Aufgeräumt werden Fächer nie**, auch die von Rechnern nicht, die es nicht mehr gibt:
@@ -1861,7 +1815,7 @@ Nicht erneut vorschlagen:
 4. **Gleichzeitiges Buchen von zwei Rechnern derselben Person auf denselben Branch** ist nicht
    abgedeckt. Im Tagesmodus gehört der Tageswechsel dazu (Abschnitt 3). Die Regel „fremd + eigen" setzt voraus, dass immer nur einer schreibt. Laufen
    zwei Timer parallel, überholen sich die Schreibzugriffe und der Wert ist zeitweise zu
-   niedrig. Bekannte Grenze, kein Fehler. **Gelöst wird sie von den Fächern in `api-comments`**
+   niedrig. Bekannte Grenze, kein Fehler. **Gelöst wird sie von den Fächern in `apiComments`**
    (Punkt 1), und zwar als Nebenwirkung: Wo jeder Rechner nur sein eigenes Fach schreibt, gibt
    es nichts mehr zu überholen. Bis dahin bleibt es bei der Voraussetzung. Zwei **Personen** am
    selben Branch sind dagegen schon heute abgedeckt: Die Suche filtert auf `userID=myself`, jede
@@ -1880,8 +1834,8 @@ Nicht erneut vorschlagen:
 
 Gebaut sind die Punkte 1 bis 9 der Reihenfolge unten, dazu Zeitkorrektur, Verwerfen,
 Zuschlagen, Segmentprotokoll samt Bericht, der Abgleich über mehrere Rechner, der Modus *pro
-Branch und Tag*, die Schlaferkennung, das Durchsehen und Berichtigen der Zeiteinträge und der
-Anspruch vor dem Anlegen (Abschnitt 7).
+Branch und Tag*, die Schlaferkennung, das Durchsehen und Berichtigen der Zeiteinträge, der
+Anspruch vor dem Anlegen (Abschnitt 7) und die Maschinendaten in `apiComments` (Abschnitt 3).
 
 **Noch nicht gebaut** – jeweils an Ort und Stelle gekennzeichnet:
 
@@ -1891,7 +1845,7 @@ Anspruch vor dem Anlegen (Abschnitt 7).
 | Abschlussvorschlag aus „lokaler Branch gelöscht" und „Zeiteintrag ruht" | 3, *Abschluss* |
 | Zusammenführen zurückgerollter, bereits gesendeter Zeiteinträge | 3, *Zurückgerollte Commits* |
 | Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
-| Umzug der Maschinendaten nach `api-comments`, samt Rechnerfächern | 7 und 12 |
+| Rechnerfächer in `apiComments`, samt Rechnerkennung | 7 und 12 |
 | Einmalige Migration alter Hooks über alle bekannten Repositories | 8 |
 | Repo-Vorgabe für den Modus (`prosonata.mode`) | 3, *pro Branch und Tag* |
 | `post-merge`-Hook, damit ein Merge-Commit den Eintrag abschliesst | 8, *Hook* |

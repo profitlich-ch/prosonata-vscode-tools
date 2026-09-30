@@ -1,5 +1,4 @@
 import { ApiError, type Api, type Category, type EntryDraft, type Project, type RateLimit, type RemoteEntry } from './api.js'
-import { searchTerm } from './marker.js'
 import { parseWorkingTime } from './working-time.js'
 
 /**
@@ -45,9 +44,9 @@ export class FakeApi implements Api {
     return this.entries.get(timeId) ?? null
   }
 
-  async findByKey(projectId: number, key: string, markerWord: string): Promise<RemoteEntry[]> {
-    this.record(`findByKey ${projectId} ${key}`)
-    return this.matching(projectId, searchTerm(key, markerWord))
+  async findByComments(projectId: number, term: string): Promise<RemoteEntry[]> {
+    this.record(`findByComments ${projectId} ${term}`)
+    return this.matching(projectId, (entry) => (entry.apiComments ?? '').includes(term))
   }
 
   async listEntries(projectId: number): Promise<RemoteEntry[]> {
@@ -59,15 +58,14 @@ export class FakeApi implements Api {
 
   async findByDetail(projectId: number, term: string): Promise<RemoteEntry[]> {
     this.record(`findByDetail ${projectId} ${term}`)
-    return this.matching(projectId, term)
+    return this.matching(projectId, (entry) => entry.detail.includes(term))
   }
 
   // A substring match, as measured against the account — and `userID=myself`,
   // which is why entries of other people never show up here.
-  private matching(projectId: number, term: string): RemoteEntry[] {
+  private matching(projectId: number, contains: (entry: RemoteEntry) => boolean): RemoteEntry[] {
     return [...this.entries.values()].filter(
-      (entry) =>
-        entry.projectID === projectId && !entry.isInvoiced && entry.detail.includes(term) && !this.foreign.has(entry.timeID),
+      (entry) => entry.projectID === projectId && !entry.isInvoiced && contains(entry) && !this.foreign.has(entry.timeID),
     )
   }
 
@@ -93,6 +91,7 @@ export class FakeApi implements Api {
       workingTimeStart: normaliseStart(draft.workingTimeStart),
       workingTimeEnd: normaliseStart(draft.workingTimeEnd),
       notInvoiceable: false,
+      apiComments: draft.apiComments ?? null,
     }
     this.entries.set(entry.timeID, entry)
     return { ...entry }
@@ -109,6 +108,7 @@ export class FakeApi implements Api {
     if (patch.date !== undefined) entry.date = patch.date
     if (patch.projectID !== undefined) entry.projectID = patch.projectID
     if (patch.category !== undefined) entry.category = patch.category
+    if (patch.apiComments !== undefined) entry.apiComments = patch.apiComments
     // Measured: null clears, an empty string writes 01:00:00 instead.
     if (patch.workingTimeStart !== undefined) entry.workingTimeStart = normaliseStart(patch.workingTimeStart)
     if (patch.workingTimeEnd !== undefined) entry.workingTimeEnd = normaliseStart(patch.workingTimeEnd)

@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { ApiError } from './api.js'
+import { ApiError, type RemoteEntry } from './api.js'
 import { fixedClock } from './clock.js'
 import { DEFAULTS, type Config } from './config.js'
 import { FakeApi } from './fake-api.js'
 import { Journal } from './journal.js'
-import { isMarkedOpen, readKey } from './marker.js'
+import { EXTENSION_ID, readComments } from './api-comments.js'
 import { adoptForeignShare, applySend, describeTrouble, dueWrites, send, type SendDeps, type SendResult } from './sender.js'
 import { emptyState, type State, type TimeEntry } from './types.js'
 import { pause } from './tracking.js'
@@ -40,6 +40,22 @@ function entry(overrides: Partial<TimeEntry> = {}): TimeEntry {
   }
 }
 
+function timerOn(entryId: string, startedAt: number | null) {
+  return {
+    id: 't1',
+    origin: 'local' as const,
+    remoteTimerId: null,
+    scope: { repoPath: '/work/shop', branch: 'feature/buchung' },
+    startedAt,
+    entryId,
+  }
+}
+
+/** What we wrote into `apiComments`, read back. */
+function own(remote: RemoteEntry | undefined) {
+  return readComments(remote?.apiComments ?? null)
+}
+
 function stateWith(e: TimeEntry, since = NINE): State {
   return { ...emptyState(), entries: [e], pending: [{ entryId: e.id, since, closing: false }] }
 }
@@ -57,12 +73,13 @@ describe('when a write becomes due', () => {
 })
 
 describe('the first write', () => {
-  it('creates the entry with the marker in front of the text', async () => {
+  it('creates the entry with the marker in front of the text and the key in the field', async () => {
     const { api, deps } = setup()
     const { state } = await send(stateWith(entry()), deps, true)
 
     const created = [...api.entries.values()][0]!
-    expect(created.detail).toBe('[LAUFEND:a3f9c1] Buchungsmodul')
+    expect(created.detail).toBe('[LAUFEND] Buchungsmodul')
+    expect(own(created)).toEqual({ key: 'a3f9c1', open: true, running: null })
     expect(created.hours).toBe(1)
     expect(state.entries[0]?.timeId).toBe(created.timeID)
     expect(state.pending).toHaveLength(0)
@@ -78,7 +95,7 @@ describe('the first write', () => {
 
     const { state } = await send(stateWith(entry({ text: '' })), deps, true)
 
-    expect([...api.entries.values()][0]?.detail).toBe('[LAUFEND:a3f9c1] (in Arbeit)')
+    expect([...api.entries.values()][0]?.detail).toBe('[LAUFEND] (in Arbeit)')
     // Locally it stays text-less, so the panel keeps asking for a real one.
     expect(state.entries[0]?.text).toBe('')
     expect(state.pending).toHaveLength(0)
@@ -97,27 +114,29 @@ describe('the first write', () => {
 
 describe('a closed entry', () => {
   /*
-   * The word goes, the key stays: `LAUFEND` on a finished entry would be a lie,
-   * while the key is what makes it findable again — for follow-up time, for a
-   * lost state, for a rolled-back commit.
+   * The invoice line is the bare text. The key stays in the field — it is what
+   * makes the entry findable again, for follow-up time, for a lost state, for a
+   * rolled-back commit.
    */
-  it('keeps its key and loses the word', async () => {
+  it('goes out as the bare text, and keeps its key in the field', async () => {
     const { api, deps } = setup()
     const closed = entry({ state: 'closed', text: 'Buchungsmodul, fertig' })
 
     await send(stateWith(closed), deps, true)
 
-    expect([...api.entries.values()][0]?.detail).toBe('[a3f9c1] Buchungsmodul, fertig')
+    const written = [...api.entries.values()][0]
+    expect(written?.detail).toBe('Buchungsmodul, fertig')
+    expect(own(written)).toEqual({ key: 'a3f9c1', open: false, running: null })
   })
 
-  it('is told from an open one by the word, not by the bracket', async () => {
+  it('says it is closed explicitly, and carries no running time', async () => {
     const { api, deps } = setup()
+    const since = new Date(2026, 6, 30, 8, 0).getTime()
+    const state = { ...stateWith(entry({ state: 'closed', text: 'fertig' })), timers: [timerOn('e1', since)] }
 
-    await send(stateWith(entry({ state: 'closed', text: 'fertig' })), deps, true)
-    const detail = [...api.entries.values()][0]!.detail
+    await send(state, deps, true)
 
-    expect(isMarkedOpen(detail)).toBe(false)
-    expect(readKey(detail)).toBe('a3f9c1')
+    expect(own([...api.entries.values()][0])?.running).toBeNull()
   })
 })
 
@@ -200,12 +219,14 @@ describe('a text over the limit', () => {
   })
 
   it('counts the marker towards the limit', async () => {
-    const { deps, config } = setup({ detailLimit: 30 })
-    const e = entry({ text: 'a'.repeat(20) })
-    const { result } = await send(stateWith(e), deps, true)
+    const { deps } = setup({ detailLimit: 30 })
 
-    // 20 characters of text plus "[LAUFEND:a3f9c1] " is over 30.
-    expect(result.tooLong[0]?.length).toBeGreaterThan(config.detailLimit)
+    // 20 characters of text plus "[LAUFEND] " is 30, just within; 21 is over.
+    const { result: within } = await send(stateWith(entry({ text: 'a'.repeat(20) })), deps, true)
+    const { result: over } = await send(stateWith(entry({ text: 'a'.repeat(21) })), deps, true)
+
+    expect(within.tooLong).toEqual([])
+    expect(over.tooLong[0]?.length).toBe(31)
   })
 })
 
@@ -249,9 +270,9 @@ describe('an entry deleted in ProSonata', () => {
 })
 
 /*
- * Closed on another machine: the marker is gone from `detail` while we still
- * hold the entry open. Writing would put the marker back and overwrite the
- * final text — the entry belongs to whoever closed it (KONZEPT.md §3).
+ * Closed on another machine: the field says closed while we still hold the
+ * entry open. Writing would reopen it and overwrite the final text — the entry
+ * belongs to whoever closed it (KONZEPT.md §3).
  */
 describe('an entry closed on another machine', () => {
   it('is parked instead of written', async () => {
@@ -259,8 +280,10 @@ describe('an entry closed on another machine', () => {
     const first = await send(stateWith(entry({ seconds: 3600 })), deps, true)
     const timeId = first.state.entries[0]!.timeId!
 
-    // Somebody closes it over there: marker gone, final text set.
-    api.entries.get(timeId)!.detail = 'Buchungsmodul, fertig'
+    // Somebody closes it over there: field closed, final text set.
+    const remote = api.entries.get(timeId)!
+    remote.detail = 'Buchungsmodul, fertig'
+    remote.apiComments = remote.apiComments!.replace('"open":true', '"open":false')
     api.calls.length = 0
 
     const local = { ...first.state.entries[0]!, seconds: 3600 + 900 }
@@ -294,28 +317,21 @@ describe('an entry closed on another machine', () => {
 })
 
 /*
- * "A timer is running here" needs no field of its own: the presence of
- * `workingTimeStart` says it, and null takes it back. Measured against the
- * account — an empty string would write 01:00:00 instead of clearing.
+ * Since when a timer runs, with the day — in `apiComments`, where another
+ * machine reads it (KONZEPT.md §2).
  */
 describe('the running mark', () => {
-  const timerOn = (entryId: string, startedAt: number | null) => ({
-    id: 't1',
-    origin: 'local' as const,
-    remoteTimerId: null,
-    scope: { repoPath: '/work/shop', branch: 'feature/buchung' },
-    startedAt,
-    entryId,
-  })
-
-  it('rides along in the marker while the timer runs', async () => {
+  it('rides along in the field while the timer runs', async () => {
     const { api, deps } = setup()
     const nineTwelve = new Date(2026, 6, 30, 9, 12, 0).getTime()
     const state = { ...stateWith(entry()), timers: [timerOn('e1', nineTwelve)] }
 
     const { state: after } = await send(state, deps, true)
 
-    expect(api.entries.get(after.entries[0]!.timeId!)?.detail).toBe('[LAUFEND:a3f9c1][260730-09:12] Buchungsmodul')
+    const written = api.entries.get(after.entries[0]!.timeId!)
+    expect(own(written)?.running).toBe(nineTwelve)
+    expect(written?.apiComments).toContain('"running":"2026-07-30T09:12"')
+    expect(written?.detail).toBe('[LAUFEND] Buchungsmodul')
   })
 
   it('is taken back by the next write once the timer stands still', async () => {
@@ -331,7 +347,7 @@ describe('the running mark', () => {
     }
     await send(paused, deps, true)
 
-    expect(api.entries.get(timeId)?.detail).toBe('[LAUFEND:a3f9c1] Buchungsmodul')
+    expect(own(api.entries.get(timeId))).toEqual({ key: 'a3f9c1', open: true, running: null })
   })
 
   // The status used to sit in `workingTimeStart`. It does not any more, and the
@@ -343,6 +359,59 @@ describe('the running mark', () => {
     const { state: after } = await send({ ...stateWith(entry()), timers: [timerOn('e1', nineTwelve)] }, deps, true)
 
     expect(api.entries.get(after.entries[0]!.timeId!)?.workingTimeStart).toBeNull()
+  })
+})
+
+/*
+ * The field is shared: the outer key is ours, anything beside it belongs to
+ * another integration (KONZEPT.md §12).
+ */
+describe('apiComments', () => {
+  it('keeps what another integration wrote there', async () => {
+    const { api, deps } = setup()
+    const first = await send(stateWith(entry()), deps, true)
+    const timeId = first.state.entries[0]!.timeId!
+    const remote = api.entries.get(timeId)!
+    remote.apiComments = JSON.stringify({ 'jemand.anderes': { ticket: 42 }, ...JSON.parse(remote.apiComments!) })
+
+    await send({ ...first.state, pending: [{ entryId: 'e1', since: NINE, closing: false }] }, deps, true)
+
+    const field = JSON.parse(api.entries.get(timeId)!.apiComments!)
+    expect(field['jemand.anderes']).toEqual({ ticket: 42 })
+    expect(field[EXTENSION_ID].key).toBe('a3f9c1')
+  })
+
+  /*
+   * An entry from before the field: the old marker is all it carries. It is
+   * still open by that marker, and the next write moves it over.
+   */
+  it('takes over an entry that still carries the old marker', async () => {
+    const { api, deps } = setup()
+    const first = await send(stateWith(entry()), deps, true)
+    const timeId = first.state.entries[0]!.timeId!
+    const remote = api.entries.get(timeId)!
+    remote.detail = '[LAUFEND:a3f9c1][260730-08:00] Buchungsmodul'
+    remote.apiComments = null
+
+    const { result } = await send({ ...first.state, pending: [{ entryId: 'e1', since: NINE, closing: false }] }, deps, true)
+
+    expect(result.sent).toEqual(['e1'])
+    expect(api.entries.get(timeId)?.detail).toBe('[LAUFEND] Buchungsmodul')
+    expect(own(api.entries.get(timeId))).toEqual({ key: 'a3f9c1', open: true, running: null })
+  })
+
+  // Whoever edits the text in ProSonata no longer closes the entry by accident:
+  // the state lives in the field, which nobody edits by hand.
+  it('keeps an entry open whose marker was removed from the text by hand', async () => {
+    const { api, deps } = setup()
+    const first = await send(stateWith(entry()), deps, true)
+    const timeId = first.state.entries[0]!.timeId!
+    api.entries.get(timeId)!.detail = 'Buchungsmodul'
+
+    const { result } = await send({ ...first.state, pending: [{ entryId: 'e1', since: NINE, closing: false }] }, deps, true)
+
+    expect(result.awaitingDecision).toEqual([])
+    expect(api.entries.get(timeId)?.detail).toBe('[LAUFEND] Buchungsmodul')
   })
 })
 

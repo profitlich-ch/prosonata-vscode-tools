@@ -121,31 +121,29 @@ Prosonata: Rabattberechnung im Shop korrigiert
 
 Auf dem Main-Branch, wo jeder Commit seinen eigenen Eintrag abschliesst, gilt
 die Betreffzeile, wenn es keinen Trailer gibt. Auf einem Branch dagegen zählt nur der Trailer; der zuletzt in einem Commit geschriebene gewinnt, normale Betreffzeilen
-bleiben aussen vor. Ein Eintrag ohne Text steht in ProSonata als `[LAUFEND:a3f9c1] (in Arbeit)` —
+bleiben aussen vor. Ein Eintrag ohne Text steht in ProSonata als `[LAUFEND] (in Arbeit)` —
 der erste Trailer ersetzt den Platzhalter. Er wird gebraucht, damit ein zweiter
-Computer den Eintrag findet, bevor der erste Commit fällt; gesucht wird über den
-Marker, und den gibt es erst nach dem ersten Schreibvorgang. Auf einem Branch
+Computer den Eintrag findet, bevor der erste Commit fällt; gesucht wird über die
+Kennung, und die gibt es erst nach dem ersten Schreibvorgang. Auf einem Branch
 erinnert die Seitenleiste mit der Zeile **Ohne Text** daran, dass die
 Rechnungszeile noch fehlt. Abschliessen lässt sich ein Eintrag ohne Text nicht:
 Er stünde endgültig namenlos beim Kunden.
 
-Jeder Zeiteintrag trägt eine Markierung. Sie macht einen unfertigen Eintrag in
-ProSonata sichtbar — die API hat kein Statusfeld — und sie trägt die Identität
-des Branches, sodass auf weiteren Computern am selben Branch gearbeitet werden
-kann:
+Was das Werkzeug über einen Zeiteintrag wissen muss, steht in ProSonatas Feld
+`apiComments`, das auf keiner Rechnung erscheint: die Kennung des Branches,
+damit weitere Computer den Eintrag wiederfinden, ob er offen ist, und seit wann
+ein Timer läuft. Auf der Rechnungszeile bleibt nur ein Hinweis für den Menschen:
 
-| Zustand | Markierung |
+| Zustand | Text in ProSonata |
 |---|---|
-| Timer läuft | `[LAUFEND:a3f9c1][260802-08:12] Text` |
-| pausiert | `[LAUFEND:a3f9c1] Text` |
-| abgeschlossen | `[a3f9c1] Text` |
+| offen | `[LAUFEND] Text` |
+| abgeschlossen | `Text` |
 
-Beim Abschliessen fällt also das **Wort** weg, nicht die Klammer: Auf einem
-fertigen Eintrag wäre «LAUFEND» falsch, die Kennung dagegen wird weiter
-gebraucht. Ohne sie ist ein abgeschlossener Eintrag in ProSonata anonym, und
-weder das Zuschlagen noch eine Wiederherstellung fänden ihn wieder. Die acht
-technischen Zeichen auf der Rechnungszeile sind dafür der bewusste Preis —
-solange, bis ProSonata ein eigenes Feld für solche Angaben hat.
+Das `[LAUFEND]` fällt beim Fakturieren auf, falls ein Abschluss einmal
+ausbleibt. Wird es in ProSonata von Hand entfernt, schadet das nicht: Den
+Zustand trägt das Feld. Einträge aus der Zeit vor dem Feld tragen die Kennung
+noch im Text, etwa `[LAUFEND:a3f9c1] Text`; sie werden weiter erkannt und beim
+nächsten Schreiben umgestellt.
 
 In den Feldern **Start** und **Ende** steht dafür die Spanne des Arbeitstages —
 Beginn des ersten und Ende des jüngsten Segments. Erstreckt sich ein Eintrag über
@@ -154,7 +152,7 @@ etwas aus.
 
 ## Auf mehreren Computern
 
-Die Kennung im Marker entsteht aus dem ersten Commit des Repositories und dem
+Die Kennung des Branches entsteht aus dem ersten Commit des Repositories und dem
 Branchnamen — in jedem Klon dieselbe. Der zweite Computer findet den Zeiteintrag
 deshalb wieder und **ergänzt** ihn, statt einen zweiten anzulegen. Vorausgesetzt
 ist, dass nicht beide gleichzeitig messen.
@@ -170,7 +168,7 @@ sequenceDiagram
     participant Z as Zuhause
     B->>P: misst 3:00, schreibt 3:00
     Note over B: zuletzt geschrieben 3:00<br/>fremd 0:00 · eigen 3:00
-    Z->>P: sucht «LAUFEND:a3f9c1», findet 3:00
+    Z->>P: sucht die Kennung a3f9c1, findet 3:00
     Note over Z: übernimmt den Eintrag<br/>fremd 3:00 · eigen 0:00
     Z->>P: misst 1:00, liest 3:00 = zuletzt geschrieben → fremd bleibt<br/>schreibt 4:00
     Note over Z: zuletzt geschrieben 4:00

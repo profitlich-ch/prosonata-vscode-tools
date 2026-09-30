@@ -6,6 +6,23 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Geändert
+
+- **Die Rechnungszeile trägt keine Kennung mehr.** Branch-Kennung, Zustand und
+  Startzeit eines laufenden Timers stehen jetzt in ProSonatas Feld
+  `apiComments`, das auf keiner Rechnung erscheint. Im Text bleibt nur
+  `[LAUFEND] Text`, solange ein Eintrag offen ist, und danach der blanke Text.
+  Aus `[LAUFEND:a3f9c1][260930-08:12] Buchungsmodul` wird
+  `[LAUFEND] Buchungsmodul`, aus `[a3f9c1] Buchungsmodul` wird `Buchungsmodul`.
+
+  Wer das `[LAUFEND]` in ProSonata von Hand entfernt, schliesst den Eintrag
+  damit nicht mehr ab; den Zustand trägt das Feld. Einträge mit der alten
+  Markierung werden weiter erkannt und beim nächsten Schreiben umgestellt.
+
+  **Auf allen Rechnern gleichzeitig installieren.** Eine ältere Fassung hält
+  einen Eintrag ohne Kennung im Text für anderswo abgeschlossen und parkt die
+  laufende Zeit.
+
 ## [0.19.0] — 2026-09-11
 
 ### Behoben

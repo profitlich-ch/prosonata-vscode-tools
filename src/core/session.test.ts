@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { buildComments } from './api-comments.js'
 import { ApiError } from './api.js'
 import { fixedClock } from './clock.js'
 import { DEFAULTS, type Config } from './config.js'
@@ -58,8 +59,9 @@ describe('starting the timer', () => {
       projectID: 166,
       category: 70,
       date: '2026-07-30',
-      detail: '[LAUFEND:a3f9c1] Buchungsmodul',
+      detail: '[LAUFEND] Buchungsmodul',
       workingTime: '3.00',
+      apiComments: buildComments(null, { key: 'a3f9c1', open: true, running: null }),
     })
 
     const session = sessionWith(api)
@@ -290,10 +292,25 @@ describe('adding follow-up time to the entry a commit closed', () => {
   })
 
   /*
-   * Without a local target the key in the closed entry's marker is what finds it
-   * — the whole reason the mark survives a close.
+   * Without a local target the key the closed entry keeps is what finds it —
+   * the whole reason the key survives a close. In the field today, in the
+   * marker for an entry written before it.
    */
   it('finds the target in ProSonata when the local state knows none', async () => {
+    const { api, session, remote } = await afterCommit()
+    session.store.update((state) => {
+      state.entries = state.entries.filter((entry) => entry.state !== 'closed')
+      return state
+    })
+    api.entries.get(remote.timeID)!.apiComments = buildComments(null, { key: 'a3f9c1', open: false, running: null })
+
+    const result = await session.attachToLastClosed(main, async () => true)
+
+    expect(result.kind).toBe('done')
+    expect(api.entries.get(remote.timeID)?.hours).toBeCloseTo(2 + 5 / 60, 2)
+  })
+
+  it('finds it by the old marker as well', async () => {
     const { api, session, remote } = await afterCommit()
     session.store.update((state) => {
       state.entries = state.entries.filter((entry) => entry.state !== 'closed')
@@ -304,7 +321,6 @@ describe('adding follow-up time to the entry a commit closed', () => {
     const result = await session.attachToLastClosed(main, async () => true)
 
     expect(result.kind).toBe('done')
-    expect(api.entries.get(remote.timeID)?.hours).toBeCloseTo(2 + 5 / 60, 2)
   })
 
   it('refuses an invoiced entry without asking anybody', async () => {

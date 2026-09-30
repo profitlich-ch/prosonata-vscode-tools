@@ -95,7 +95,8 @@ describe('an empty answer', () => {
   it('is an empty result, not a fault', async () => {
     const api = new HttpApi({ baseUrl: 'https://x/api/v1', apiKey: 'k', fetch: noContent })
 
-    await expect(api.findByKey(166, 'a3f9c1', 'LAUFEND')).resolves.toEqual([])
+    await expect(api.findByComments(166, '"key":"a3f9c1"')).resolves.toEqual([])
+    await expect(api.findByDetail(166, 'a3f9c1]')).resolves.toEqual([])
     await expect(api.listProjects()).resolves.toEqual([])
     await expect(api.listCategories()).resolves.toEqual([])
   })

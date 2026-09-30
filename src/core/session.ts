@@ -4,8 +4,9 @@ import { HttpApi, type Api, type RemoteEntry } from './api.js'
 import { localDate, systemClock, type Clock } from './clock.js'
 import { paths, readConfig, type Config } from './config.js'
 import { describeRepo, mainBranch, type GitRepo } from './git.js'
+import { entryIsOpen, findOfBranch } from './identity.js'
 import { Journal } from './journal.js'
-import { branchKey, identityTerm, isMarkedOpen } from './marker.js'
+import { branchKey } from './marker.js'
 import { measuredPerEntry, type MergePlan } from './merge.js'
 import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
 import { billedTime } from './report.js'
@@ -607,16 +608,16 @@ export class Session {
 
   /**
    * The last entry of this branch that ProSonata holds as finished — found by
-   * the key the marker keeps after a close (KONZEPT.md §3). Needed when the
+   * the key it keeps after a close (KONZEPT.md §3). Needed when the
    * local state knows none: after a lost `state.json`, or on a machine that has
    * never seen this branch.
    *
-   * Finished means: the marker carries no word any more. The newest is the one
-   * with the highest `timeID`, since ProSonata hands them out in order.
+   * The newest is the one with the highest `timeID`, since ProSonata hands
+   * them out in order.
    */
   private async lastClosedInProsonata(context: RepoContext): Promise<number | null> {
-    const found = await this.api.findByDetail(context.projectId, identityTerm(context.key))
-    const closed = found.filter((entry) => !isMarkedOpen(entry.detail, this.config.markerWord))
+    const word = this.config.markerWord
+    const closed = await findOfBranch(this.api, context.projectId, context.key, word, (entry) => !entryIsOpen(entry, word))
     if (closed.length === 0) return null
 
     return closed.reduce((newest, entry) => (entry.timeID > newest ? entry.timeID : newest), 0)

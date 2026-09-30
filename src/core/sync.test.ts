@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
+import { buildComments } from './api-comments.js'
 import { fixedClock } from './clock.js'
 import { DEFAULTS, type Config } from './config.js'
 import { FakeApi } from './fake-api.js'
@@ -53,7 +54,7 @@ function pendingFor(entry: TimeEntry): State {
 const options = { scope, key: KEY, projectId: 166, categoryId: 70, newId }
 
 describe('a machine that has never seen this branch', () => {
-  it('finds the open entry by its marker and adopts it', async () => {
+  it('finds the open entry by its key and adopts it', async () => {
     const api = new FakeApi()
     // The office machine left three hours behind.
     await send(pendingFor(entryOf({ seconds: 3 * 3600 })), deps(api), true)
@@ -118,6 +119,47 @@ describe('a machine that has never seen this branch', () => {
   })
 })
 
+/*
+ * Entries written before `apiComments` carry their key only in the text. They
+ * stay findable, but the old search costs a second call — so it only runs when
+ * the field has nothing (KONZEPT.md §3).
+ */
+describe('an entry from before apiComments', () => {
+  async function oldEntry(api: FakeApi, detail: string) {
+    return api.createEntry({ projectID: 166, category: 70, date: '2026-07-30', detail, workingTime: '2.00' })
+  }
+
+  it('is found by its old marker and adopted with a clean text', async () => {
+    const api = new FakeApi()
+    const remote = await oldEntry(api, `[LAUFEND:${KEY}][260730-08:12] Buchungsmodul`)
+
+    const outcome = await sync(emptyState(), api, config, options)
+
+    expect(outcome.adopted).toBe(true)
+    const adopted = openEntry(outcome.state, scope)!
+    expect(adopted.timeId).toBe(remote.timeID)
+    expect(adopted.text).toBe('Buchungsmodul')
+    expect(adopted.foreignSeconds).toBe(2 * 3600)
+  })
+
+  it('is not adopted once it was closed', async () => {
+    const api = new FakeApi()
+    await oldEntry(api, `[${KEY}] Buchungsmodul, fertig`)
+
+    expect((await sync(emptyState(), api, config, options)).adopted).toBe(false)
+  })
+
+  it('costs a second search only when the field has nothing', async () => {
+    const api = new FakeApi()
+    await send(pendingFor(entryOf({ seconds: 3600 })), deps(api), true)
+    api.calls.length = 0
+
+    await sync(emptyState(), api, config, options)
+
+    expect(api.calls).toEqual([`findByComments 166 "key":"${KEY}"`])
+  })
+})
+
 describe('recovery after a lost state', () => {
   it('is the very same path — an empty state adopts what ProSonata holds', async () => {
     const api = new FakeApi()
@@ -134,12 +176,12 @@ describe('recovery after a lost state', () => {
 })
 
 describe('an entry closed on another machine', () => {
-  it('is noticed by the missing marker', async () => {
+  it('is noticed by the field saying closed', async () => {
     const api = new FakeApi()
     const open = await send(pendingFor(entryOf({ seconds: 3600 })), deps(api), true)
     const mine = open.state.entries[0]!
 
-    // The office closes it: the marker disappears.
+    // The office closes it.
     const closed = { ...mine, state: 'closed' as const, text: 'Buchungsmodul, fertig' }
     await send({ ...open.state, entries: [closed], pending: [{ entryId: closed.id, since: NINE, closing: true }] }, deps(api), true)
 
@@ -157,14 +199,15 @@ describe('an entry closed on another machine', () => {
 })
 
 /**
- * Somebody measuring on another machine (KONZEPT.md §2). The signal is the time
- * bracket in the marker — it carries the day, which is what tells a timer that
- * runs right now from one forgotten last week.
+ * Somebody measuring on another machine (KONZEPT.md §2). The signal is the
+ * running time in `apiComments`, or the time bracket of an old marker — both
+ * carry the day, which is what tells a timer that runs right now from one
+ * forgotten last week.
  */
 describe('a timer running on another machine', () => {
   const EIGHT_TWELVE = new Date(2026, 6, 30, 8, 12, 0).getTime()
 
-  async function seen(detail: string): Promise<number | null> {
+  async function seen(detail: string, apiComments?: string): Promise<number | null> {
     const api = new FakeApi()
     const remote = await api.createEntry({
       projectID: 166,
@@ -172,6 +215,7 @@ describe('a timer running on another machine', () => {
       date: '2026-07-30',
       detail,
       workingTime: '1.00',
+      ...(apiComments === undefined ? {} : { apiComments }),
     })
     const state: State = { ...emptyState(), entries: [entryOf({ timeId: remote.timeID })] }
 
@@ -179,7 +223,17 @@ describe('a timer running on another machine', () => {
     return outcome.runningElsewhereSince
   }
 
-  it('is read from the marker, with its day', async () => {
+  it('is read from the field, with its day', async () => {
+    const field = buildComments(null, { key: KEY, open: true, running: EIGHT_TWELVE })
+    expect(await seen('[LAUFEND] Buchungsmodul', field)).toBe(EIGHT_TWELVE)
+  })
+
+  it('is absent while the field carries no time', async () => {
+    const field = buildComments(null, { key: KEY, open: true, running: null })
+    expect(await seen('[LAUFEND] Buchungsmodul', field)).toBeNull()
+  })
+
+  it('is read from an old marker, with its day', async () => {
     expect(await seen(`[LAUFEND:${KEY}][260730-08:12] Buchungsmodul`)).toBe(EIGHT_TWELVE)
   })
 
