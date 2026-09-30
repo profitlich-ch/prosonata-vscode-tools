@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.20.0] — 2026-09-30
+
 ### Geändert
 
 - **Die Rechnungszeile trägt keine Kennung mehr.** Branch-Kennung, Zustand und
