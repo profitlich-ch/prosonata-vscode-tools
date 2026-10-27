@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.22.0] — 2026-10-27
+
 ### Hinzugefügt
 
 - **Gelöschte und gemergte Branches werden für jeden offenen Eintrag des
