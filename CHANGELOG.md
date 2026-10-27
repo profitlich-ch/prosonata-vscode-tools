@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.23.0] — 2026-10-27
+
 ### Hinzugefügt
 
 - **Ruhende Einträge werden erkannt.** Ein offener Eintrag, in den seit 14
