@@ -596,21 +596,29 @@ SHAs. `reset`, `amend`, `rebase` und Squash lassen ihn unberührt – die Zuordn
 robuster als eine SHA-Verknüpfung. Nur ein Text, der aus dem Trailer des zurückgerollten
 Commits kam, bleibt stehen, bis ein neuer ihn ersetzt.
 
-**Auf dem Hauptbranch** hängt jeder Zeiteintrag an seiner SHA. Ist diese von HEAD nicht mehr
-erreichbar, war der Commit zurückgerollt:
+**Auf dem Hauptbranch** hängt jeder Zeiteintrag an seiner SHA. Steckt diese nicht mehr im
+Hauptbranch, war der Commit zurückgerollt. *(Noch nicht gebaut, keiner der beiden Fälle – #3.)*
+Heute prüft nichts, ob der Commit eines Eintrags noch existiert. Ein `--amend` kurz nach dem
+Commit ergibt deshalb zwei Zeilen in ProSonata: den ersten Eintrag mit der Zeit bis zum Commit
+und einen zweiten mit den Sekunden bis zum Amend, oft mit demselben Text. Nach einem
+`git reset` geht der Eintrag mit dem Text eines Commits hinaus, den es nicht mehr gibt. Die Summe
+stimmt in beiden Fällen, die Aufteilung auf Rechnungszeilen nicht.
+
+Vorgesehen ist:
 
 - **Noch nicht gesendet** – durch den aufgeschobenen Versand der Normalfall, auch bei einem
   `--amend` unmittelbar nach dem Commit: die Sekunden fliessen in den nächsten Zeiteintrag,
-  dessen Commit die Arbeit ersetzt. Keine Rückfrage. In ProSonata ist nie etwas Falsches
-  erschienen.
+  dessen Commit die Arbeit ersetzt. Keine Rückfrage. In ProSonata erschiene nie etwas Falsches.
 - **Schon gesendet** – der Zeiteintrag steht in ProSonata und trägt echte Zeit. Rückfrage im
   nächsten VS-Code-Fenster, nicht im Hook: **zusammenführen** oder **stehen lassen**.
-  *(Noch nicht gebaut: Ein zurückgerollter, bereits gesendeter Commit bleibt heute stehen, wie
-  er ist – `DELETE` wird nirgends aufgerufen.)*
   Zusammenführen heisst summieren – ein Zeiteintrag behält die Gesamtzeit und den neuen Text,
   die übrigen werden per `DELETE /projecttimes/{id}` entfernt. Stehen lassen heisst: der alte
   bleibt mit seiner Zeit und seinem Text, der neue Commit legt einen eigenen an. Beide Wege
   erhalten die Summe.
+
+Geprüft wird gegen den Hauptbranch, nicht gegen HEAD: Sonst gälte jeder Commit auf `main` als
+zurückgerollt, sobald man auf einem Feature-Branch steht. Der Plan im Einzelnen und die offenen
+Weichen stehen in #3.
 
 ### Mehrere Rechner
 
@@ -1975,7 +1983,7 @@ das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnit
 | Was | Abschnitt |
 |---|---|
 | Angebot, nach einem Commit ohne Timer die Zeit nachzutragen | 3, *Wirkung eines Commits* |
-| Zusammenführen zurückgerollter, bereits gesendeter Zeiteinträge | 3, *Zurückgerollte Commits* |
+| Zurückgerollte Commits auf dem Hauptbranch, gesendet oder nicht (#3) | 3, *Zurückgerollte Commits* |
 | Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
 | Rechnerfächer in `apiComments`, samt Rechnerkennung | 7 und 12 |
 | Einmalige Migration alter Hooks über alle bekannten Repositories | 8 |
