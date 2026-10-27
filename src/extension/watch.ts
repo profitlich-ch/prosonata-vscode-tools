@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import * as vscode from 'vscode'
 
-import { fetchPrune, isMerged, remoteBranchGone } from '../core/git.js'
+import { fetchPrune, remoteBranchGone, workMerged } from '../core/git.js'
 import type { RepoContext, Session } from '../core/session.js'
 import { describeRunningElsewhere } from '../core/sync.js'
 import { openEntry, runningSeconds } from '../core/tracking.js'
@@ -21,6 +21,8 @@ export async function syncOnOpen(): Promise<void> {
   if (!active || !context) return
 
   await active.syncQuietly(context)
+  active.tidyDeletedBranches(context)
+  active.finished = active.finishedEntries(context)
   reload()
   warnAboutRunningElsewhere(active)
   await askAboutClosedElsewhere(active, context)
@@ -51,6 +53,10 @@ export async function work(): Promise<void> {
 
 async function workOnce(active: Session, context: RepoContext): Promise<void> {
   watchHead(active, context)
+  // Here and not in the panel: it costs a few `git` processes per open entry,
+  // and the panel redraws every second.
+  active.tidyDeletedBranches(context)
+  active.finished = active.finishedEntries(context)
   reload()
 
   try {
@@ -228,7 +234,7 @@ export async function prune(): Promise<void> {
 
   fetchPrune(context.repo.root)
 
-  const merged = isMerged(context.repo.root, context.scope.branch, context.mainBranch)
+  const merged = workMerged(context.repo.root, context.scope.branch, context.mainBranch)
   const gone = remoteBranchGone(context.repo.root, context.scope.branch)
   if (!merged && !gone) return
 

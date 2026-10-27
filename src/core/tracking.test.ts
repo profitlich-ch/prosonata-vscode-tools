@@ -9,10 +9,12 @@ import {
   commit,
   currentSeconds,
   discardEntry,
+  dropPausedTimer,
   entriesToMove,
   keepFromRunning,
   lastClosedEntry,
   moveEntries,
+  openBranchEntries,
   openEntriesIn,
   moveToClosed,
   retryEntry,
@@ -28,6 +30,7 @@ import {
   shiftStart,
   skipGap,
   start,
+  unfinishedOnOtherProject,
   unwrittenSeconds,
 } from './tracking.js'
 import { emptyState, type Scope, type State, type TimeEntry } from './types.js'
@@ -1056,29 +1059,29 @@ describe('keeping part of a stretch that ran too long', () => {
  * What can be done with an entry ProSonata refused (KONZEPT.md §4): ask again,
  * move it to another project, or discard it because the time stands there already.
  */
+function entryOf(id: string, overrides: Partial<TimeEntry> = {}): TimeEntry {
+  return {
+    id,
+    key: 'a3f9c1',
+    scope,
+    projectId: 178,
+    categoryId: 72,
+    text: 'Kartenstandorte',
+    seconds: 600,
+    foreignSeconds: 0,
+    lastWritten: null,
+    timeId: null,
+    state: 'open',
+    ...overrides,
+  }
+}
+
+function stateOf(...entries: TimeEntry[]): State {
+  return { ...emptyState(), entries }
+}
+
 describe('a refused entry', () => {
   const refused = { at: NINE, call: 'POST /projecttimes', status: 409, message: 'Database insert data conflict.' }
-
-  function entryOf(id: string, overrides: Partial<TimeEntry> = {}): TimeEntry {
-    return {
-      id,
-      key: 'a3f9c1',
-      scope,
-      projectId: 178,
-      categoryId: 72,
-      text: 'Kartenstandorte',
-      seconds: 600,
-      foreignSeconds: 0,
-      lastWritten: null,
-      timeId: null,
-      state: 'open',
-      ...overrides,
-    }
-  }
-
-  function stateOf(...entries: TimeEntry[]): State {
-    return { ...emptyState(), entries }
-  }
 
   it('moves alone when its project is fine', () => {
     const state = stateOf(entryOf('a', { rejected: refused }), entryOf('b', { scope: main }))
@@ -1137,5 +1140,43 @@ describe('a refused entry', () => {
     expect(discarded.entries.map((entry) => entry.id)).toEqual(['b'])
     expect(discarded.pending.map((write) => write.entryId)).toEqual(['b'])
     expect(discarded.timers).toEqual([])
+  })
+})
+
+/*
+ * A project switch that asks before it moves anything (KONZEPT.md §6), and the
+ * entries of branches that are done (§3, *Abschluss*).
+ */
+describe('switching projects and finished branches', () => {
+  it('names what a project switch would have to ask about', () => {
+    const state = stateOf(
+      entryOf('a'),
+      entryOf('b', { projectId: 177 }),
+      entryOf('c', { state: 'closed', timeId: 2866 }),
+      entryOf('d', { scope: { repoPath: '/work/anderes', branch: 'main' } }),
+    )
+
+    // b is on the new project already, c is done, d belongs to another repository.
+    expect(unfinishedOnOtherProject(state, '/work/shop', 177).map((entry) => entry.id)).toEqual(['a'])
+  })
+
+  it('lists the open branch entries of a repository, the main branch left out', () => {
+    const state = stateOf(
+      entryOf('a'),
+      entryOf('b', { scope: main }),
+      entryOf('c', { state: 'closed' }),
+      entryOf('d', { scope: { repoPath: '/work/anderes', branch: 'feature/x' } }),
+    )
+
+    expect(openBranchEntries(state, '/work/shop', 'main').map((entry) => entry.id)).toEqual(['a'])
+  })
+
+  it('takes a paused timer off an entry, but leaves a running one', () => {
+    const timer = { id: 't', origin: 'local' as const, remoteTimerId: null, scope, entryId: 'a' }
+    const paused: State = { ...stateOf(entryOf('a')), timers: [{ ...timer, startedAt: null }] }
+    const running: State = { ...stateOf(entryOf('a')), timers: [{ ...timer, startedAt: NINE }] }
+
+    expect(dropPausedTimer(paused, 'a').timers).toEqual([])
+    expect(dropPausedTimer(running, 'a').timers).toHaveLength(1)
   })
 })

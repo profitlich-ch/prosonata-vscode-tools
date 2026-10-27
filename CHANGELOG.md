@@ -6,6 +6,30 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Gelöschte und gemergte Branches werden für jeden offenen Eintrag des
+  Repositories erkannt**, nicht nur für den Branch, auf dem man steht. Nach
+  einem Squash-Merge und dem Löschen des Branches steht man auf dem
+  Hauptbranch, und der Eintrag des gelöschten Branches blieb bisher unbemerkt
+  offen. Das Panel schlägt den Abschluss jetzt mit einer Zeile «Branch gelöscht
+  · …» vor, `prosonata status` ebenso; abgeschlossen wird per Klick oder mit
+  `prosonata close <Nr> [Text]`.
+
+### Geändert
+
+- **Ein Projektwechsel fragt, ob unfertige Einträge mitgehen.** Bisher wanderten
+  sie ungefragt ins neue Projekt, auch wenn der Wechsel neue Arbeit begann und
+  kein Irrtum war. «Mitnehmen» tut, was bisher geschah; «Dort lassen» lässt die
+  Einträge auf ihrem Projekt. Wegklicken bricht den Wechsel ab.
+- **Ein eben angelegter Branch gilt nicht mehr als gemergt.** Sein Tip ist ein
+  Vorfahr des Hauptbranches, bevor auf ihm etwas geschehen ist; das Signal
+  verlangt jetzt, dass er sich seit seiner Anlage bewegt hat.
+- **Der Abschluss eines Eintrags auf einem gelöschten Branch nimmt dessen
+  pausierten Timer mit**, statt ihn an einen Folgeeintrag zu übergeben, der nie
+  wieder gestartet werden kann. Solche leeren Reste aus früheren Abschlüssen
+  räumt die Extension weg.
+
 ## [0.21.0] — 2026-10-27
 
 ### Hinzugefügt

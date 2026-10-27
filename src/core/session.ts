@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { HttpApi, type Api, type RemoteEntry } from './api.js'
 import { localDate, systemClock, type Clock } from './clock.js'
 import { paths, readConfig, type Config } from './config.js'
-import { describeRepo, mainBranch, type GitRepo } from './git.js'
+import { branchExists, describeRepo, mainBranch, workMerged, type GitRepo } from './git.js'
 import { entryIsOpen, findOfBranch } from './identity.js'
 import { Journal } from './journal.js'
 import { branchKey } from './marker.js'
@@ -23,13 +23,16 @@ import {
   forgetRemote,
   currentSeconds,
   discardEntry,
+  dropPausedTimer,
   entriesToMove,
   findEntry,
+  isEmptyRemainder,
   keepFromRunning,
   moveEntries,
   retryEntry,
   lastClosedEntry,
   moveToClosed,
+  openBranchEntries,
   openEntry,
   pause,
   pauseAt,
@@ -71,6 +74,12 @@ export interface RepoContext {
   config: RepoConfig
   projectId: number
   categoryId: number
+}
+
+/** An open entry whose branch is done, and how it came to be (KONZEPT.md §3). */
+export interface FinishedEntry {
+  entry: TimeEntry
+  why: 'deleted' | 'merged'
 }
 
 export class NotConfigured extends Error {
@@ -298,7 +307,13 @@ export class Session {
    * text on every row.
    */
   closeEntry(entryId: string, text: string): State {
-    const state = this.store.update((current) => close(current, entryId, text, this.clock.now(), randomUUID))
+    // A deleted branch will never be started again, so its paused timer goes
+    // rather than passing to an empty successor (KONZEPT.md §3, *Abschluss*).
+    const target = findEntry(this.state(), entryId)
+    const deleted = target !== undefined && !branchExists(target.scope.repoPath, target.scope.branch)
+    const state = this.store.update((current) =>
+      close(deleted ? dropPausedTimer(current, entryId) : current, entryId, text, this.clock.now(), randomUUID),
+    )
     const entry = state.entries.find((candidate) => candidate.id === entryId)
     if (entry?.state === 'closed') this.recordEntryClosed(entry)
     return state
@@ -898,6 +913,64 @@ export class Session {
       reason: 'correction',
     })
   }
+
+  /**
+   * Open entries of this repository whose branch is done: deleted locally, or
+   * merged into the main branch after work on it (KONZEPT.md §3, *Abschluss*).
+   * Only a suggestion — nothing is closed here.
+   *
+   * Asked of every open branch entry, not only the current one: after a squash
+   * merge and deleting the branch one stands on main, and the entry of the
+   * branch that is gone would otherwise stay open unnoticed.
+   */
+  finishedEntries(context: RepoContext): FinishedEntry[] {
+    const root = context.repo.root
+    const state = this.state()
+    return openBranchEntries(state, root, context.mainBranch).flatMap((entry): FinishedEntry[] => {
+      // Nothing to bill, nothing to suggest: `tidyDeletedBranches` takes it away.
+      if (isEmptyRemainder(state, entry)) return []
+      if (!branchExists(root, entry.scope.branch)) return [{ entry, why: 'deleted' }]
+      if (workMerged(root, entry.scope.branch, context.mainBranch)) return [{ entry, why: 'merged' }]
+      return []
+    })
+  }
+
+  /**
+   * Removes the empty remainders of deleted branches, with their paused timers.
+   * A close hands the timer to a successor; is the branch deleted afterwards,
+   * that successor holds nothing and could never be started again. It is not
+   * closed — there is nothing in it to close — and the journal notes it, so a
+   * recovery does not bring it back.
+   */
+  tidyDeletedBranches(context: RepoContext): void {
+    const root = context.repo.root
+    const gone = openBranchEntries(this.state(), root, context.mainBranch)
+      .filter((entry) => !branchExists(root, entry.scope.branch))
+      .map((entry) => entry.id)
+    if (gone.length === 0) return
+
+    const removed: string[] = []
+    this.store.update((state) => {
+      removed.length = 0
+      let next = state
+      for (const entryId of gone) {
+        const entry = findEntry(next, entryId)
+        if (!entry || entry.state !== 'open' || !isEmptyRemainder(next, entry)) continue
+        next = discardEntry(next, entryId)
+        removed.push(entryId)
+      }
+      return next
+    })
+    for (const entryId of removed) this.journal.append({ kind: 'discarded', entryId })
+  }
+
+  /**
+   * The last answer of `finishedEntries`, for the panel. It costs a few `git`
+   * processes per entry, too many for a view that redraws every second, so the
+   * slower work beat refreshes it. In memory like `lastTrouble`: an observation
+   * of this window, not shared state.
+   */
+  finished: FinishedEntry[] = []
 
   /** A refused entry, sent once more right away (KONZEPT.md §4). */
   async retryRejected(entryId: string): Promise<SendResult> {

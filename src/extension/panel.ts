@@ -187,10 +187,35 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       )
     }
 
+    /*
+     * A branch that is merged or deleted while its entry is still open. Checked
+     * for every branch of the repository, not only this one: after a squash merge
+     * one stands on main, and the entry of the deleted branch would otherwise stay
+     * open unnoticed (KONZEPT.md §3, *Abschluss*). A suggestion — the click asks
+     * for the final text, nothing closes on its own.
+     */
+    const finished = session.finished.filter(({ entry: done }) => {
+      const now = state.entries.find((candidate) => candidate.id === done.id)
+      return now?.state === 'open' && now.scope.repoPath === context.scope.repoPath
+    })
+    for (const { entry: done, why } of finished) {
+      rows.push(
+        new PanelRow(
+          `Branch ${why === 'deleted' ? 'gelöscht' : 'gemergt'} · ${done.scope.branch}`,
+          `${done.text || '(ohne Text)'} · ${billedTime(done.foreignSeconds + done.seconds, grid)} h — abschliessen`,
+          'pass',
+          { command: 'prosonata.closeEntry', title: 'Eintrag abschliessen', arguments: [done.id] },
+        ),
+      )
+    }
+    const finishedIds = new Set(finished.map(({ entry: done }) => done.id))
+
     // Only this working directory: an open entry of another project is none of
     // this panel's business, and the label `Offen · <branch>` would read like a
     // branch of the repository one is looking at.
-    for (const open of openEntriesIn(state, context.scope.repoPath).filter((candidate) => candidate.text !== '')) {
+    for (const open of openEntriesIn(state, context.scope.repoPath).filter(
+      (candidate) => candidate.text !== '' && !finishedIds.has(candidate.id),
+    )) {
       rows.push(
         new PanelRow(
           open.scope.branch === context.scope.branch ? 'Offener Eintrag' : `Offen · ${open.scope.branch}`,

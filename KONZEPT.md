@@ -500,10 +500,32 @@ sind nur Vorschläge, keines schliesst von selbst ab.
 
 | Signal | Erkennung |
 |---|---|
-| Branch ist gemergt | `git merge-base --is-ancestor <branch> <hauptbranch>` |
+| Branch ist gemergt | `git merge-base --is-ancestor <branch> <hauptbranch>`, und der Branch hat sich seit seiner Anlage bewegt |
 | **Remote-Branch verschwunden** | `git fetch --prune`, danach fehlt `refs/remotes/origin/<branch>` |
-| Lokaler Branch gelöscht | Ref existiert nicht mehr, Zeiteintrag aber schon *(noch nicht gebaut)* |
+| **Lokaler Branch gelöscht** | Ref existiert nicht mehr, Zeiteintrag aber schon |
 | Zeiteintrag ruht | Seit längerem keine neue Zeit und kein Commit *(noch nicht gebaut)* |
+
+**Gemergt und gelöscht werden für jeden offenen Branch-Eintrag des Repositories geprüft**, nicht
+nur für den Branch, auf dem man steht – alle 30 Sekunden im Arbeitstakt der Extension, ohne
+Netzzugriff. Nach einem Squash-Merge und dem Löschen des Branches steht man auf dem Hauptbranch;
+ein Signal, das nur den aktuellen Branch ansieht, bemerkte den offenen Eintrag des gelöschten nie.
+Der Vorschlag ist eine Zeile im Panel, «Branch gelöscht · <branch>» oder «Branch gemergt · …»,
+und eine Zeile in `prosonata status`; abgeschlossen wird mit einem Klick darauf oder mit
+`prosonata close <Nr> [Text]`. Eine Meldung gibt es dafür nicht: Sie verschwände, während niemand
+hinsieht.
+
+**«Hat sich bewegt»** liest das Reflog des Branches: Seine erste Zeile ist die Anlage, jeder Commit
+und jeder Reset fügt eine hinzu. Ohne diese Bedingung gälte ein eben angelegter Branch als
+gemergt, bevor auf ihm etwas geschehen ist – sein Tip ist ein Vorfahr des Hauptbranches.
+
+**Wird ein Eintrag auf einem gelöschten Branch abgeschlossen, verschwindet sein pausierter Timer.**
+Sonst ginge er wie immer an einen Folgeeintrag über, der nie wieder gestartet werden kann.
+
+**Leere Reste werden aufgeräumt, nicht vorgeschlagen.** Wird ein Eintrag abgeschlossen, solange
+sein Branch noch besteht, übernimmt ein leerer Folgeeintrag den Timer. Wird der Branch danach
+gelöscht, bleibt dieser Rest – keine Sekunden, kein fremder Anteil, nie gesendet, kein laufender
+Timer – sonst für immer liegen. Abzuschliessen gibt es an ihm nichts, und ohne Text liesse er sich
+auch nicht abschliessen; die Extension entfernt ihn samt Timer und hält das im Journal fest.
 
 Das zweite Signal ist das wichtigste, weil Pull Requests auf github.com geschlossen werden und
 VS Code davon nichts mitbekommt. Ein **Squash-Merge** ist über den ersten Weg nämlich nicht
@@ -965,11 +987,20 @@ zufällig. `git config prosonata.category.412 7` scheitert mit „invalid key".
   Eingeschränkt wird sie clientseitig auf `active = 1` und auf die Kategorien, die für den
   Kunden des aktiven Projekts gelten – das sind die allgemeinen mit
   `linkedCustomerID: null` plus die mit der `customerID` des Projekts.
-- **Ein Umschalten des Projekts ist eine Korrektur.** Es wirkt auf alle noch nicht
-  abgeschlossenen Zeiteinträge – auch auf den, in dem gerade Zeit läuft. Ein PUT braucht
-  nicht alle Felder, `projectID` allein genügt. Gehört das neue Projekt zu einem anderen
-  Kunden, kann die gemerkte Kategorie dort ungültig sein; dann wird auf die für dieses
-  Projekt gemerkte umgestellt und, falls es keine gibt, einmal gefragt.
+- **Ein Umschalten des Projekts fragt, ob die unfertigen Einträge mitgehen.** Es ist so oft
+  eine Korrektur wie der Beginn neuer Arbeit: Ein Repository bucht etwa Laufendes auf
+  «Allgemein» und ein Feature auf ein eigenes Projekt, und am 26. Oktober 2026 wanderte ein
+  offener Eintrag ungefragt vom einen ins andere. Gefragt wird nur, wenn es unfertige Einträge
+  auf einem anderen Projekt gibt, und bevor irgendetwas geschrieben ist:
+  - *Mitnehmen* – das bisherige Projekt war ein Irrtum. Es wirkt auf alle noch nicht
+    abgeschlossenen Zeiteinträge, auch auf den, in dem gerade Zeit läuft. Ein PUT braucht
+    nicht alle Felder, `projectID` allein genügt. Gehört das neue Projekt zu einem anderen
+    Kunden, kann die gemerkte Kategorie dort ungültig sein; dann wird auf die für dieses
+    Projekt gemerkte umgestellt und, falls es keine gibt, einmal gefragt.
+  - *Dort lassen* – ab jetzt beginnt neue Arbeit. Die Einträge bleiben auf ihrem Projekt, nur
+    neue buchen auf das gewählte.
+  - Keine Antwort bricht den Wechsel ab: Auch das aktive Projekt bleibt, wie es war. Eine stille
+    Vorgabe in die eine oder andere Richtung gäbe es sonst genau dann, wenn niemand hinsieht.
 - `git config` reist **nicht** mit dem Clone. Jeder Rechner braucht eine einmalige
   Einrichtung. In einem unbekannten Repo fragt das Werkzeug und schreibt die Antwort weg.
 - **Ein Projekt kann in ProSonata verschwinden**, während ein Repository darauf bucht – gelöscht
@@ -1902,7 +1933,7 @@ das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnit
 | Was | Abschnitt |
 |---|---|
 | Angebot, nach einem Commit ohne Timer die Zeit nachzutragen | 3, *Wirkung eines Commits* |
-| Abschlussvorschlag aus „lokaler Branch gelöscht" und „Zeiteintrag ruht" | 3, *Abschluss* |
+| Abschlussvorschlag aus „Zeiteintrag ruht" | 3, *Abschluss* |
 | Zusammenführen zurückgerollter, bereits gesendeter Zeiteinträge | 3, *Zurückgerollte Commits* |
 | Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
 | Rechnerfächer in `apiComments`, samt Rechnerkennung | 7 und 12 |
@@ -1911,8 +1942,8 @@ das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnit
 | `post-merge`-Hook, damit ein Merge-Commit den Eintrag abschliesst | 8, *Hook* |
 | Endgültigen Text über die zurückliegenden Tage nachziehen | 3, *pro Branch und Tag* |
 
-Gebaut sind dagegen die beiden wichtigsten Abschlusssignale: gemergter Branch und
-verschwundene Remote-Ref.
+Gebaut sind dagegen drei der vier Abschlusssignale: gemergter Branch, verschwundene Remote-Ref
+und gelöschter lokaler Branch.
 
 ## Umsetzungsreihenfolge
 

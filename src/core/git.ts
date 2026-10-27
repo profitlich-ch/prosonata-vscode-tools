@@ -128,6 +128,19 @@ export function isMerged(cwd: string, branch: string, into: string): boolean {
   return tryGit(cwd, 'merge-base', '--is-ancestor', branch, into) !== null
 }
 
+/**
+ * Whether work on `branch` has landed in `into`: merged, and moved at least once
+ * since it was created. Without the second half a branch just made from main —
+ * `git start` followed by a timer — would count as merged before its first
+ * commit, since its tip is an ancestor of main by construction. The reflog tells
+ * the two apart: creation is its first line, every commit or reset adds one.
+ */
+export function workMerged(cwd: string, branch: string, into: string): boolean {
+  if (!isMerged(cwd, branch, into)) return false
+  const moves = tryGit(cwd, 'reflog', 'show', '--format=%H', `refs/heads/${branch}`, '--')
+  return moves !== null && moves.split('\n').filter((line) => line !== '').length > 1
+}
+
 export function branchExists(cwd: string, branch: string): boolean {
   return tryGit(cwd, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`) !== null
 }

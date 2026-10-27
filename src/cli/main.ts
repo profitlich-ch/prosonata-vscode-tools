@@ -20,10 +20,12 @@ import {
   awaitingDecision,
   entriesToMove,
   findTimer,
+  openBranchEntries,
   openEntry,
   rejectedEntries,
   runningSeconds,
   setText,
+  unfinishedOnOtherProject,
   unwrittenSeconds,
 } from '../core/tracking.js'
 import { workingTime, type TimeGrid } from '../core/working-time.js'
@@ -50,7 +52,7 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata category                Zeitkategorie dieses Projekts wählen
   prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
   prosonata mode [branch|tag|commit] ein Eintrag pro Branch, pro Branch und Tag, oder pro Commit
-  prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
+  prosonata close [Nr] [Text]       offenen Zeiteintrag abschliessen und senden; mit Nr den eines anderen Branches
   prosonata text <Text>             Text des offenen Zeiteintrags ändern
   prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
   prosonata attach                  Zeit seit dem letzten Commit dem Eintrag jenes Commits zuschlagen
@@ -176,12 +178,33 @@ async function chooseProject(cwd: string): Promise<number> {
   const project = await pick(projects, (candidate) => `${candidate.projectNo}  ${candidate.projectName}`, 'Projektnummer: ')
   if (!project) return 1
 
+  /*
+   * A switch is a correction as often as it is new work, so it is asked — and
+   * before anything is written, so that no answer cancels it (KONZEPT.md §6).
+   */
+  const others = unfinishedOnOtherProject(session.state(), repo.root, project.projectID)
+  let carry = false
+  if (others.length > 0) {
+    const answer = (
+      await ask(
+        `${others.length === 1 ? 'ein unfertiger Eintrag steht' : `${others.length} unfertige Einträge stehen`} auf einem anderen Projekt — mitnehmen (m), dort lassen (d)? `,
+      )
+    ).toLowerCase()
+    if (answer !== 'm' && answer !== 'd') {
+      process.stdout.write('nichts geändert\n')
+      return 1
+    }
+    carry = answer === 'm'
+  }
+
   rememberProject(repo.root, { id: project.projectID, name: project.projectName, no: project.projectNo })
 
   let categoryId = readRepoConfig(repo.root).categories.get(project.projectID) ?? 0
   if (categoryId <= 0) categoryId = await askForCategory(session, repo.root, project)
 
-  session.store.update((state) => applyProject(state, repo.root, project.projectID, categoryId, session.clock.now()))
+  if (carry) {
+    session.store.update((state) => applyProject(state, repo.root, project.projectID, categoryId, session.clock.now()))
+  }
 
   const cli = publishCliOrOwnPath()
   const hook = installHook(repo.root, { node: process.execPath, cli })
@@ -304,19 +327,29 @@ async function chooseMode(cwd: string, argument: string): Promise<number> {
   return 0
 }
 
-/** Closes the open entry of this branch and sends it right away. */
+/**
+ * Closes an open entry and sends it right away: the one of this branch, or —
+ * when the first word is the eight-character number `status` shows — the entry
+ * of another branch of this repository, typically one already merged and
+ * deleted (KONZEPT.md §3, *Abschluss*).
+ */
 async function closeEntry(cwd: string, argument: string): Promise<number> {
   const session = Session.open()
   const context = session.context(cwd)
   if (!context) return notARepo()
 
-  const entry = openEntry(session.state(), context.scope)
+  const [first = '', ...rest] = argument.split(' ')
+  const named = /^[0-9a-f]{8}$/.test(first)
+    ? openBranchEntries(session.state(), context.repo.root, context.mainBranch).find((candidate) => candidate.id.startsWith(first))
+    : undefined
+  const entry = named ?? openEntry(session.state(), context.scope)
   if (!entry) {
     process.stderr.write(`auf ${context.scope.branch} ist nichts offen\n`)
     return 1
   }
 
-  const text = argument !== '' ? argument : (await ask(`Endgültiger Text${entry.text ? ` [${entry.text}]` : ''}: `)) || entry.text
+  const given = named ? rest.join(' ').trim() : argument
+  const text = given !== '' ? given : (await ask(`Endgültiger Text${entry.text ? ` [${entry.text}]` : ''}: `)) || entry.text
   if (text === '') {
     process.stderr.write('ein Eintrag ohne Text wird nie gesendet — nichts getan\n')
     return 1
@@ -496,6 +529,11 @@ async function status(cwd: string): Promise<number> {
   for (const parked of awaitingDecision(state, context.scope)) {
     process.stdout.write(
       `  anderswo abgeschlossen  ${format(unwrittenSeconds(parked))} offen — "prosonata resume" entscheidet\n`,
+    )
+  }
+  for (const { entry: done, why } of session.finishedEntries(context)) {
+    process.stdout.write(
+      `  Branch ${why === 'deleted' ? 'gelöscht' : 'gemergt'}  ${done.id.slice(0, 8)}  ${done.scope.branch}  ${done.text || '(ohne Text)'}  ${format(done.foreignSeconds + done.seconds)} — "prosonata close ${done.id.slice(0, 8)} [Text]"\n`,
     )
   }
   if (context.categoryId <= 0) {

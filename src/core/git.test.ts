@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { describeRepo, rootCommit, subjectOf, trailerOf } from './git.js'
+import { describeRepo, rootCommit, subjectOf, trailerOf, workMerged } from './git.js'
 
 /**
  * The root commit identifies the repository across all clones, so a branch key
@@ -129,5 +129,40 @@ describe('the text a commit carries', () => {
     const dir = repoWith('fix: der Betreff\n\nEin Fliesstext, der nicht auf die Rechnung gehört.')
 
     expect(subjectOf(dir)).toBe('fix: der Betreff')
+  })
+})
+
+/*
+ * After a squash merge one stands on main, and the branch of an open entry may
+ * be merged — but a branch made a minute ago is an ancestor of main as well,
+ * before anything was committed on it (KONZEPT.md §3, *Abschluss*).
+ */
+describe('whether work on a branch has landed', () => {
+  it('says no for a branch just made, with nothing committed on it', () => {
+    const dir = repo()
+    commit(dir, 'a.txt', 'erster Commit')
+    run(dir, 'branch', 'neu')
+
+    expect(workMerged(dir, 'neu', 'main')).toBe(false)
+  })
+
+  it('says yes once a commit on the branch is merged', () => {
+    const dir = repo()
+    commit(dir, 'a.txt', 'erster Commit')
+    run(dir, 'checkout', '--quiet', '-b', 'feature')
+    commit(dir, 'b.txt', 'Arbeit auf dem Branch')
+    run(dir, 'checkout', '--quiet', 'main')
+    run(dir, 'merge', '--quiet', '--no-ff', '--no-edit', 'feature')
+
+    expect(workMerged(dir, 'feature', 'main')).toBe(true)
+  })
+
+  it('says no while the work is not on main', () => {
+    const dir = repo()
+    commit(dir, 'a.txt', 'erster Commit')
+    run(dir, 'checkout', '--quiet', '-b', 'feature')
+    commit(dir, 'b.txt', 'Arbeit auf dem Branch')
+
+    expect(workMerged(dir, 'feature', 'main')).toBe(false)
   })
 })

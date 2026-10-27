@@ -998,3 +998,105 @@ describe('a project deleted in ProSonata', () => {
     expect(api.entries.size).toBe(0)
   })
 })
+
+/*
+ * Squash-merged, branch deleted, back on main: the entry of the branch stayed
+ * open, because the only signal looked at the branch one stands on
+ * (KONZEPT.md §3, *Abschluss*).
+ */
+describe('an open entry whose branch is done', () => {
+  function git(cwd: string, ...args: string[]): void {
+    execFileSync('git', ['-c', 'user.email=t@example.invalid', '-c', 'user.name=T', ...args], { cwd })
+  }
+
+  function repoWithBranches(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-branches-'))
+    git(dir, 'init', '--quiet', '--initial-branch=main')
+    git(dir, 'commit', '--quiet', '--allow-empty', '-m', 'erster Commit')
+    for (const branch of ['geloescht', 'gemergt']) {
+      git(dir, 'checkout', '--quiet', '-b', branch)
+      git(dir, 'commit', '--quiet', '--allow-empty', '-m', `Arbeit auf ${branch}`)
+      git(dir, 'checkout', '--quiet', 'main')
+    }
+    git(dir, 'merge', '--quiet', '--no-ff', '--no-edit', 'gemergt')
+    git(dir, 'branch', '--quiet', '-D', 'geloescht')
+    git(dir, 'branch', '--quiet', 'neu')
+    return dir
+  }
+
+  function sessionOn(repoPath: string, branches: string[]) {
+    const session = sessionWith(new FakeApi())
+    session.store.update((state) => ({
+      ...state,
+      entries: branches.map((branch) => ({
+        id: branch,
+        key: branch,
+        scope: { repoPath, branch },
+        projectId: 166,
+        categoryId: 70,
+        text: `Arbeit auf ${branch}`,
+        seconds: 600,
+        foreignSeconds: 0,
+        lastWritten: null,
+        timeId: null,
+        state: 'open' as const,
+      })),
+      timers: branches.map((branch) => ({
+        id: `t-${branch}`,
+        origin: 'local' as const,
+        remoteTimerId: null,
+        scope: { repoPath, branch },
+        startedAt: null,
+        entryId: branch,
+      })),
+    }))
+    const onMain = { ...context, repo: { ...context.repo, root: repoPath }, scope: { repoPath, branch: 'main' } }
+    return { session, onMain: onMain as RepoContext }
+  }
+
+  it('is found on every branch of the repository, deleted or merged — not on one just made', () => {
+    const repoPath = repoWithBranches()
+    const { session, onMain } = sessionOn(repoPath, ['geloescht', 'gemergt', 'neu'])
+
+    expect(session.finishedEntries(onMain).map(({ entry, why }) => [entry.id, why])).toEqual([
+      ['geloescht', 'deleted'],
+      ['gemergt', 'merged'],
+    ])
+  })
+
+  it('leaves no timer behind once closed on a deleted branch', () => {
+    const repoPath = repoWithBranches()
+    const { session } = sessionOn(repoPath, ['geloescht', 'gemergt'])
+
+    session.closeEntry('geloescht', 'Arbeit auf geloescht')
+    session.closeEntry('gemergt', 'Arbeit auf gemergt')
+
+    // The merged branch still exists and may see more work: its timer moves on.
+    const state = session.state()
+    expect(state.timers.map((timer) => timer.scope.branch)).toEqual(['gemergt'])
+    expect(state.entries.filter((entry) => entry.scope.branch === 'geloescht')).toHaveLength(1)
+  })
+
+  /*
+   * What 27 October 2026 left behind: the entry was closed while the branch
+   * still existed, its timer passed to an empty successor, then the branch was
+   * deleted. Nothing in it to close, so nothing to suggest either.
+   */
+  it('takes the empty remainder of a deleted branch away instead of suggesting it', () => {
+    const repoPath = repoWithBranches()
+    const { session, onMain } = sessionOn(repoPath, ['geloescht', 'neu'])
+    session.store.update((state) => ({
+      ...state,
+      entries: state.entries.map((entry) => ({ ...entry, seconds: 0, text: '' })),
+    }))
+
+    expect(session.finishedEntries(onMain)).toEqual([])
+    session.tidyDeletedBranches(onMain)
+
+    // `neu` still exists: its empty entry is where work begins, not a remainder.
+    const state = session.state()
+    expect(state.entries.map((entry) => entry.id)).toEqual(['neu'])
+    expect(state.timers.map((timer) => timer.entryId)).toEqual(['neu'])
+    expect(session.journal.read().at(-1)).toMatchObject({ kind: 'discarded', entryId: 'geloescht' })
+  })
+})

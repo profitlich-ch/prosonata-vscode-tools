@@ -341,7 +341,7 @@ prosonata project                 Projekt dieses Repositories wählen
 prosonata category                Zeitkategorie dieses Projekts wählen
 prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
 prosonata mode [branch|tag|commit] ein Eintrag pro Branch, pro Branch und Tag, oder pro Commit
-prosonata close [Text]            offenen Zeiteintrag abschliessen und senden
+prosonata close [Nr] [Text]       offenen Zeiteintrag abschliessen und senden; mit Nr den eines anderen Branches
 prosonata text <Text>             Text des offenen Zeiteintrags ändern
 prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
 prosonata attach                  Zeit dem Eintrag des letzten Commits zuschlagen

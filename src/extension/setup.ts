@@ -5,7 +5,7 @@ import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../co
 import { type GitRepo } from '../core/git.js'
 import { hookNeedsRepair, installHook, publishCli } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid } from '../core/repo-config.js'
-import { applyCategory, applyProject } from '../core/tracking.js'
+import { applyCategory, applyProject, unfinishedOnOtherProject } from '../core/tracking.js'
 import type { Session } from '../core/session.js'
 import type { TimeGrid } from '../core/working-time.js'
 import { currentContext, currentSession, extensionRoot, refreshBudget, reload, resetSession } from './view.js'
@@ -77,23 +77,58 @@ export async function chooseProject(session: Session, repo: GitRepo): Promise<vo
   )
   if (!picked) return
 
+  // Asked before anything is written: dismissing the question cancels the switch.
+  const carry = await askCarryOver(session, repo, picked.project)
+  if (carry === null) return
+
   rememberProject(repo.root, { id: picked.project.projectID, name: picked.project.projectName, no: picked.project.projectNo })
 
   // Without this the hook would only appear at the next window start, and the
   // commits in between would book nothing.
   installHookHere(repo.root)
 
-  // Choosing a project is a correction of a mistake: time already measured
-  // belongs to this work, not to the project picked by accident. Everything
-  // unfinished moves along, including what ProSonata already knows.
+  // Carried over, everything unfinished moves, including what ProSonata already
+  // knows. Left, it stays on its project and only new entries book to this one.
   const remembered = readRepoConfig(repo.root).categories.get(picked.project.projectID) ?? 0
-  session.store.update((state) =>
-    applyProject(state, repo.root, picked.project.projectID, remembered, session.clock.now()),
-  )
+  if (carry) {
+    session.store.update((state) =>
+      applyProject(state, repo.root, picked.project.projectID, remembered, session.clock.now()),
+    )
+  }
 
   // A project without a category books nothing either: ProSonata requires one.
   // Asking right here keeps the editor route as complete as "prosonata init".
   if (remembered <= 0) await chooseCategory(session, repo, picked.project)
+}
+
+/**
+ * Whether unfinished entries go along to the new project (KONZEPT.md §6). A
+ * switch is a correction as often as it is new work — a repository may book
+ * maintenance to one project and a feature to another — so it is asked, and only
+ * when there is something to move. Null when the question was dismissed.
+ */
+async function askCarryOver(session: Session, repo: GitRepo, project: Project): Promise<boolean | null> {
+  const others = unfinishedOnOtherProject(session.state(), repo.root, project.projectID)
+  if (others.length === 0) return false
+
+  const config = readRepoConfig(repo.root)
+  const from = [...new Set(others.map((entry) => entry.projectId))]
+    .map((id) => {
+      const known = config.projects.find((candidate) => candidate.id === id)
+      return known ? (known.no ? `${known.no} ${known.name}` : known.name) : `#${id}`
+    })
+    .join(', ')
+  const answer = await vscode.window.showInformationMessage(
+    `${others.length === 1 ? 'Ein unfertiger Eintrag steht' : `${others.length} unfertige Einträge stehen`} auf ${from}. Nach ${project.projectNo} ${project.projectName} mitnehmen?`,
+    {
+      modal: true,
+      detail: 'Mitnehmen, wenn das bisherige Projekt ein Irrtum war. Dort lassen, wenn ab jetzt neue Arbeit beginnt.',
+    },
+    'Mitnehmen',
+    'Dort lassen',
+  )
+  if (answer === undefined) return null
+  return answer === 'Mitnehmen'
 }
 
 /**

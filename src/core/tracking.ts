@@ -814,6 +814,51 @@ export function applyProject(state: State, repoPath: string, projectId: number, 
   return changed ? next : state
 }
 
+/**
+ * Unfinished entries of a repository that are on another project than this one —
+ * what a project switch has to ask about before it moves anything (KONZEPT.md §6).
+ */
+export function unfinishedOnOtherProject(state: State, repoPath: string, projectId: number): TimeEntry[] {
+  return unfinishedIn(state, repoPath).filter((entry) => entry.projectId !== projectId)
+}
+
+/**
+ * Open branch entries of a repository, the main branch left out: the ones whose
+ * branch may have been merged or deleted meanwhile (KONZEPT.md §3, *Abschluss*).
+ */
+export function openBranchEntries(state: State, repoPath: string, mainBranch: string): TimeEntry[] {
+  return state.entries.filter(
+    (entry) => entry.state === 'open' && entry.scope.repoPath === repoPath && entry.scope.branch !== mainBranch,
+  )
+}
+
+/**
+ * Whether an entry holds nothing to bill: no time measured here or elsewhere,
+ * never written to ProSonata, no timer running into it. What a close leaves
+ * behind on a branch that is deleted afterwards — the successor that took over
+ * the timer (KONZEPT.md §3, *Abschluss*).
+ */
+export function isEmptyRemainder(state: State, entry: TimeEntry): boolean {
+  return (
+    entry.seconds === 0 &&
+    entry.foreignSeconds === 0 &&
+    entry.timeId === null &&
+    !state.timers.some((timer) => timer.entryId === entry.id && timer.startedAt !== null)
+  )
+}
+
+/**
+ * Takes a paused timer off an entry. Closing an entry hands its timer on to a
+ * successor, which is right for a branch that lives on — for a deleted one it
+ * would leave an empty entry and a timer behind that nothing can ever start
+ * again. A running timer stays: it measures, and that is not ours to stop.
+ */
+export function dropPausedTimer(state: State, entryId: string): State {
+  const next = structuredClone(state)
+  next.timers = next.timers.filter((timer) => !(timer.entryId === entryId && timer.startedAt === null))
+  return next
+}
+
 /** Entries ProSonata refused, across every repository (KONZEPT.md §4). */
 export function rejectedEntries(state: State): TimeEntry[] {
   return state.entries.filter((entry) => entry.rejected !== undefined)
