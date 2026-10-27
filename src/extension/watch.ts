@@ -226,6 +226,10 @@ async function askAboutLongRun(active: Session, context: RepoContext): Promise<v
  * gone — which a squash merge does not otherwise reveal (KONZEPT.md §3).
  */
 export async function prune(): Promise<void> {
+  // Hourly, not on the thirty-second beat: it asks git about every repository
+  // the state knows, and remainders do not grow by the minute (#1).
+  currentSession()?.tidyAllRepositories()
+
   const context = currentContext()
   if (!context || context.scope.branch === context.mainBranch) return
 

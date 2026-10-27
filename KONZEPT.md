@@ -526,6 +526,11 @@ sein Branch noch besteht, übernimmt ein leerer Folgeeintrag den Timer. Wird der
 gelöscht, bleibt dieser Rest – keine Sekunden, kein fremder Anteil, nie gesendet, kein laufender
 Timer – sonst für immer liegen. Abzuschliessen gibt es an ihm nichts, und ohne Text liesse er sich
 auch nicht abschliessen; die Extension entfernt ihn samt Timer und hält das im Journal fest.
+Für das offene Repository geschieht das im 30-Sekunden-Takt, für alle übrigen, die der Zustand
+kennt, stündlich – am 27. Oktober 2026 warteten 31 solcher Reste, 21 davon in einem selten
+geöffneten Repository. Im Terminal tut es `prosonata tidy`. Angefasst wird nur ein Pfad, der noch
+die Wurzel eines Repositories ist: Ein fehlender kann ein gerade nicht eingehängtes Laufwerk sein,
+und in einem Ordner ohne Repository sähe jeder Branch gelöscht aus.
 
 Das zweite Signal ist das wichtigste, weil Pull Requests auf github.com geschlossen werden und
 VS Code davon nichts mitbekommt. Ein **Squash-Merge** ist über den ersten Weg nämlich nicht
@@ -1387,7 +1392,7 @@ der npm-bin-Pfad liegt in `$PATH` meist vor `/bin`; ein global installiertes `ps
 Fremdnutzern `ps aux` brechen. Ein kurzer Alias ist optional.
 
 Befehle: `init`, `start`, `pause`, `status`, `send`, `project`, `category`, `grid`, `mode`,
-`close`, `text`, `discard`, `attach`, `resume`, `rejected`, `resting`, `log`, `adjust` – die verbindliche Liste steht
+`close`, `text`, `discard`, `attach`, `resume`, `rejected`, `resting`, `tidy`, `log`, `adjust` – die verbindliche Liste steht
 in `prosonata help`. Kein `end` – ein Timer kennt kein Beenden.
 
 Damit ist die CLI zugleich die Schnittstelle für einen **Coding-Agenten**: Wer Shell-Zugriff hat,

@@ -6,6 +6,13 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Leere Reste werden in allen Repositories aufgeräumt**, nicht nur im
+  offenen: stündlich durch die Extension, auf Abruf mit `prosonata tidy`.
+  Angefasst wird nur ein Pfad, der noch ein Repository ist — ein fehlender kann
+  ein nicht eingehängtes Laufwerk sein.
+
 ## [0.24.0] — 2026-10-27
 
 ### Geändert

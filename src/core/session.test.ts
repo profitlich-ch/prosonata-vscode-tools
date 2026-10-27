@@ -14,6 +14,7 @@ import { Session, type RepoContext } from './session.js'
 import { SegmentLog, atLocal } from './segments.js'
 import { StateStore } from './state-store.js'
 import { planMerge } from './merge.js'
+import { describeRepo } from './git.js'
 import { readRepoConfig, rememberCategory, rememberProject } from './repo-config.js'
 import { findEntry, openEntry } from './tracking.js'
 import { EXACT } from './working-time.js'
@@ -1136,6 +1137,57 @@ describe('an open entry whose branch is done', () => {
     expect(state.entries.map((entry) => entry.id)).toEqual(['neu'])
     expect(state.timers.map((timer) => timer.entryId)).toEqual(['neu'])
     expect(session.journal.read().at(-1)).toMatchObject({ kind: 'discarded', entryId: 'geloescht' })
+  })
+})
+
+/*
+ * Remainders in repositories that are not open here (#1). Only where the path is
+ * still a repository: elsewhere every branch would look deleted.
+ */
+describe('tidying every repository', () => {
+  function repoWithDeleted(): string {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-tidy-'))
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-c', 'user.email=t@example.invalid', '-c', 'user.name=T', ...args], { cwd: dir })
+    git('init', '--quiet', '--initial-branch=main')
+    git('commit', '--quiet', '--allow-empty', '-m', 'erster Commit')
+    git('branch', 'bleibt')
+    return describeRepo(dir)!.root
+  }
+
+  it('takes remainders away in every repository, and nothing where the path is no repository', () => {
+    const one = repoWithDeleted()
+    const two = repoWithDeleted()
+    const plain = mkdtempSync(join(tmpdir(), 'prosonata-plain-'))
+    const missing = join(plain, 'nicht-da')
+
+    const session = sessionWith(new FakeApi())
+    const remainder = (id: string, repoPath: string, branch: string) => ({
+      id,
+      key: id,
+      scope: { repoPath, branch },
+      projectId: 166,
+      categoryId: 70,
+      text: '',
+      seconds: 0,
+      foreignSeconds: 0,
+      lastWritten: null,
+      timeId: null,
+      state: 'open' as const,
+    })
+    session.store.update((state) => ({
+      ...state,
+      entries: [
+        remainder('eins-weg', one, 'weg'),
+        remainder('eins-bleibt', one, 'bleibt'),
+        remainder('zwei-weg', two, 'weg'),
+        remainder('ordner', plain, 'weg'),
+        remainder('fehlt', missing, 'weg'),
+      ],
+    }))
+
+    expect(session.tidyAllRepositories()).toBe(2)
+    expect(session.state().entries.map((entry) => entry.id)).toEqual(['eins-bleibt', 'ordner', 'fehlt'])
   })
 })
 

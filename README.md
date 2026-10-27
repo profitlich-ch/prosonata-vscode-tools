@@ -350,6 +350,7 @@ prosonata rejected [Nr retry|move|drop]
                                   abgelehnte Einträge: erneut senden, auf anderes Projekt, verwerfen
 prosonata resting [Nr close|keep|drop]
                                   seit Wochen ruhende Einträge: abschliessen, behalten, verwerfen
+prosonata tidy                    leere Reste gelöschter Branches in allen Repositories entfernen
 prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
 prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 ```

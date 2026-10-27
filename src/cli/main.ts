@@ -61,6 +61,7 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
                                     abgelehnte Einträge: erneut senden, auf anderes Projekt, verwerfen
   prosonata resting [Nr close|keep|drop]
                                     seit Wochen ruhende Einträge: abschliessen, behalten, verwerfen
+  prosonata tidy                    leere Reste gelöschter Branches in allen Repositories entfernen
   prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
   prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 
@@ -107,6 +108,8 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await rejected(argument)
       case 'resting':
         return await resting(argument)
+      case 'tidy':
+        return tidy()
       case 'log':
         return log(cwd, argument)
       case 'adjust':
@@ -721,6 +724,19 @@ async function resting(argument: string): Promise<number> {
       process.stderr.write(`was soll mit ${ref} geschehen? close, keep oder drop\n`)
       return 2
   }
+}
+
+/**
+ * Removes the empty remainders of deleted branches in every repository the state
+ * knows (#1). The extension does the same once an hour; this is for whoever
+ * works without it, or does not want to wait.
+ */
+function tidy(): number {
+  const removed = Session.open().tidyAllRepositories()
+  process.stdout.write(
+    removed === 0 ? 'nichts aufzuräumen\n' : `${removed === 1 ? 'ein leerer Rest' : `${removed} leere Reste`} gelöschter Branches entfernt\n`,
+  )
+  return 0
 }
 
 /** The other project for a refused entry: the repository's own first, the dead one left out. */

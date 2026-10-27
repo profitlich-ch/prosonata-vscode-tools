@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { existsSync } from 'node:fs'
 
 import { HttpApi, type Api, type RemoteEntry } from './api.js'
 import { localDate, systemClock, type Clock } from './clock.js'
@@ -945,12 +946,39 @@ export class Session {
    * closed — there is nothing in it to close — and the journal notes it, so a
    * recovery does not bring it back.
    */
-  tidyDeletedBranches(context: RepoContext): void {
-    const root = context.repo.root
-    const gone = openBranchEntries(this.state(), root, context.mainBranch)
+  tidyDeletedBranches(context: RepoContext): number {
+    return this.tidyIn(context.repo.root, context.mainBranch)
+  }
+
+  /**
+   * The same for every repository the state knows, not only the one open here
+   * (#1). On 27 October 2026 31 such remainders were waiting, 21 of them in a
+   * repository rarely opened.
+   *
+   * Only where the path still is the root of a repository. A missing path may
+   * be a volume not mounted right now, and in a folder that is no repository —
+   * or with git unavailable — every branch would look deleted, and remainders
+   * of branches that still exist would go too.
+   */
+  tidyAllRepositories(): number {
+    const roots = new Set(
+      this.state()
+        .entries.filter((entry) => entry.state === 'open')
+        .map((entry) => entry.scope.repoPath),
+    )
+    let removed = 0
+    for (const root of roots) {
+      if (!existsSync(root) || describeRepo(root)?.root !== root) continue
+      removed += this.tidyIn(root, mainBranch(root))
+    }
+    return removed
+  }
+
+  private tidyIn(root: string, main: string): number {
+    const gone = openBranchEntries(this.state(), root, main)
       .filter((entry) => !branchExists(root, entry.scope.branch))
       .map((entry) => entry.id)
-    if (gone.length === 0) return
+    if (gone.length === 0) return 0
 
     const removed: string[] = []
     this.store.update((state) => {
@@ -965,6 +993,7 @@ export class Session {
       return next
     })
     for (const entryId of removed) this.journal.append({ kind: 'discarded', entryId })
+    return removed.length
   }
 
   /**
