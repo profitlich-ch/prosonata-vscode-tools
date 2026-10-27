@@ -5,6 +5,7 @@ import type { Config } from './config.js'
 import type { Journal } from './journal.js'
 import { entryIsOpen } from './identity.js'
 import { stripMarker, withMarker } from './marker.js'
+import type { RepoProject } from './repo-config.js'
 import { findEntry, parkClosedElsewhere, runningInto } from './tracking.js'
 import type { State, TimeEntry } from './types.js'
 import { workingTime, type TimeGrid } from './working-time.js'
@@ -33,6 +34,8 @@ export interface SendResult {
   awaitingDecision: string[]
   /** Left for the next round because the API budget was nearly spent. */
   deferred: string[]
+  /** Refused by ProSonata, in this round or before; held until somebody decides. */
+  rejected: string[]
 }
 
 /**
@@ -103,6 +106,7 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
     missingCategory: [],
     awaitingDecision: [],
     deferred: [],
+    rejected: [],
   }
 
   const due = force ? state.pending.map((write) => write.entryId) : dueWrites(state, clock, config.sendDelaySeconds)
@@ -131,6 +135,14 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
     // commit in the meantime must not queue it back into being written.
     if (entry.awaitingDecision) {
       result.awaitingDecision.push(entryId)
+      next.pending = next.pending.filter((write) => write.entryId !== entryId)
+      continue
+    }
+
+    // Refused before: the same write would earn the same answer. Time measured
+    // since queues it again, and it is taken off again until somebody decides.
+    if (entry.rejected) {
+      result.rejected.push(entryId)
       next.pending = next.pending.filter((write) => write.entryId !== entryId)
       continue
     }
@@ -189,6 +201,33 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       next.pending = next.pending.filter((write) => write.entryId !== entryId)
       result.sent.push(entryId)
     } catch (error) {
+      /*
+       * Refused by ProSonata itself. Asked again every thirty seconds, it said
+       * the same thing for a day on 26 October 2026 — the project had been
+       * deleted. So the entry is held, and what became of its project is looked
+       * up once, because that is the one cause the tool can name and offer a way
+       * out of (KONZEPT.md §4).
+       */
+      if (error instanceof ApiError && error.refusesEntry) {
+        const project = await projectFate(deps.api, entry.projectId)
+        entry.rejected = {
+          at: clock.now(),
+          call: error.call ?? '-',
+          status: error.status,
+          message: error.message,
+          ...(project ? { project } : {}),
+        }
+        next.pending = next.pending.filter((write) => write.entryId !== entryId)
+        result.rejected.push(entryId)
+        journal.append({
+          kind: 'note',
+          entryId,
+          projectId: entry.projectId,
+          message: `${entry.rejected.call} → ${error.status}: ${error.message}${project ? ` (Projekt ${project === 'deleted' ? 'gelöscht' : 'nicht mehr offen'})` : ''}`,
+        })
+        continue
+      }
+
       result.failed.push({ entryId, error: error as Error })
       // Transient failures simply wait for the next event; anything else is
       // reported but also kept, because dropping it would lose time.
@@ -213,6 +252,24 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
 }
 
 /**
+ * What became of a project after ProSonata refused a write onto it. Measured: a
+ * deleted project answers 404 and is gone from every list (KONZEPT.md §9).
+ *
+ * Undefined when the project is fine or the lookup itself fails — the refusal
+ * stands either way, it just cannot be explained by the project.
+ */
+async function projectFate(api: Api, projectId: number): Promise<'deleted' | 'closed' | undefined> {
+  try {
+    const project = await api.getProject(projectId)
+    if (project === null) return 'deleted'
+    if (project.projectStatus !== 0 || project.activeStatus === 0) return 'closed'
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Why a queue is not moving, in one line — or null when the last round was
  * uneventful (KONZEPT.md §10).
  *
@@ -224,6 +281,9 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
  * In `core` because the panel and the terminal have to say it the same way.
  */
 export function describeTrouble(result: SendResult): string | null {
+  if (result.rejected.length > 0) {
+    return `${result.rejected.length === 1 ? 'ein Eintrag' : `${result.rejected.length} Einträge`} von ProSonata abgelehnt`
+  }
   const [tooLong] = result.tooLong
   if (tooLong) return `Text zu lang: ${tooLong.length} von ${tooLong.limit} Zeichen`
   if (result.missingCategory.length > 0) return 'ohne Zeitkategorie wird nicht gesendet'
@@ -238,6 +298,20 @@ export function describeTrouble(result: SendResult): string | null {
   if (error.status === 403) return 'ProSonata verweigert den Zugriff — API-Key oder Rechte prüfen'
   if (error.status === 401) return 'ProSonata weist den API-Key ab'
   return error.message
+}
+
+/**
+ * A refused entry in one line, for the panel and the terminal alike. A deleted
+ * or closed project comes first: it is the cause the tool can name, and the way
+ * out — another project — follows from it. Otherwise ProSonata's own words.
+ */
+export function describeRejection(entry: TimeEntry, project?: RepoProject): string {
+  const rejection = entry.rejected
+  if (!rejection) return ''
+  const name = project ? (project.no ? `${project.no} ${project.name}` : project.name) : `#${entry.projectId}`
+  if (rejection.project === 'deleted') return `Projekt ${name} gibt es in ProSonata nicht mehr`
+  if (rejection.project === 'closed') return `Projekt ${name} ist in ProSonata nicht mehr offen`
+  return `${rejection.message} (${rejection.status})`
 }
 
 /**
@@ -278,6 +352,16 @@ export function applySend(current: State, before: State, after: State, result: S
     if (now.awaitingDecision !== undefined) mine.awaitingDecision = now.awaitingDecision
     if (now.remoteFinalSeconds !== undefined) mine.remoteFinalSeconds = now.remoteFinalSeconds
 
+    next.pending = next.pending.filter((write) => write.entryId !== entryId)
+  }
+
+  // The refusal is taken over as a value — it is a fact about the last call, not
+  // a counter. Seconds are left alone: nothing was written.
+  for (const entryId of result.rejected) {
+    const now = findEntry(after, entryId)
+    const mine = findEntry(next, entryId)
+    if (!now?.rejected || !mine) continue
+    mine.rejected = now.rejected
     next.pending = next.pending.filter((write) => write.entryId !== entryId)
   }
 

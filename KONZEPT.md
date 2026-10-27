@@ -835,12 +835,56 @@ Branches verwaist sind.
 - Erster Schreibzugriff POST, danach PUT.
 - Mehrere Änderungen innerhalb des Fensters werden zusammengefasst; dank absoluter Summe
   zählt ohnehin nur der letzte Stand.
-- Bei HTTP-Fehlern bleibt der Schreibzugriff ausstehend und wird beim nächsten Ereignis erneut
-  versucht. 429 und 403 werden verständlich gemeldet, nicht verschluckt.
+- Bei vorübergehenden Fehlern – keine Verbindung, 5xx, 429 – bleibt der Schreibzugriff
+  ausstehend und wird beim nächsten Ereignis erneut versucht. 401 und 403 ebenso: Sie betreffen
+  Key und Rechte, also jeden Schreibzugriff gleich, und werden als solche gemeldet, nicht
+  verschluckt. Lehnt ProSonata dagegen **den Eintrag** ab (jeder andere 4xx), wird er angehalten –
+  unten.
 - Am selben Zeitgeber hängt `git fetch --prune`, um geschlossene Pull Requests zu bemerken
   (Abschnitt 3) – aber deutlich seltener, etwa stündlich, und nur solange es überhaupt einen
   offenen Branch-Eintrag gibt. Das ist ein Zugriff auf das Git-Remote, kein API-Call an
   ProSonata.
+
+### Abgelehnte Einträge
+
+Am 26. Oktober 2026 lehnte ProSonata drei Einträge einen Tag lang alle 30 Sekunden ab, mit
+`Database insert data conflict.` Ihr Projekt war doppelt angelegt und das jüngere gelöscht
+worden, während ein Repository noch darauf buchte. Sichtbar war davon nur ein Zähler „wartet
+auf Versand", der nicht sank – und das in einem anderen Repository als dem, zu dem die Einträge
+gehörten. Die Meldung nannte weder Aufruf noch Status; den Hergang musste man erraten.
+
+Daraus folgt:
+
+- **Eine Ablehnung hält den Eintrag an** (`rejected`, Abschnitt 7), schon nach dem ersten Mal.
+  Abgelehnt heisst: ein 4xx ausser 401, 403 und 429. Dieselbe Anfrage bekäme dieselbe Antwort;
+  sie zu wiederholen kostet nur Kontingent und füllt das Journal. Der Preis: Antwortet ProSonata
+  einmal fälschlich mit 4xx, steht ein gesunder Eintrag, bis jemand «Erneut versuchen» wählt.
+- **Danach wird einmal nachgesehen, was aus dem Projekt geworden ist** (`GET /projects/<id>`).
+  404 heisst gelöscht, ein Status ausser „offen" oder `activeStatus = 0` heisst nicht mehr offen
+  (Abschnitt 9). Geprüft wird nur nach einer Ablehnung, nicht beim Start eines Timers: Ein
+  Projekt verschwindet selten, und eine Prüfung bei jedem Start kostete Kontingent für einen
+  Fall, den die Ablehnung ohnehin aufdeckt.
+- **Es wird weiter gemessen.** Der Timer läuft, Zeit sammelt sich lokal; nur der Versand ruht.
+  Neue Zeit stellt den Eintrag zwar wieder in die Warteschlange, der Versand nimmt ihn aber
+  sofort wieder heraus.
+- **Panel und `prosonata status` zeigen ihn, aus jedem Repository**, mit der Ursache: einem
+  gelöschten oder geschlossenen Projekt, sonst ProSonatas eigener Meldung samt Status.
+- **Drei Handlungen**, im Panel per Klick auf die Zeile, im Terminal mit `prosonata rejected`:
+  - *Erneut versuchen* – dieselben Angaben, sofort.
+  - *Auf anderes Projekt verschieben* – Auswahl aus den offenen Projekten, die des Repositories
+    zuerst, und sofort senden. Liegt die Ursache beim Projekt, wandert alles Unfertige darauf
+    im Repository mit: Keiner dieser Einträge käme dort je an. Das Repository bucht dann auf
+    das neue Projekt, und ein gelöschtes verschwindet aus seiner Git-Config (Abschnitt 6).
+    Abgeschlossene Einträge, die schon in ProSonata stehen, bleiben, wo sie sind.
+  - *Verwerfen* – nur lokal, samt Timer und Warteschlange. In ProSonata wird nichts gelöscht:
+    Gedacht ist es für Zeit, die dort schon steht, etwa von Hand gebucht. Eine Zeile aus
+    ProSonata zu entfernen ist Sache von *Zeiteinträge durchsehen* (Abschnitt 3), mit dessen
+    Schutz für fakturierte Einträge. Das Journal hält das Verwerfen fest, damit eine
+    Wiederherstellung den Eintrag nicht zurückholt.
+- **Die Notiz im Journal nennt Aufruf und Status**, etwa `POST /projecttimes → 4xx: Database
+  insert data conflict. (Projekt gelöscht)`. Und sie entsteht einmal, nicht alle 30 Sekunden.
+  Welchen Status ProSonata für ein gelöschtes Projekt schickt, ist nicht gemessen: Die Notizen
+  vom 26. Oktober nannten ihn nicht, belegt ist nur, dass er nicht vorübergehend war.
 
 ---
 
@@ -928,6 +972,11 @@ zufällig. `git config prosonata.category.412 7` scheitert mit „invalid key".
   Projekt gemerkte umgestellt und, falls es keine gibt, einmal gefragt.
 - `git config` reist **nicht** mit dem Clone. Jeder Rechner braucht eine einmalige
   Einrichtung. In einem unbekannten Repo fragt das Werkzeug und schreibt die Antwort weg.
+- **Ein Projekt kann in ProSonata verschwinden**, während ein Repository darauf bucht – gelöscht
+  oder abgeschlossen. Bemerkt wird das an der ersten Ablehnung (Abschnitt 4). Wird dann ein
+  anderes Projekt gewählt, wird es zum aktiven, falls das verschwundene es war; ein gelöschtes
+  fällt dabei aus der Liste und mit ihm seine Untersektion. Ein abgeschlossenes bleibt stehen:
+  Es kann für Nacharbeiten wieder geöffnet werden, ein gelöschtes nicht.
 
 ---
 
@@ -1153,6 +1202,7 @@ Ein Zeiteintrag trägt:
 | `state` | `"open"` oder `"closed"` – die einzigen beiden Zustände im Code |
 | `awaitingDecision` | gesetzt, wenn ein anderer Rechner den Eintrag abgeschlossen hat: nichts wird geschrieben, bis jemand antwortet |
 | `remoteFinalSeconds` | was ProSonata in jenem Moment hielt – daraus ergibt sich, was von der hiesigen Zeit noch nicht drüben steht |
+| `rejected` | gesetzt, wenn ProSonata den letzten Schreibzugriff abgelehnt hat: Aufruf, Status, Meldung und – falls das die Ursache ist – `project: "deleted"` oder `"closed"`. Nichts wird geschrieben, bis jemand entscheidet (Abschnitt 4) |
 
 Die Statusleiste rendert eine **Liste** laufender Timer, kein Singleton – parallele Timer sind
 der Normalfall, und später können fremde Timer von anderen Geräten dazukommen.
@@ -1270,7 +1320,7 @@ der npm-bin-Pfad liegt in `$PATH` meist vor `/bin`; ein global installiertes `ps
 Fremdnutzern `ps aux` brechen. Ein kurzer Alias ist optional.
 
 Befehle: `init`, `start`, `pause`, `status`, `send`, `project`, `category`, `grid`, `mode`,
-`close`, `text`, `discard`, `attach`, `resume`, `log`, `adjust` – die verbindliche Liste steht
+`close`, `text`, `discard`, `attach`, `resume`, `rejected`, `log`, `adjust` – die verbindliche Liste steht
 in `prosonata help`. Kein `end` – ein Timer kennt kein Beenden.
 
 Damit ist die CLI zugleich die Schnittstelle für einen **Coding-Agenten**: Wer Shell-Zugriff hat,
@@ -1501,6 +1551,15 @@ liegen in [bruno/](bruno/).
   Einzelabruf.
 - `isProjectTemplate` markiert Vorlagen und steht ebenfalls in der Liste. Als Filterparameter
   ist es nicht dokumentiert – clientseitig aussortieren.
+- **Gemessen: Ein gelöschtes Projekt ist weg, nicht bloss geschlossen.** Am 27. Oktober 2026
+  am eigenen Konto, mit Projekt 178, das in der Oberfläche gelöscht worden war (DELETE kennt
+  die API nicht): `GET /projects/178` antwortet **404** mit `"Data not found."` und leerem
+  `data`; in der Liste fehlt es mit wie ohne Filter. Ein bestehendes Projekt antwortet 200 mit
+  `projectStatus` und `activeStatus`. Der Einzelabruf unterscheidet damit in einem Aufruf
+  gelöscht, nicht mehr offen und in Ordnung (Abschnitt 4).
+- **Schreiben auf ein gelöschtes Projekt** lehnt ProSonata mit `Database insert data conflict.`
+  ab, beim POST und – so das Journal vom 26. Oktober – beim PUT, der `projectID` darauf setzt.
+  Die Meldung klingt nach einem doppelten Eintrag, meint aber einen Verweis ins Leere.
 
 ### `projecttimes`
 
@@ -1835,7 +1894,8 @@ Nicht erneut vorschlagen:
 Gebaut sind die Punkte 1 bis 9 der Reihenfolge unten, dazu Zeitkorrektur, Verwerfen,
 Zuschlagen, Segmentprotokoll samt Bericht, der Abgleich über mehrere Rechner, der Modus *pro
 Branch und Tag*, die Schlaferkennung, das Durchsehen und Berichtigen der Zeiteinträge, der
-Anspruch vor dem Anlegen (Abschnitt 7) und die Maschinendaten in `apiComments` (Abschnitt 3).
+Anspruch vor dem Anlegen (Abschnitt 7), die Maschinendaten in `apiComments` (Abschnitt 3) und
+das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnitt 4).
 
 **Noch nicht gebaut** – jeweils an Ort und Stelle gekennzeichnet:
 

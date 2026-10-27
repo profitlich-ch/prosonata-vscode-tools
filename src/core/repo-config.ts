@@ -105,6 +105,17 @@ export function rememberProject(cwd: string, project: RepoProject): void {
   git(cwd, 'config', '--local', KEY.active, String(project.id))
 }
 
+/**
+ * Takes a project ProSonata no longer has out of the repository: its line in the
+ * list, its number and category. Offered for a choice again it would only be
+ * refused again (KONZEPT.md §6). `active` is left to the caller, who sets the
+ * project that replaces it.
+ */
+export function forgetProject(cwd: string, projectId: number): void {
+  tryGit(cwd, 'config', '--local', '--unset-all', KEY.project, `^${projectId}:`)
+  tryGit(cwd, 'config', '--local', '--remove-section', `prosonata.${projectId}`)
+}
+
 export function rememberCategory(cwd: string, projectId: number, categoryId: number, name?: string): void {
   const value = name && !name.includes('\n') ? `${categoryId}:${name}` : String(categoryId)
   git(cwd, 'config', '--local', KEY.category(projectId), value)

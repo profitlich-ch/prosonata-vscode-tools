@@ -346,6 +346,8 @@ prosonata text <Text>             Text des offenen Zeiteintrags ändern
 prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
 prosonata attach                  Zeit dem Eintrag des letzten Commits zuschlagen
 prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
+prosonata rejected [Nr retry|move|drop]
+                                  abgelehnte Einträge: erneut senden, auf anderes Projekt, verwerfen
 prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
 prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 ```

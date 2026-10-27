@@ -8,10 +8,14 @@ import {
   close,
   commit,
   currentSeconds,
+  discardEntry,
+  entriesToMove,
   keepFromRunning,
   lastClosedEntry,
+  moveEntries,
   openEntriesIn,
   moveToClosed,
+  retryEntry,
   openEntry,
   runningSeconds,
   parkClosedElsewhere,
@@ -26,7 +30,7 @@ import {
   start,
   unwrittenSeconds,
 } from './tracking.js'
-import { emptyState, type Scope, type State } from './types.js'
+import { emptyState, type Scope, type State, type TimeEntry } from './types.js'
 
 const scope: Scope = { repoPath: '/work/shop', branch: 'feature/buchung' }
 const main: Scope = { repoPath: '/work/shop', branch: 'main' }
@@ -1045,5 +1049,93 @@ describe('keeping part of a stretch that ran too long', () => {
 
     expect(openEntry(state, scope)?.seconds).toBe(2 * 3600)
     expect(state.timers[0]?.startedAt).toBeNull()
+  })
+})
+
+/*
+ * What can be done with an entry ProSonata refused (KONZEPT.md §4): ask again,
+ * move it to another project, or discard it because the time stands there already.
+ */
+describe('a refused entry', () => {
+  const refused = { at: NINE, call: 'POST /projecttimes', status: 409, message: 'Database insert data conflict.' }
+
+  function entryOf(id: string, overrides: Partial<TimeEntry> = {}): TimeEntry {
+    return {
+      id,
+      key: 'a3f9c1',
+      scope,
+      projectId: 178,
+      categoryId: 72,
+      text: 'Kartenstandorte',
+      seconds: 600,
+      foreignSeconds: 0,
+      lastWritten: null,
+      timeId: null,
+      state: 'open',
+      ...overrides,
+    }
+  }
+
+  function stateOf(...entries: TimeEntry[]): State {
+    return { ...emptyState(), entries }
+  }
+
+  it('moves alone when its project is fine', () => {
+    const state = stateOf(entryOf('a', { rejected: refused }), entryOf('b', { scope: main }))
+
+    expect(entriesToMove(state, 'a').map((entry) => entry.id)).toEqual(['a'])
+  })
+
+  it('takes everything unfinished on a deleted project in that repository along', () => {
+    const state = stateOf(
+      entryOf('a', { rejected: { ...refused, project: 'deleted' } }),
+      entryOf('b', { scope: main }),
+      entryOf('c', { projectId: 56 }),
+      entryOf('d', { scope: { repoPath: '/work/anderes', branch: 'main' } }),
+      entryOf('e', { state: 'closed', timeId: 2866 }),
+    )
+
+    // c is on another project, d in another repository, e closed and written.
+    expect(entriesToMove(state, 'a').map((entry) => entry.id)).toEqual(['a', 'b'])
+  })
+
+  it('goes to the new project and is queued, even when ProSonata never knew it', () => {
+    const state = stateOf(entryOf('a', { rejected: refused }), entryOf('b'))
+
+    const moved = moveEntries(state, ['a', 'b'], 177, 72, at(10))
+
+    expect(moved.entries.map((entry) => entry.projectId)).toEqual([177, 177])
+    expect(moved.entries[0]?.rejected).toBeUndefined()
+    expect(moved.pending.map((write) => write.entryId)).toEqual(['a', 'b'])
+  })
+
+  it('keeps its category when the new project has none remembered', () => {
+    const moved = moveEntries(stateOf(entryOf('a')), ['a'], 177, 0, at(10))
+
+    expect(moved.entries[0]?.categoryId).toBe(72)
+  })
+
+  it('is queued again on a retry, with the refusal gone', () => {
+    const retried = retryEntry(stateOf(entryOf('a', { rejected: refused, state: 'closed' })), 'a', at(10))
+
+    expect(retried.entries[0]?.rejected).toBeUndefined()
+    expect(retried.pending).toEqual([{ entryId: 'a', since: at(10), closing: true }])
+  })
+
+  it('leaves no timer and no queued write behind when discarded', () => {
+    const state: State = {
+      ...stateOf(entryOf('a', { rejected: refused }), entryOf('b')),
+      pending: [
+        { entryId: 'a', since: NINE, closing: false },
+        { entryId: 'b', since: NINE, closing: false },
+      ],
+      timers: [{ id: 't', origin: 'local', remoteTimerId: null, scope, startedAt: null, entryId: 'a' }],
+    }
+
+    const discarded = discardEntry(state, 'a')
+
+    expect(discarded.entries.map((entry) => entry.id)).toEqual(['b'])
+    expect(discarded.pending.map((write) => write.entryId)).toEqual(['b'])
+    expect(discarded.timers).toEqual([])
   })
 })

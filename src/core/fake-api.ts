@@ -17,6 +17,12 @@ export class FakeApi implements Api {
   failNext: Error | null = null
   /** Characters `detail` keeps. Beyond it the rest is dropped without a word. */
   detailLimit = 800
+  /**
+   * Projects deleted in ProSonata. Writing onto one is refused with the message
+   * seen on 26 October 2026, for a POST and a PUT alike. The status was not
+   * recorded then — only that it was not a transient one — so 409 stands in.
+   */
+  readonly deletedProjects = new Set<number>()
 
   calls: string[] = []
   /** Entries of other users; `userID=myself` keeps them out of every search. */
@@ -32,6 +38,12 @@ export class FakeApi implements Api {
   async listProjects(): Promise<Project[]> {
     this.record('listProjects')
     return this.projects.filter((p) => p.projectStatus === 0 && p.activeStatus === 1 && p.isProjectTemplate !== 1)
+  }
+
+  async getProject(projectId: number): Promise<Project | null> {
+    this.record(`getProject ${projectId}`)
+    if (this.deletedProjects.has(projectId)) return null
+    return this.projects.find((p) => p.projectID === projectId) ?? null
   }
 
   async listCategories(): Promise<Category[]> {
@@ -80,6 +92,7 @@ export class FakeApi implements Api {
 
   async createEntry(draft: EntryDraft): Promise<RemoteEntry> {
     this.record(`createEntry ${draft.workingTime}`)
+    this.refuseDeleted('POST /projecttimes', draft.projectID)
     const entry: RemoteEntry = {
       timeID: this.nextId++,
       projectID: draft.projectID,
@@ -101,6 +114,7 @@ export class FakeApi implements Api {
     this.record(`updateEntry ${timeId} ${patch.workingTime ?? '-'}`)
     const entry = this.entries.get(timeId)
     if (!entry) throw new ApiError(404, 'Data not found.')
+    this.refuseDeleted(`PUT /projecttimes/${timeId}`, patch.projectID ?? entry.projectID)
 
     // A partial body leaves everything else alone — measured.
     if (patch.detail !== undefined) entry.detail = this.truncate(patch.detail)
@@ -128,6 +142,12 @@ export class FakeApi implements Api {
     }
     this.calls.push(call)
     this.limit = { ...this.limit, remaining: Math.max(0, this.limit.remaining - 1) }
+  }
+
+  private refuseDeleted(call: string, projectId: number | undefined): void {
+    if (projectId !== undefined && this.deletedProjects.has(projectId)) {
+      throw new ApiError(409, 'Database insert data conflict.', undefined, call)
+    }
   }
 
   private truncate(detail: string): string {

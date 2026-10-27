@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { basename } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 
 import { inProsonataOrder, type Project } from '../core/api.js'
@@ -6,7 +7,7 @@ import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../co
 import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHook, isInstalled, publishCli, publishedCli } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
-import type { EntryMode } from '../core/types.js'
+import type { EntryMode, TimeEntry } from '../core/types.js'
 import { noteFor, readAdjustment } from '../core/adjust.js'
 import { describeAttachment, describePlan } from '../core/attach.js'
 import { describeRunningElsewhere } from '../core/sync.js'
@@ -17,14 +18,16 @@ import {
   applyCategory,
   applyProject,
   awaitingDecision,
+  entriesToMove,
   findTimer,
   openEntry,
+  rejectedEntries,
   runningSeconds,
   setText,
   unwrittenSeconds,
 } from '../core/tracking.js'
 import { workingTime, type TimeGrid } from '../core/working-time.js'
-import type { SendResult } from '../core/sender.js'
+import { describeRejection, type SendResult } from '../core/sender.js'
 
 /**
  * The command line. Same core as the extension, so a commit from the terminal
@@ -52,6 +55,8 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
   prosonata attach                  Zeit seit dem letzten Commit dem Eintrag jenes Commits zuschlagen
   prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
+  prosonata rejected [Nr retry|move|drop]
+                                    abgelehnte Einträge: erneut senden, auf anderes Projekt, verwerfen
   prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
   prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 
@@ -94,6 +99,8 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await attach(cwd)
       case 'resume':
         return await resume(cwd, argument)
+      case 'rejected':
+        return await rejected(argument)
       case 'log':
         return log(cwd, argument)
       case 'adjust':
@@ -497,6 +504,13 @@ async function status(cwd: string): Promise<number> {
   if (state.pending.length > 0) {
     process.stdout.write(`  wartet auf Versand: ${state.pending.length}\n`)
   }
+  // Every repository's, not only this one: on 26 October 2026 the stuck entries
+  // belonged to another repository, and nothing here would have shown them.
+  const refused = rejectedEntries(state)
+  if (refused.length > 0) {
+    process.stdout.write(`  von ProSonata abgelehnt: ${refused.length} — "prosonata rejected <Nr> retry|move|drop"\n`)
+    listRejected(refused, '    ')
+  }
 
   /*
    * Which version the hooks actually run. Every silent hook failure so far was
@@ -533,8 +547,97 @@ function report(result: SendResult): number {
   for (const failure of result.failed) {
     process.stderr.write(`konnte nicht gesendet werden: ${failure.error.message}\n`)
   }
+  if (result.rejected.length > 0) {
+    process.stderr.write(`von ProSonata abgelehnt: ${result.rejected.length} — "prosonata rejected" zeigt, was zu tun ist\n`)
+  }
   process.stdout.write(`gesendet: ${result.sent.length}\n`)
-  return result.failed.length > 0 ? 1 : 0
+  return result.failed.length > 0 || result.rejected.length > 0 ? 1 : 0
+}
+
+/**
+ * Entries ProSonata refused (KONZEPT.md §4). Without an argument the list; with
+ * the first characters of an entry's number and an action, that action. Works
+ * from any directory: the entry names its own repository.
+ */
+async function rejected(argument: string): Promise<number> {
+  const session = Session.open()
+  const refused = rejectedEntries(session.state())
+  const [ref, action] = argument.split(/\s+/).filter((part) => part !== '')
+
+  if (!ref) {
+    if (refused.length === 0) {
+      process.stdout.write('ProSonata hat keinen Eintrag abgelehnt\n')
+      return 0
+    }
+    listRejected(refused, '  ')
+    process.stdout.write('\n  "prosonata rejected <Nr> retry"  erneut senden\n')
+    process.stdout.write('  "prosonata rejected <Nr> move"   auf ein anderes Projekt verschieben und senden\n')
+    process.stdout.write('  "prosonata rejected <Nr> drop"   verwerfen — die Zeit steht schon in ProSonata\n')
+    return 0
+  }
+
+  const matches = refused.filter((entry) => entry.id.startsWith(ref))
+  const entry = matches[0]
+  if (!entry || matches.length > 1) {
+    process.stderr.write(`${matches.length > 1 ? 'mehrdeutig' : 'kein abgelehnter Eintrag'}: ${ref} — "prosonata rejected" listet sie\n`)
+    return 2
+  }
+
+  switch (action) {
+    case 'retry':
+      return report(await session.retryRejected(entry.id))
+    case 'move':
+      return await moveRejected(session, entry)
+    case 'drop': {
+      const running = session.state().timers.some((timer) => timer.entryId === entry.id && timer.startedAt !== null)
+      const answer = await ask(
+        `${entry.text || '(ohne Text)'} verwerfen? Nur hier, ProSonata bleibt unberührt${running ? '; der laufende Timer geht mit' : ''} [j/N] `,
+      )
+      if (answer.toLowerCase() !== 'j') {
+        process.stdout.write('nichts verworfen\n')
+        return 1
+      }
+      session.discardRejected(entry.id)
+      process.stdout.write('verworfen\n')
+      return 0
+    }
+    default:
+      process.stderr.write(`was soll mit ${ref} geschehen? retry, move oder drop\n`)
+      return 2
+  }
+}
+
+/** The other project for a refused entry: the repository's own first, the dead one left out. */
+async function moveRejected(session: Session, entry: TimeEntry): Promise<number> {
+  const repoPath = entry.scope.repoPath
+  const known = new Set(readRepoConfig(repoPath).projects.map((project) => project.id))
+  const projects = (await session.api.listProjects()).filter((project) => project.projectID !== entry.projectId)
+  const project = await pick(
+    [...projects.filter((p) => known.has(p.projectID)), ...projects.filter((p) => !known.has(p.projectID))],
+    (candidate) => `${candidate.projectNo}  ${candidate.projectName}`,
+    'Projektnummer: ',
+  )
+  if (!project) return 1
+
+  let categoryId = readRepoConfig(repoPath).categories.get(project.projectID) ?? 0
+  if (categoryId <= 0) categoryId = await askForCategory(session, repoPath, project)
+  if (categoryId <= 0) return 1
+
+  const moving = entriesToMove(session.state(), entry.id).length
+  const result = await session.moveRejected(entry.id, { id: project.projectID, name: project.projectName, no: project.projectNo }, categoryId)
+  process.stdout.write(`${moving === 1 ? 'ein Eintrag' : `${moving} Einträge`} nach ${project.projectNo} ${project.projectName}\n`)
+  return report(result)
+}
+
+/** One line per refused entry: number, where it comes from, what it is, why. */
+function listRejected(entries: TimeEntry[], indent: string): void {
+  for (const entry of entries) {
+    const project = readRepoConfig(entry.scope.repoPath).projects.find((candidate) => candidate.id === entry.projectId)
+    process.stdout.write(
+      `${indent}${entry.id.slice(0, 8)}  ${basename(entry.scope.repoPath)}/${entry.scope.branch}  ${entry.text || '(ohne Text)'}  ${format(entry.foreignSeconds + entry.seconds)}\n`,
+    )
+    process.stdout.write(`${indent}          ${describeRejection(entry, project)}\n`)
+  }
 }
 
 /**

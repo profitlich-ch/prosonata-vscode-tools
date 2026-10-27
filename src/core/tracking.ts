@@ -814,6 +814,68 @@ export function applyProject(state: State, repoPath: string, projectId: number, 
   return changed ? next : state
 }
 
+/** Entries ProSonata refused, across every repository (KONZEPT.md §4). */
+export function rejectedEntries(state: State): TimeEntry[] {
+  return state.entries.filter((entry) => entry.rejected !== undefined)
+}
+
+/**
+ * What moves along when a refused entry goes to another project. Was its project
+ * deleted or closed, everything unfinished on it in that repository moves too:
+ * none of it could be written there either (KONZEPT.md §4). Otherwise only the
+ * entry itself — the project is fine, so the others belong where they are.
+ */
+export function entriesToMove(state: State, entryId: string): TimeEntry[] {
+  const entry = findEntry(state, entryId)
+  if (!entry) return []
+  if (!entry.rejected?.project) return [entry]
+  return unfinishedIn(state, entry.scope.repoPath).filter((candidate) => candidate.projectId === entry.projectId)
+}
+
+/** Asks ProSonata once more. The caller sends right away; nothing waits the delay. */
+export function retryEntry(state: State, entryId: string, at: number): State {
+  const next = structuredClone(state)
+  const entry = findEntry(next, entryId)
+  if (!entry) return state
+  delete entry.rejected
+  queueWrite(next, entryId, at, entry.state === 'closed')
+  return next
+}
+
+/**
+ * Moves entries to another project and queues them, the refused ones included.
+ *
+ * Unlike `applyProject` every one is queued, not only those ProSonata knows: a
+ * refused entry was taken off the queue, and an entry that never got through has
+ * no other write coming that would carry it.
+ */
+export function moveEntries(state: State, entryIds: string[], projectId: number, categoryId: number, at: number): State {
+  const next = structuredClone(state)
+  for (const entryId of entryIds) {
+    const entry = findEntry(next, entryId)
+    if (!entry) continue
+    entry.projectId = projectId
+    if (categoryId > 0) entry.categoryId = categoryId
+    delete entry.rejected
+    queueWrite(next, entryId, at, entry.state === 'closed')
+  }
+  return next
+}
+
+/**
+ * Drops an entry locally — its timer and its queued write with it. Nothing is
+ * deleted in ProSonata: this is for time that already stands there, booked by
+ * hand (KONZEPT.md §4). Removing a line from an invoice is what browsing the
+ * entries is for, with its guard against invoiced ones.
+ */
+export function discardEntry(state: State, entryId: string): State {
+  const next = structuredClone(state)
+  next.entries = next.entries.filter((entry) => entry.id !== entryId)
+  next.pending = next.pending.filter((write) => write.entryId !== entryId)
+  next.timers = next.timers.filter((timer) => timer.entryId !== entryId)
+  return next
+}
+
 /**
  * Marks an entry for the next write from outside these rules — after a
  * correction, where the sum changed without a segment ending.

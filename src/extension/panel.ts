@@ -1,14 +1,18 @@
+import { basename } from 'node:path'
 import * as vscode from 'vscode'
 
 import { paths } from '../core/config.js'
 import { isInstalled, publishedCli } from '../core/hooks.js'
+import { describeRejection } from '../core/sender.js'
 import {
   awaitingDecision,
   currentSeconds,
   lastClosedEntry,
   openEntriesIn,
   openEntry,
+  rejectedEntries,
   runningSeconds,
+  sameScope,
   unwrittenSeconds,
 } from '../core/tracking.js'
 import type { RepoProject } from '../core/repo-config.js'
@@ -224,6 +228,30 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
           `${clock(slept)} ab ${since.toTimeString().slice(0, 5)} — abziehen?`,
           'debug-disconnect',
           { command: 'prosonata.resolveSleep', title: 'Schlafzeit entscheiden' },
+        ),
+      )
+    }
+
+    /*
+     * Refused by ProSonata, from every repository — not only this one. On
+     * 26 October 2026 the stuck entries belonged to another repository, and the
+     * only trace here was a count that would not go down (KONZEPT.md §4).
+     */
+    for (const refused of rejectedEntries(state)) {
+      const here = sameScope(refused.scope, context.scope)
+      // From the cached config only: the panel redraws every second, and reading
+      // another repository's would cost a handful of `git` processes each time.
+      // Elsewhere the project shows by its id; the action names it in full.
+      const project =
+        refused.scope.repoPath === context.scope.repoPath
+          ? context.config.projects.find((candidate) => candidate.id === refused.projectId)
+          : undefined
+      rows.push(
+        new PanelRow(
+          here ? 'Abgelehnt' : `Abgelehnt · ${basename(refused.scope.repoPath)}/${refused.scope.branch}`,
+          `${refused.text ? `${refused.text} — ` : ''}${describeRejection(refused, project)}`,
+          'error',
+          { command: 'prosonata.handleRejected', title: 'Abgelehnten Eintrag behandeln', arguments: [refused.id] },
         ),
       )
     }

@@ -6,6 +6,33 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Abgelehnte Einträge werden angehalten statt endlos wiederholt.** Lehnt
+  ProSonata einen Eintrag ab (ein 4xx ausser 401, 403 und 429), sendet das
+  Werkzeug ihn nicht mehr alle 30 Sekunden erneut, sondern hält ihn an und
+  zeigt ihn — im Panel und in `prosonata status`, aus jedem Repository. Es misst
+  weiter; nur der Versand ruht. Drei Handlungen stehen zur Wahl, im Panel per
+  Klick auf die Zeile, im Terminal mit `prosonata rejected <Nr> retry|move|drop`:
+  erneut versuchen, auf ein anderes Projekt verschieben, verwerfen. Verwerfen
+  wirkt nur lokal; in ProSonata wird nichts gelöscht.
+- **Ein gelöschtes oder geschlossenes Projekt wird erkannt.** Nach einer
+  Ablehnung sieht das Werkzeug einmal nach, was aus dem Projekt geworden ist,
+  und sagt es: «Projekt COR-26021 gibt es in ProSonata nicht mehr». Beim
+  Verschieben geht dann alles Unfertige auf diesem Projekt mit, das Repository
+  bucht künftig auf das neue, und ein gelöschtes Projekt verschwindet aus seiner
+  Git-Config.
+
+  Anlass: Am 26. Oktober 2026 wurden drei Einträge einen Tag lang abgelehnt,
+  weil ihr Projekt doppelt angelegt und das jüngere gelöscht worden war.
+  Sichtbar war nur ein Zähler, der nicht sank.
+
+### Geändert
+
+- **Die Journal-Notiz zu einer Ablehnung nennt Aufruf und Status**, nach dem
+  Muster `POST /projecttimes → <Status>: Database insert data conflict. (Projekt
+  gelöscht)`, und entsteht einmal statt bei jedem Versuch.
+
 ## [0.20.0] — 2026-09-30
 
 ### Geändert

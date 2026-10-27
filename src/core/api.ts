@@ -98,6 +98,12 @@ export interface RateLimit {
 
 export interface Api {
   listProjects(): Promise<Project[]>
+  /**
+   * One project, whatever its status — or null when ProSonata no longer has it.
+   * Measured: a deleted project answers 404 `Data not found.` and is missing
+   * from the unfiltered list too, so null means deleted, not merely closed.
+   */
+  getProject(projectId: number): Promise<Project | null>
   listCategories(): Promise<Category[]>
   getEntry(timeId: number): Promise<RemoteEntry | null>
   /**
@@ -130,6 +136,8 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly retryAfterSeconds?: number,
+    /** `POST /projecttimes` — so a journal line says which call was refused. */
+    readonly call?: string,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -138,6 +146,15 @@ export class ApiError extends Error {
   /** Worth trying again later: rate limit, or the server having a bad moment. */
   get transient(): boolean {
     return this.status === 429 || this.status >= 500 || this.status === 0
+  }
+
+  /**
+   * ProSonata refuses this write itself, and asking again will not change its
+   * mind (KONZEPT.md §4). 401 and 403 are left out: they are about the key or
+   * its rights, not about the entry, and stop every write alike.
+   */
+  get refusesEntry(): boolean {
+    return this.status >= 400 && this.status < 500 && ![401, 403, 429].includes(this.status)
   }
 }
 
@@ -167,6 +184,15 @@ export class HttpApi implements Api {
       '/projects?projectStatus=0&activeStatus=1&perPage=500&orderBy=projectName',
     )
     return (rows ?? []).filter((row) => Number(row['isProjectTemplate'] ?? 0) !== 1).map(toProject)
+  }
+
+  async getProject(projectId: number): Promise<Project | null> {
+    try {
+      return toProject(await this.request<Record<string, unknown>>('GET', `/projects/${projectId}`))
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null
+      throw error
+    }
   }
 
   async listCategories(): Promise<Category[]> {
@@ -252,6 +278,8 @@ export class HttpApi implements Api {
     }
     if (this.options.appId) headers['X-APP-ID'] = this.options.appId
     if (body !== undefined) headers['Content-Type'] = 'application/json'
+    // Without the query: it carries search terms, and the journal needs the call, not them.
+    const call = `${method} ${path.split('?')[0]}`
 
     let response: Response
     try {
@@ -273,7 +301,7 @@ export class HttpApi implements Api {
      * "this branch has no entry yet" would look like a broken API.
      */
     if (text.trim() === '') {
-      if (!response.ok) throw new ApiError(response.status, `HTTP ${response.status}`)
+      if (!response.ok) throw new ApiError(response.status, `HTTP ${response.status}`, undefined, call)
       return undefined as T
     }
 
@@ -285,6 +313,8 @@ export class HttpApi implements Api {
       throw new ApiError(
         response.status,
         response.ok ? 'ProSonata hat mit etwas anderem als JSON geantwortet' : `HTTP ${response.status}`,
+        undefined,
+        call,
       )
     }
 
@@ -298,7 +328,7 @@ export class HttpApi implements Api {
 
     if (!response.ok) {
       const message = typeof meta['message'] === 'string' ? meta['message'] : `HTTP ${response.status}`
-      throw new ApiError(response.status, message, this.limit?.resetSeconds)
+      throw new ApiError(response.status, message, this.limit?.resetSeconds, call)
     }
 
     return envelope.data as T

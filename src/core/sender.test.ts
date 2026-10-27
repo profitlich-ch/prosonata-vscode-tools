@@ -3,13 +3,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { ApiError, type RemoteEntry } from './api.js'
+import { ApiError, type Project, type RemoteEntry } from './api.js'
 import { fixedClock } from './clock.js'
 import { DEFAULTS, type Config } from './config.js'
 import { FakeApi } from './fake-api.js'
 import { Journal } from './journal.js'
 import { EXTENSION_ID, readComments } from './api-comments.js'
-import { adoptForeignShare, applySend, describeTrouble, dueWrites, send, type SendDeps, type SendResult } from './sender.js'
+import {
+  adoptForeignShare,
+  applySend,
+  describeRejection,
+  describeTrouble,
+  dueWrites,
+  send,
+  type SendDeps,
+  type SendResult,
+} from './sender.js'
 import { emptyState, type State, type TimeEntry } from './types.js'
 import { pause } from './tracking.js'
 
@@ -252,6 +261,136 @@ describe('when sending fails', () => {
     ;({ state } = await send(state, deps, true))
     expect(state.pending).toHaveLength(0)
     expect(api.entries.size).toBe(1)
+  })
+})
+
+function project(overrides: Partial<Project> = {}): Project {
+  return {
+    projectID: 166,
+    projectName: 'Website',
+    projectNo: 'COR-26020',
+    customerID: 1,
+    customerName: 'Kunde',
+    projectStatus: 0,
+    activeStatus: 1,
+    isProjectTemplate: 0,
+    timeNeeded: 0,
+    timePlanned: 0,
+    ...overrides,
+  }
+}
+
+/*
+ * On 26 October 2026 three entries were asked again every thirty seconds for a
+ * day, because their project had been deleted in ProSonata. A refusal is now held
+ * until somebody decides, and the project is looked up once (KONZEPT.md §4).
+ */
+describe('an entry ProSonata refuses', () => {
+  it('is held, and names the call, the answer and a deleted project', async () => {
+    const { api, deps, journal } = setup()
+    api.deletedProjects.add(166)
+
+    const { state, result } = await send(stateWith(entry()), deps, true)
+
+    expect(result.rejected).toEqual(['e1'])
+    expect(result.failed).toEqual([])
+    expect(state.pending).toEqual([])
+    expect(state.entries[0]?.rejected).toEqual({
+      at: NINE,
+      call: 'POST /projecttimes',
+      status: 409,
+      message: 'Database insert data conflict.',
+      project: 'deleted',
+    })
+    expect(journal.read().at(-1)?.message).toBe(
+      'POST /projecttimes → 409: Database insert data conflict. (Projekt gelöscht)',
+    )
+  })
+
+  it('is held as well when the refused write is a change, not a creation', async () => {
+    const { api, deps } = setup()
+    const first = await send(stateWith(entry()), deps, true)
+    api.deletedProjects.add(166)
+
+    const { state } = await send(stateWith({ ...first.state.entries[0]!, seconds: 7200 }), deps, true)
+
+    expect(state.entries[0]?.rejected?.call).toBe(`PUT /projecttimes/${first.state.entries[0]!.timeId}`)
+    expect(state.entries[0]?.rejected?.project).toBe('deleted')
+  })
+
+  it('tells a closed project from a deleted one', async () => {
+    const { api, deps } = setup()
+    api.projects = [project({ projectStatus: 2 })]
+    api.failNext = new ApiError(422, 'Projekt abgeschlossen', undefined, 'POST /projecttimes')
+
+    const { state } = await send(stateWith(entry()), deps, true)
+
+    expect(state.entries[0]?.rejected?.project).toBe('closed')
+  })
+
+  it('names no project when the project is fine', async () => {
+    const { api, deps } = setup()
+    api.projects = [project()]
+    api.failNext = new ApiError(400, 'Bad Request', undefined, 'POST /projecttimes')
+
+    const { state } = await send(stateWith(entry()), deps, true)
+
+    expect(state.entries[0]?.rejected?.status).toBe(400)
+    expect(state.entries[0]?.rejected?.project).toBeUndefined()
+  })
+
+  it('is not asked again, even when new time queues it', async () => {
+    const { api, deps } = setup()
+    api.deletedProjects.add(166)
+    const first = await send(stateWith(entry()), deps, true)
+    const calls = api.calls.length
+
+    const queued: State = { ...first.state, pending: [{ entryId: 'e1', since: NINE, closing: false }] }
+    const { state, result } = await send(queued, deps, true)
+
+    expect(api.calls.length).toBe(calls)
+    expect(result.rejected).toEqual(['e1'])
+    expect(state.pending).toEqual([])
+  })
+
+  it('leaves a refused key alone: that stops every write, not this one', async () => {
+    const { api, deps } = setup()
+    api.failNext = new ApiError(403, 'Forbidden')
+
+    const { state, result } = await send(stateWith(entry()), deps, true)
+
+    expect(state.entries[0]?.rejected).toBeUndefined()
+    expect(state.pending).toHaveLength(1)
+    expect(result.failed).toHaveLength(1)
+  })
+
+  it('names a deleted project before ProSonata\'s own words', () => {
+    const rejected = { at: NINE, call: 'POST /projecttimes', status: 409, message: 'Database insert data conflict.' }
+    const named = { id: 178, name: 'Kontaktkarten', no: 'COR-26021' }
+
+    expect(describeRejection(entry({ rejected: { ...rejected, project: 'deleted' } }), named)).toBe(
+      'Projekt COR-26021 Kontaktkarten gibt es in ProSonata nicht mehr',
+    )
+    expect(describeRejection(entry({ rejected }), named)).toBe('Database insert data conflict. (409)')
+  })
+
+  it('says so in the line about the queue', () => {
+    const empty: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [], deferred: [], rejected: [] }
+    expect(describeTrouble({ ...empty, rejected: ['e1'] })).toBe('ein Eintrag von ProSonata abgelehnt')
+  })
+
+  it('is folded onto the state as it stands now, keeping time booked meanwhile', () => {
+    const rejected = { at: NINE, call: 'POST /projecttimes', status: 409, message: 'x', project: 'deleted' as const }
+    const before = stateWith(entry({ seconds: 1000 }))
+    const after = { ...stateWith(entry({ seconds: 1000, rejected })), pending: [] }
+    const current = stateWith(entry({ seconds: 1300 }))
+    const result: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [], deferred: [], rejected: ['e1'] }
+
+    const merged = applySend(current, before, after, result)
+
+    expect(merged.entries[0]?.rejected).toEqual(rejected)
+    expect(merged.entries[0]?.seconds).toBe(1300)
+    expect(merged.pending).toEqual([])
   })
 })
 
@@ -502,6 +641,7 @@ describe('folding a send onto the state as it stands now', () => {
     missingCategory: [],
     awaitingDecision: [],
     deferred: [],
+    rejected: [],
   }
 
   it('keeps time another actor booked while the send was in flight', () => {
@@ -674,7 +814,7 @@ describe('the API budget', () => {
 })
 
 describe('naming why a queue is stuck', () => {
-  const empty: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [], deferred: [] }
+  const empty: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [], deferred: [], rejected: [] }
 
   it('says nothing when the round was uneventful', () => {
     expect(describeTrouble({ ...empty, sent: ['e1'] })).toBeNull()

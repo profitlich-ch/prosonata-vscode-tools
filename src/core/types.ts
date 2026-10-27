@@ -60,6 +60,12 @@ export interface TimeEntry {
   /** What ProSonata holds for it, read at the moment the close was noticed. */
   remoteFinalSeconds?: number
   /**
+   * ProSonata refused the last write, and asking again would not change that
+   * (KONZEPT.md §4). Nothing is sent until somebody decides — try again, move
+   * it to another project, or discard it. Time keeps being measured into it.
+   */
+  rejected?: Rejection
+  /**
    * Epoch milliseconds since some actor began creating this entry in ProSonata.
    *
    * A `POST` creates, so unlike a `PUT` with an absolute sum it cannot simply be
@@ -71,6 +77,23 @@ export interface TimeEntry {
    * leaves nothing to clean up, and it holds up this one entry rather than all.
    */
   creating?: number
+}
+
+/** Why ProSonata refused an entry, as it said so. */
+export interface Rejection {
+  /** Epoch milliseconds of the refusal. */
+  at: number
+  /** `POST /projecttimes` or `PUT /projecttimes/2866`. */
+  call: string
+  status: number
+  /** ProSonata's own words, `meta.message`. */
+  message: string
+  /**
+   * What became of the entry's project, looked up after the refusal: `deleted`
+   * when ProSonata no longer has it, `closed` when it is finished, cancelled or
+   * dormant. Absent when the project is fine — then the cause lies elsewhere.
+   */
+  project?: 'deleted' | 'closed'
 }
 
 /**

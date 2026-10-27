@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -13,7 +14,8 @@ import { Session, type RepoContext } from './session.js'
 import { SegmentLog, atLocal } from './segments.js'
 import { StateStore } from './state-store.js'
 import { planMerge } from './merge.js'
-import { openEntry } from './tracking.js'
+import { readRepoConfig, rememberCategory, rememberProject } from './repo-config.js'
+import { findEntry, openEntry } from './tracking.js'
 import { EXACT } from './working-time.js'
 
 /**
@@ -917,5 +919,82 @@ describe('deciding about sleeping time', () => {
     session.sleepGaps.push({ from: TEN, until: TEN + 600_000 })
 
     expect(session.openSleepGaps()).toHaveLength(1)
+  })
+})
+
+/*
+ * The case of 26 October 2026: a project created twice in ProSonata, the newer
+ * one deleted while a repository still booked to it (KONZEPT.md §4 and §6).
+ */
+describe('a project deleted in ProSonata', () => {
+  function repoBookingTo(deleted: number): string {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-repo-'))
+    execFileSync('git', ['init', '--quiet', '--initial-branch=main'], { cwd: dir })
+    rememberProject(dir, { id: 56, name: 'Allgemein', no: 'COR' })
+    rememberProject(dir, { id: deleted, name: 'Kontaktkarten', no: 'COR-26021' })
+    rememberCategory(dir, deleted, 72, 'Programmierung')
+    return dir
+  }
+
+  function withEntryIn(session: Session, repoPath: string, branch = 'kontakt-standorte'): void {
+    session.store.update((state) => ({
+      ...state,
+      entries: [
+        ...state.entries,
+        {
+          id: branch,
+          key: 'b5da46',
+          scope: { repoPath, branch },
+          projectId: 178,
+          categoryId: 72,
+          text: 'Kartenstandorte',
+          seconds: 1377,
+          foreignSeconds: 0,
+          lastWritten: null,
+          timeId: null,
+          state: 'open',
+        },
+      ],
+      pending: [...state.pending, { entryId: branch, since: NINE, closing: false }],
+    }))
+  }
+
+  it('moves the entries to the chosen project and takes the dead one out of the repository', async () => {
+    const api = new FakeApi()
+    api.deletedProjects.add(178)
+    const repoPath = repoBookingTo(178)
+    const session = sessionWith(api)
+    withEntryIn(session, repoPath)
+    withEntryIn(session, repoPath, 'main')
+
+    await session.flush(true)
+    expect(findEntry(session.state(), 'kontakt-standorte')?.rejected?.project).toBe('deleted')
+
+    await session.moveRejected('kontakt-standorte', { id: 177, name: 'Impressum, Datenschutz und Kontakticons', no: 'COR-26020' }, 72)
+
+    const state = session.state()
+    expect(state.entries.map((entry) => [entry.projectId, entry.timeId !== null])).toEqual([
+      [177, true],
+      [177, true],
+    ])
+    const config = readRepoConfig(repoPath)
+    expect(config.activeProjectId).toBe(177)
+    expect(config.projects.map((project) => project.id)).toEqual([56, 177])
+    expect(config.categories.has(178)).toBe(false)
+  })
+
+  it('discards an entry locally, and recovery does not bring it back', async () => {
+    const api = new FakeApi()
+    api.deletedProjects.add(178)
+    const session = sessionWith(api)
+    withEntryIn(session, repoBookingTo(178))
+    session.journal.append({ kind: 'segment', entryId: 'kontakt-standorte', seconds: 1377 })
+    await session.flush(true)
+
+    session.discardRejected('kontakt-standorte')
+
+    expect(session.state().entries).toEqual([])
+    expect(session.journal.unsent()).toEqual([])
+    expect(api.entries.size).toBe(0)
   })
 })

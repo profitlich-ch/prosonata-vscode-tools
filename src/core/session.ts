@@ -8,7 +8,7 @@ import { entryIsOpen, findOfBranch } from './identity.js'
 import { Journal } from './journal.js'
 import { branchKey } from './marker.js'
 import { measuredPerEntry, type MergePlan } from './merge.js'
-import { modeFor, readRepoConfig, type RepoConfig } from './repo-config.js'
+import { forgetProject, modeFor, readRepoConfig, rememberProject, type RepoConfig, type RepoProject } from './repo-config.js'
 import { billedTime } from './report.js'
 import { applySend, describeTrouble, send, type SendResult } from './sender.js'
 import { planAdjustment, type Adjustment, type Plan, type Situation } from './adjust.js'
@@ -22,8 +22,12 @@ import {
   commit,
   forgetRemote,
   currentSeconds,
+  discardEntry,
+  entriesToMove,
   findEntry,
   keepFromRunning,
+  moveEntries,
+  retryEntry,
   lastClosedEntry,
   moveToClosed,
   openEntry,
@@ -895,6 +899,39 @@ export class Session {
     })
   }
 
+  /** A refused entry, sent once more right away (KONZEPT.md §4). */
+  async retryRejected(entryId: string): Promise<SendResult> {
+    this.store.update((state) => retryEntry(state, entryId, this.clock.now()))
+    return this.flush(true)
+  }
+
+  /**
+   * A refused entry to another project, and sent right away. Was its project
+   * deleted or closed, everything unfinished on it in the repository goes along
+   * and the repository books to the new one from now on; a deleted project also
+   * leaves the repository's list, where choosing it would only be refused again.
+   */
+  async moveRejected(entryId: string, target: RepoProject, categoryId: number): Promise<SendResult> {
+    const entry = findEntry(this.state(), entryId)
+    if (!entry) throw new Error('diesen Eintrag gibt es nicht mehr')
+    const fate = entry.rejected?.project
+    const repoPath = entry.scope.repoPath
+    const from = entry.projectId
+
+    this.store.update((state) =>
+      moveEntries(state, entriesToMove(state, entryId).map((candidate) => candidate.id), target.id, categoryId, this.clock.now()),
+    )
+    if (fate && readRepoConfig(repoPath).activeProjectId === from) rememberProject(repoPath, target)
+    if (fate === 'deleted') forgetProject(repoPath, from)
+    return this.flush(true)
+  }
+
+  /** Drops a refused entry locally; ProSonata is not touched (KONZEPT.md §4). */
+  discardRejected(entryId: string): void {
+    this.store.update((state) => discardEntry(state, entryId))
+    this.journal.append({ kind: 'discarded', entryId })
+  }
+
   /** Sends everything that is due (KONZEPT.md §4). */
   async flush(force = false): Promise<SendResult> {
     /*
@@ -913,7 +950,7 @@ export class Session {
      * a write — replacing would throw that away, and that is how queued writes
      * went missing (KONZEPT.md §7).
      */
-    if (result.sent.length > 0 || result.awaitingDecision.length > 0) {
+    if (result.sent.length > 0 || result.awaitingDecision.length > 0 || result.rejected.length > 0) {
       this.store.update((current) => applySend(current, before, after, result))
     }
     this.lastTrouble = describeTrouble(result)

@@ -1,11 +1,16 @@
+import { basename } from 'node:path'
 import * as vscode from 'vscode'
 
 import { describeAttachment, describePlan } from '../core/attach.js'
 import { paths } from '../core/config.js'
-import { setMode } from '../core/repo-config.js'
+import { describeRepo } from '../core/git.js'
+import { readRepoConfig, setMode, type RepoProject } from '../core/repo-config.js'
+import { describeRejection } from '../core/sender.js'
 import type { RepoContext, Session } from '../core/session.js'
-import { awaitingDecision, openEntry, setText, unwrittenSeconds } from '../core/tracking.js'
+import { awaitingDecision, openEntry, rejectedEntries, setText, unwrittenSeconds } from '../core/tracking.js'
+import type { TimeEntry } from '../core/types.js'
 import { clock } from './panel.js'
+import { chooseCategory } from './setup.js'
 import { closedAmong, currentSession, refreshBudget, reload } from './view.js'
 
 /** What can be done to a time entry from the editor (KONZEPT.md §3). */
@@ -34,6 +39,99 @@ export async function askAboutClosedElsewhere(session: Session, context: RepoCon
     }
     reload()
   }
+}
+
+/**
+ * An entry ProSonata refused (KONZEPT.md §4): try again, move it to another
+ * project, or discard it. Reached from its row in the panel, which passes the
+ * entry; from the command palette it asks which one first.
+ *
+ * Works on the entry's own repository, not on the one this window shows — the
+ * entries stuck on 26 October 2026 belonged to another one.
+ */
+export async function handleRejected(entryId?: string): Promise<void> {
+  const session = currentSession()
+  if (!session) return
+
+  const refused = rejectedEntries(session.state())
+  const entry = refused.find((candidate) => candidate.id === entryId) ?? (await pickRejected(refused))
+  if (!entry) return
+
+  const reason = describeRejection(entry, projectOf(entry))
+  const action = await vscode.window.showQuickPick(
+    [
+      { label: 'Auf anderes Projekt verschieben', detail: 'und gleich senden', action: 'move' as const },
+      { label: 'Erneut versuchen', detail: 'dieselben Angaben noch einmal senden', action: 'retry' as const },
+      { label: 'Verwerfen', detail: 'nur hier — für Zeit, die schon in ProSonata steht', action: 'drop' as const },
+    ],
+    { title: `ProSonata: ${entry.text || entry.scope.branch} — ${reason}` },
+  )
+  if (!action) return
+
+  try {
+    if (action.action === 'retry') await session.retryRejected(entry.id)
+    if (action.action === 'move') await moveToProject(session, entry)
+    if (action.action === 'drop') {
+      const running = session.state().timers.some((timer) => timer.entryId === entry.id && timer.startedAt !== null)
+      const confirmed = await vscode.window.showWarningMessage(
+        `„${entry.text || entry.scope.branch}" verwerfen? ProSonata bleibt unberührt.${running ? ' Der laufende Timer geht mit.' : ''}`,
+        { modal: true },
+        'Verwerfen',
+      )
+      if (confirmed === 'Verwerfen') session.discardRejected(entry.id)
+    }
+  } catch (error) {
+    void vscode.window.showWarningMessage(`ProSonata: ${(error as Error).message}`)
+  }
+  reload()
+}
+
+async function pickRejected(refused: TimeEntry[]): Promise<TimeEntry | undefined> {
+  if (refused.length === 0) {
+    void vscode.window.showInformationMessage('ProSonata hat keinen Eintrag abgelehnt.')
+    return undefined
+  }
+  const picked = await vscode.window.showQuickPick(
+    refused.map((entry) => ({
+      label: entry.text || '(ohne Text)',
+      description: `${basename(entry.scope.repoPath)}/${entry.scope.branch}`,
+      detail: describeRejection(entry, projectOf(entry)),
+      entry,
+    })),
+    { title: 'ProSonata: abgelehnte Einträge' },
+  )
+  return picked?.entry
+}
+
+/** The repository's own projects first, the one that refused left out. */
+async function moveToProject(session: Session, entry: TimeEntry): Promise<void> {
+  const repoPath = entry.scope.repoPath
+  const known = new Set(readRepoConfig(repoPath).projects.map((project) => project.id))
+  const projects = (await session.api.listProjects()).filter((project) => project.projectID !== entry.projectId)
+  const picked = await vscode.window.showQuickPick(
+    [...projects.filter((p) => known.has(p.projectID)), ...projects.filter((p) => !known.has(p.projectID))].map((project) => ({
+      label: project.projectName,
+      description: project.projectNo,
+      detail: project.customerName,
+      project,
+    })),
+    { title: 'ProSonata: auf welches Projekt?', matchOnDescription: true, matchOnDetail: true },
+  )
+  if (!picked) return
+
+  const { project } = picked
+  if ((readRepoConfig(repoPath).categories.get(project.projectID) ?? 0) <= 0) {
+    const repo = describeRepo(repoPath)
+    if (repo) await chooseCategory(session, repo, project)
+  }
+  const categoryId = readRepoConfig(repoPath).categories.get(project.projectID) ?? 0
+  if (categoryId <= 0) return
+
+  await session.moveRejected(entry.id, { id: project.projectID, name: project.projectName, no: project.projectNo }, categoryId)
+}
+
+function projectOf(entry: TimeEntry): RepoProject | undefined {
+  return readRepoConfig(entry.scope.repoPath).projects.find((project) => project.id === entry.projectId)
 }
 
 /**

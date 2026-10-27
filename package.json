@@ -97,6 +97,11 @@
         "category": "ProSonata"
       },
       {
+        "command": "prosonata.handleRejected",
+        "title": "Abgelehnten Eintrag behandeln",
+        "category": "ProSonata"
+      },
+      {
         "command": "prosonata.adjust",
         "title": "Zeit korrigieren",
         "icon": "$(edit)",

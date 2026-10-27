@@ -15,7 +15,8 @@ import { dirname } from 'node:path'
 
 export interface JournalLine {
   at: string
-  kind: 'segment' | 'commit' | 'sent' | 'note'
+  /** `discarded`: dropped by hand, so recovery must not bring it back. */
+  kind: 'segment' | 'commit' | 'sent' | 'discarded' | 'note'
   entryId: string
   key?: string
   projectId?: number
@@ -62,10 +63,14 @@ export class Journal {
    * recovery re-queues after `state.json` was lost.
    */
   unsent(): JournalLine[] {
-    const sent = new Set(this.read().filter((line) => line.kind === 'sent').map((line) => line.entryId))
+    const sent = new Set(
+      this.read()
+        .filter((line) => line.kind === 'sent' || line.kind === 'discarded')
+        .map((line) => line.entryId),
+    )
     const seen = new Map<string, JournalLine>()
     for (const line of this.read()) {
-      if (line.kind === 'sent' || line.kind === 'note') continue
+      if (line.kind === 'sent' || line.kind === 'discarded' || line.kind === 'note') continue
       if (sent.has(line.entryId)) continue
       seen.set(line.entryId, line)
     }
