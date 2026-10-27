@@ -6,6 +6,13 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Geändert
+
+- **Wiederholte Fehler landen einmal im Journal.** Ein Key, der nicht mehr
+  gilt, oder ein Fehler ohne HTTP-Status wurde bisher bei jedem Versuch notiert,
+  also alle 30 Sekunden. Jetzt steht er einmal je Eintrag da, mit Aufruf und
+  Status, und erst nach einem erfolgreichen Versand wieder.
+
 ## [0.23.0] — 2026-10-27
 
 ### Hinzugefügt

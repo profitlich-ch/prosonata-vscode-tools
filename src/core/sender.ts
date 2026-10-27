@@ -85,6 +85,13 @@ export interface SendDeps {
    * second writer, and for the tests.
    */
   claimCreate?: (entryId: string) => (() => void) | null
+  /**
+   * Whether this failure is news for this entry. A key that no longer works is
+   * refused at every round, every thirty seconds, and the journal filled with
+   * the same line all day. Left out, every failure is noted — for a single run,
+   * where nothing repeats, and for the tests.
+   */
+  firstNote?: (entryId: string, message: string) => boolean
 }
 
 /** Entry ids whose write is due now. */
@@ -232,7 +239,9 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       // Transient failures simply wait for the next event; anything else is
       // reported but also kept, because dropping it would lose time.
       if (!(error instanceof ApiError) || !error.transient) {
-        journal.append({ kind: 'note', entryId, message: (error as Error).message })
+        const message =
+          error instanceof ApiError && error.call ? `${error.call} → ${error.status}: ${error.message}` : (error as Error).message
+        if (deps.firstNote?.(entryId, message) ?? true) journal.append({ kind: 'note', entryId, message })
       }
       // The quota is spent. Every further entry this round would earn the same
       // answer, so the rest waits rather than burning calls on refusals.

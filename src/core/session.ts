@@ -1028,6 +1028,20 @@ export class Session {
     this.store.update((state) => keepResting(state, entryId, this.clock.now()))
   }
 
+  /**
+   * The last failure noted per entry, so the journal hears of each one once.
+   * In memory, not in `state.json`: it says what this process has already
+   * written, and a new process — the next hook, a restarted window — may well
+   * say it once more. That is one line, not one every thirty seconds.
+   */
+  private readonly notes = new Map<string, string>()
+
+  firstNote = (entryId: string, message: string): boolean => {
+    if (this.notes.get(entryId) === message) return false
+    this.notes.set(entryId, message)
+    return true
+  }
+
   /** Sends everything that is due (KONZEPT.md §4). */
   async flush(force = false): Promise<SendResult> {
     /*
@@ -1050,6 +1064,8 @@ export class Session {
       this.store.update((current) => applySend(current, before, after, result))
     }
     this.lastTrouble = describeTrouble(result)
+    // Through at last: should the same failure come back later, it is news again.
+    for (const entryId of result.sent) this.notes.delete(entryId)
     return result
   }
 

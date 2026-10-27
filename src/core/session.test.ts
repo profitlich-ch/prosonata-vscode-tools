@@ -1138,3 +1138,47 @@ describe('an open entry whose branch is done', () => {
     expect(session.journal.read().at(-1)).toMatchObject({ kind: 'discarded', entryId: 'geloescht' })
   })
 })
+
+/*
+ * A key that no longer works is refused at every round. The journal used to get
+ * the same line every thirty seconds; now it hears of each failure once (#2).
+ */
+describe('the journal and a failure that repeats', () => {
+  it('notes it once, with the call and the answer, and again only after a send went through', async () => {
+    const api = new FakeApi()
+    const session = sessionWith(api)
+    session.store.update((state) => ({
+      ...state,
+      entries: [
+        {
+          id: 'e1',
+          key: 'a3f9c1',
+          scope,
+          projectId: 166,
+          categoryId: 70,
+          text: 'Buchungsmodul',
+          seconds: 3600,
+          foreignSeconds: 0,
+          lastWritten: null,
+          timeId: null,
+          state: 'open',
+        },
+      ],
+      pending: [{ entryId: 'e1', since: NINE, closing: false }],
+    }))
+    const refused = () => new ApiError(403, 'Forbidden', undefined, 'POST /projecttimes')
+    const notes = () => session.journal.read().filter((line) => line.kind === 'note')
+
+    api.failNext = refused()
+    await session.flush(true)
+    api.failNext = refused()
+    await session.flush(true)
+    expect(notes().map((line) => line.message)).toEqual(['POST /projecttimes → 403: Forbidden'])
+
+    await session.flush(true)
+    session.store.update((state) => ({ ...state, pending: [{ entryId: 'e1', since: NINE, closing: false }] }))
+    api.failNext = refused()
+    await session.flush(true)
+    expect(notes()).toHaveLength(2)
+  })
+})

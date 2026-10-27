@@ -891,7 +891,10 @@ Branches verwaist sind.
 - Bei vorübergehenden Fehlern – keine Verbindung, 5xx, 429 – bleibt der Schreibzugriff
   ausstehend und wird beim nächsten Ereignis erneut versucht. 401 und 403 ebenso: Sie betreffen
   Key und Rechte, also jeden Schreibzugriff gleich, und werden als solche gemeldet, nicht
-  verschluckt. Lehnt ProSonata dagegen **den Eintrag** ab (jeder andere 4xx), wird er angehalten –
+  verschluckt. Ins Journal kommt ein solcher Fehler **einmal je Eintrag**, mit Aufruf und Status,
+  und erst nach einem erfolgreichen Versand wieder; vorher stand dort alle 30 Sekunden dieselbe
+  Zeile. Was schon notiert ist, weiss nur der laufende Prozess – ein neuer, etwa der nächste Hook,
+  notiert es höchstens ein weiteres Mal. Lehnt ProSonata dagegen **den Eintrag** ab (jeder andere 4xx), wird er angehalten –
   unten.
 - Am selben Zeitgeber hängt `git fetch --prune`, um geschlossene Pull Requests zu bemerken
   (Abschnitt 3) – aber deutlich seltener, etwa stündlich, und nur solange es überhaupt einen
