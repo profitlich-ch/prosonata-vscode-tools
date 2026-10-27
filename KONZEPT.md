@@ -503,7 +503,7 @@ sind nur Vorschläge, keines schliesst von selbst ab.
 | Branch ist gemergt | `git merge-base --is-ancestor <branch> <hauptbranch>`, und der Branch hat sich seit seiner Anlage bewegt |
 | **Remote-Branch verschwunden** | `git fetch --prune`, danach fehlt `refs/remotes/origin/<branch>` |
 | **Lokaler Branch gelöscht** | Ref existiert nicht mehr, Zeiteintrag aber schon |
-| Zeiteintrag ruht | Seit längerem keine neue Zeit und kein Commit *(noch nicht gebaut)* |
+| **Zeiteintrag ruht** | Seit `restingDays` Tagen (Vorgabe 14) keine neue Zeit und kein Commit |
 
 **Gemergt und gelöscht werden für jeden offenen Branch-Eintrag des Repositories geprüft**, nicht
 nur für den Branch, auf dem man steht – alle 30 Sekunden im Arbeitstakt der Extension, ohne
@@ -540,6 +540,37 @@ ist ein Netzzugriff auf das Git-Remote, kein API-Call an ProSonata.
 Das vierte Signal fängt den Rest: Branches, die nie gemergt und nie gelöscht werden. Offene
 Zeiteinträge sind ausserdem jederzeit in der Oberfläche sichtbar, mit ihrem Alter – wer sie
 übersieht, sieht spätestens das `[LAUFEND]` in ProSonata.
+
+**Ruhend heisst:** offen, mit etwas abzurechnen – Zeit oder eine Zeile in ProSonata –, kein
+laufender Timer, und seit `restingDays` Tagen keine neue Zeit. Gemessen wird am Feld
+`lastActivity` (Abschnitt 7), das jede Buchung eines Segments setzt, also jede Pause, jeder
+Commit, jeder Branch-Wechsel. Das Segmentprotokoll gäbe dasselbe her, ist aber ein Archiv, das
+nur wächst; es bei jedem Blick zu lesen, wäre der teurere Weg. Einträge aus der Zeit vor dem Feld
+zählen ab dem ersten Blick – im schlimmsten Fall kommt der Vorschlag eine Frist zu spät.
+Abgelehnte und anderswo abgeschlossene Einträge haben ihre eigene Frage und bleiben aussen vor.
+
+**Die Schwelle von 14 Tagen** stützt sich auf die ersten drei Wochen des Segmentprotokolls: Zwischen
+zwei Arbeitsstücken am selben Branch lag nie mehr als ein Tag. Das Signal ist ein Sicherheitsnetz,
+keine Alltagswarnung; vierzehn Tage fangen das Vergessene, ohne Ferien oder das Warten auf eine
+Antwort der Kundschaft zu melden.
+
+**Geprüft wird in jedem Repository**, nicht nur im offenen: Vergessen wird gerade, was in einem
+Repository liegt, das man nicht vor sich hat. Das Panel zeigt «Ruht seit N Tagen», mit
+Repository und Branch, falls es nicht der aktuelle ist; `prosonata status` und
+`prosonata resting` ebenso. Ein Eintrag erscheint nur in einer Zeile – ein fertiger Branch sagt
+mehr als ein ruhender, beide mehr als «offen». Zur Wahl stehen:
+
+- *Abschliessen* – wie jeder Abschluss, mit endgültigem Text.
+- *Behalten* – der Branch geht weiter. Die Antwort steht als `restingKeptAt` im Zustand, damit
+  alle Fenster sie kennen, und zählt wie Arbeit: Gefragt wird erst wieder, wenn der Eintrag seit
+  ihr ebenso lange ruht.
+- *Verwerfen* – nur lokal, wie bei abgelehnten Einträgen (Abschnitt 4), für Zeit, die schon
+  anders in ProSonata steht.
+
+**Grenze:** `lastActivity` kennt nur die Arbeit dieses Rechners. Wird ein Branch zu Hause
+weitergeführt, ruht er im Büro trotzdem, sobald dort vierzehn Tage nichts geschah. Ein Abschluss
+im Büro parkte dann zu Hause die laufende Zeit (*Mehrere Rechner*); «Behalten» ist dort die
+richtige Antwort.
 
 ### Fakturierte Zeiteinträge
 
@@ -1233,6 +1264,8 @@ Ein Zeiteintrag trägt:
 | `state` | `"open"` oder `"closed"` – die einzigen beiden Zustände im Code |
 | `awaitingDecision` | gesetzt, wenn ein anderer Rechner den Eintrag abgeschlossen hat: nichts wird geschrieben, bis jemand antwortet |
 | `remoteFinalSeconds` | was ProSonata in jenem Moment hielt – daraus ergibt sich, was von der hiesigen Zeit noch nicht drüben steht |
+| `lastActivity` | Ende des letzten Segments, das auf diesem Rechner in den Eintrag ging – daran erkennt das Werkzeug einen ruhenden Eintrag (Abschnitt 3, *Abschluss*) |
+| `restingKeptAt` | Zeitpunkt der Antwort «Behalten» auf einen ruhenden Eintrag |
 | `rejected` | gesetzt, wenn ProSonata den letzten Schreibzugriff abgelehnt hat: Aufruf, Status, Meldung und – falls das die Ursache ist – `project: "deleted"` oder `"closed"`. Nichts wird geschrieben, bis jemand entscheidet (Abschnitt 4) |
 
 Die Statusleiste rendert eine **Liste** laufender Timer, kein Singleton – parallele Timer sind
@@ -1351,7 +1384,7 @@ der npm-bin-Pfad liegt in `$PATH` meist vor `/bin`; ein global installiertes `ps
 Fremdnutzern `ps aux` brechen. Ein kurzer Alias ist optional.
 
 Befehle: `init`, `start`, `pause`, `status`, `send`, `project`, `category`, `grid`, `mode`,
-`close`, `text`, `discard`, `attach`, `resume`, `rejected`, `log`, `adjust` – die verbindliche Liste steht
+`close`, `text`, `discard`, `attach`, `resume`, `rejected`, `resting`, `log`, `adjust` – die verbindliche Liste steht
 in `prosonata help`. Kein `end` – ein Timer kennt kein Beenden.
 
 Damit ist die CLI zugleich die Schnittstelle für einen **Coding-Agenten**: Wer Shell-Zugriff hat,
@@ -1900,8 +1933,9 @@ Nicht erneut vorschlagen:
    verworfen. Wäre eindeutig statt indirekt, bindet das Werkzeug aber an einen Hoster und
    braucht einen Token. Hervorholen, falls das Prune-Signal (Abschnitt 3) in der Praxis nicht
    trägt – etwa weil Branches nach dem Merge nicht gelöscht werden.
-3. **Schwellwerte der Warnungen** (Abschnitt 3) und des Signals „Zeiteintrag ruht" – aus der
-   Praxis festzulegen, nicht vorab zu erfinden.
+3. **Schwellwerte der Warnungen** (Abschnitt 3) – aus der Praxis festzulegen, nicht vorab zu
+   erfinden. Für „Zeiteintrag ruht" ist das geschehen: 14 Tage, begründet in Abschnitt 3,
+   *Abschluss*. Das Protokoll umfasste dafür erst drei Wochen; mit mehr Daten nachprüfen.
 4. **Gleichzeitiges Buchen von zwei Rechnern derselben Person auf denselben Branch** ist nicht
    abgedeckt. Im Tagesmodus gehört der Tageswechsel dazu (Abschnitt 3). Die Regel „fremd + eigen" setzt voraus, dass immer nur einer schreibt. Laufen
    zwei Timer parallel, überholen sich die Schreibzugriffe und der Wert ist zeitweise zu
@@ -1933,7 +1967,6 @@ das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnit
 | Was | Abschnitt |
 |---|---|
 | Angebot, nach einem Commit ohne Timer die Zeit nachzutragen | 3, *Wirkung eines Commits* |
-| Abschlussvorschlag aus „Zeiteintrag ruht" | 3, *Abschluss* |
 | Zusammenführen zurückgerollter, bereits gesendeter Zeiteinträge | 3, *Zurückgerollte Commits* |
 | Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
 | Rechnerfächer in `apiComments`, samt Rechnerkennung | 7 und 12 |
@@ -1942,8 +1975,8 @@ das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnit
 | `post-merge`-Hook, damit ein Merge-Commit den Eintrag abschliesst | 8, *Hook* |
 | Endgültigen Text über die zurückliegenden Tage nachziehen | 3, *pro Branch und Tag* |
 
-Gebaut sind dagegen drei der vier Abschlusssignale: gemergter Branch, verschwundene Remote-Ref
-und gelöschter lokaler Branch.
+Gebaut sind dagegen alle vier Abschlusssignale: gemergter Branch, verschwundene Remote-Ref,
+gelöschter lokaler Branch und ruhender Zeiteintrag.
 
 ## Umsetzungsreihenfolge
 

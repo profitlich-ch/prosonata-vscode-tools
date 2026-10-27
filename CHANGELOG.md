@@ -6,6 +6,19 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+### Hinzugefügt
+
+- **Ruhende Einträge werden erkannt.** Ein offener Eintrag, in den seit 14
+  Tagen keine Zeit mehr ging, erscheint im Panel als «Ruht seit N Tagen» und in
+  `prosonata status` — aus jedem Repository, nicht nur dem offenen. Zur Wahl
+  stehen Abschliessen, Behalten (erst nach weiteren 14 Tagen ohne Zeit wieder
+  fragen) und Verwerfen (nur lokal); im Terminal mit
+  `prosonata resting <Nr> close|keep|drop`. Die Frist lässt sich mit
+  `restingDays` in `~/.prosonata/config.json` ändern. Damit ist das vierte
+  Abschlusssignal aus dem Konzept gebaut.
+
+  Einträge aus der Zeit vor dieser Version zählen ab dem ersten Blick.
+
 ## [0.22.0] — 2026-10-27
 
 ### Hinzugefügt

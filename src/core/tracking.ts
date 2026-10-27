@@ -859,6 +859,53 @@ export function dropPausedTimer(state: State, entryId: string): State {
   return next
 }
 
+/**
+ * Open entries no time has gone into for `days`, across every repository
+ * (KONZEPT.md §3, *Abschluss*). Only entries with something to bill — time, or
+ * a line in ProSonata — and none a timer is running into. Refused and parked
+ * entries have their own question and are left out.
+ *
+ * «Keep» counts like work: the entry is called resting again only once it has
+ * rested as long since the answer.
+ */
+export function restingEntries(state: State, now: number, days: number): TimeEntry[] {
+  const limit = days * 24 * 3600 * 1000
+  return state.entries.filter(
+    (entry) =>
+      entry.state === 'open' &&
+      entry.lastActivity !== undefined &&
+      !entry.rejected &&
+      !entry.awaitingDecision &&
+      (entry.seconds + entry.foreignSeconds > 0 || entry.timeId !== null) &&
+      !state.timers.some((timer) => timer.entryId === entry.id && timer.startedAt !== null) &&
+      now - Math.max(entry.lastActivity, entry.restingKeptAt ?? 0) >= limit,
+  )
+}
+
+/** The answer «keep» to a resting entry. */
+export function keepResting(state: State, entryId: string, at: number): State {
+  const next = structuredClone(state)
+  const entry = findEntry(next, entryId)
+  if (!entry) return state
+  entry.restingKeptAt = at
+  return next
+}
+
+/**
+ * Gives open entries from before `lastActivity` existed a starting point: now.
+ * Their real last segment may lie further back, but guessing it from the segment
+ * log would mean reading an archive that only grows; counting from the first
+ * look costs at most one extra period of waiting.
+ */
+export function stampActivity(state: State, at: number): State {
+  if (!state.entries.some((entry) => entry.state === 'open' && entry.lastActivity === undefined)) return state
+  const next = structuredClone(state)
+  for (const entry of next.entries) {
+    if (entry.state === 'open' && entry.lastActivity === undefined) entry.lastActivity = at
+  }
+  return next
+}
+
 /** Entries ProSonata refused, across every repository (KONZEPT.md §4). */
 export function rejectedEntries(state: State): TimeEntry[] {
   return state.entries.filter((entry) => entry.rejected !== undefined)
@@ -948,7 +995,10 @@ function bookSegment(state: State, entryId: string, from: number, until: number)
   if (seconds <= 0) return 0
 
   const entry = findEntry(state, entryId)
-  if (entry) entry.seconds += seconds
+  if (entry) {
+    entry.seconds += seconds
+    entry.lastActivity = until
+  }
   return seconds
 }
 

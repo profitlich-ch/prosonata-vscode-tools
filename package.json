@@ -102,6 +102,11 @@
         "category": "ProSonata"
       },
       {
+        "command": "prosonata.handleResting",
+        "title": "Ruhenden Eintrag behandeln",
+        "category": "ProSonata"
+      },
+      {
         "command": "prosonata.adjust",
         "title": "Zeit korrigieren",
         "icon": "$(edit)",

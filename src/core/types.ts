@@ -66,6 +66,19 @@ export interface TimeEntry {
    */
   rejected?: Rejection
   /**
+   * Epoch milliseconds when time was last booked into this entry on this
+   * machine — the end of its last segment. What tells a resting entry from one
+   * in use (KONZEPT.md §3, *Abschluss*). Entries older than the field get it at
+   * the first look, so they count from then.
+   */
+  lastActivity?: number
+  /**
+   * Epoch milliseconds of the answer «keep» to a resting entry. It silences the
+   * suggestion until the entry has rested as long again; kept in the state so
+   * every window hears the answer.
+   */
+  restingKeptAt?: number
+  /**
    * Epoch milliseconds since some actor began creating this entry in ProSonata.
    *
    * A `POST` creates, so unlike a `PUT` with an absolute sum it cannot simply be

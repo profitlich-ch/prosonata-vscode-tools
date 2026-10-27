@@ -59,6 +59,8 @@ const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
   prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
   prosonata rejected [Nr retry|move|drop]
                                     abgelehnte Einträge: erneut senden, auf anderes Projekt, verwerfen
+  prosonata resting [Nr close|keep|drop]
+                                    seit Wochen ruhende Einträge: abschliessen, behalten, verwerfen
   prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
   prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 
@@ -103,6 +105,8 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await resume(cwd, argument)
       case 'rejected':
         return await rejected(argument)
+      case 'resting':
+        return await resting(argument)
       case 'log':
         return log(cwd, argument)
       case 'adjust':
@@ -544,6 +548,15 @@ async function status(cwd: string): Promise<number> {
   }
   // Every repository's, not only this one: on 26 October 2026 the stuck entries
   // belonged to another repository, and nothing here would have shown them.
+  const resting = session.restingEntries()
+  if (resting.length > 0) {
+    process.stdout.write(`  ruhend seit ${session.config.restingDays} Tagen oder länger: ${resting.length} — "prosonata resting <Nr> close|keep|drop"\n`)
+    for (const quiet of resting) {
+      process.stdout.write(
+        `    ${quiet.id.slice(0, 8)}  ${basename(quiet.scope.repoPath)}/${quiet.scope.branch}  ${quiet.text || '(ohne Text)'}  ${format(quiet.foreignSeconds + quiet.seconds)}\n`,
+      )
+    }
+  }
   const refused = rejectedEntries(state)
   if (refused.length > 0) {
     process.stdout.write(`  von ProSonata abgelehnt: ${refused.length} — "prosonata rejected <Nr> retry|move|drop"\n`)
@@ -635,12 +648,77 @@ async function rejected(argument: string): Promise<number> {
         process.stdout.write('nichts verworfen\n')
         return 1
       }
-      session.discardRejected(entry.id)
+      session.discardLocally(entry.id)
       process.stdout.write('verworfen\n')
       return 0
     }
     default:
       process.stderr.write(`was soll mit ${ref} geschehen? retry, move oder drop\n`)
+      return 2
+  }
+}
+
+/**
+ * Open entries that have rested for `restingDays` (KONZEPT.md §3, *Abschluss*):
+ * close, keep for another period, or discard. Works from any directory, like
+ * `rejected` — what is forgotten lies in a repository one is not in.
+ */
+async function resting(argument: string): Promise<number> {
+  const session = Session.open()
+  const quiet = session.restingEntries()
+  const [ref, action, ...rest] = argument.split(/\s+/).filter((part) => part !== '')
+
+  if (!ref) {
+    if (quiet.length === 0) {
+      process.stdout.write(`kein Eintrag ruht seit ${session.config.restingDays} Tagen\n`)
+      return 0
+    }
+    for (const entry of quiet) {
+      process.stdout.write(
+        `  ${entry.id.slice(0, 8)}  ${basename(entry.scope.repoPath)}/${entry.scope.branch}  ${entry.text || '(ohne Text)'}  ${format(entry.foreignSeconds + entry.seconds)}\n`,
+      )
+    }
+    process.stdout.write('\n  "prosonata resting <Nr> close [Text]"  abschliessen und senden\n')
+    process.stdout.write(`  "prosonata resting <Nr> keep"          behalten — in ${session.config.restingDays} Tagen wieder fragen\n`)
+    process.stdout.write('  "prosonata resting <Nr> drop"          verwerfen — die Zeit steht schon anders in ProSonata\n')
+    return 0
+  }
+
+  const matches = quiet.filter((entry) => entry.id.startsWith(ref))
+  const entry = matches[0]
+  if (!entry || matches.length > 1) {
+    process.stderr.write(`${matches.length > 1 ? 'mehrdeutig' : 'kein ruhender Eintrag'}: ${ref} — "prosonata resting" listet sie\n`)
+    return 2
+  }
+
+  switch (action) {
+    case 'close': {
+      const given = rest.join(' ').trim()
+      const text = given !== '' ? given : (await ask(`Endgültiger Text${entry.text ? ` [${entry.text}]` : ''}: `)) || entry.text
+      if (text === '') {
+        process.stderr.write('ein Eintrag ohne Text wird nie gesendet — nichts getan\n')
+        return 1
+      }
+      session.closeEntry(entry.id, text)
+      process.stdout.write(`abgeschlossen: ${text}\n`)
+      return report(await session.flush(true))
+    }
+    case 'keep':
+      session.keepResting(entry.id)
+      process.stdout.write(`behalten — gefragt wird wieder in ${session.config.restingDays} Tagen ohne neue Zeit\n`)
+      return 0
+    case 'drop': {
+      const answer = await ask(`${entry.text || '(ohne Text)'} verwerfen? Nur hier, ProSonata bleibt unberührt [j/N] `)
+      if (answer.toLowerCase() !== 'j') {
+        process.stdout.write('nichts verworfen\n')
+        return 1
+      }
+      session.discardLocally(entry.id)
+      process.stdout.write('verworfen\n')
+      return 0
+    }
+    default:
+      process.stderr.write(`was soll mit ${ref} geschehen? close, keep oder drop\n`)
       return 2
   }
 }

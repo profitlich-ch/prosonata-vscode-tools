@@ -12,12 +12,15 @@ import {
   dropPausedTimer,
   entriesToMove,
   keepFromRunning,
+  keepResting,
   lastClosedEntry,
   moveEntries,
   openBranchEntries,
   openEntriesIn,
   moveToClosed,
+  restingEntries,
   retryEntry,
+  stampActivity,
   openEntry,
   runningSeconds,
   parkClosedElsewhere,
@@ -1178,5 +1181,68 @@ describe('switching projects and finished branches', () => {
 
     expect(dropPausedTimer(paused, 'a').timers).toEqual([])
     expect(dropPausedTimer(running, 'a').timers).toHaveLength(1)
+  })
+})
+
+/*
+ * Open for weeks with no new time: the signal that catches what neither a merge
+ * nor a deleted branch reveals (KONZEPT.md §3, *Abschluss*).
+ */
+describe('a resting entry', () => {
+  const DAY = 24 * 3600 * 1000
+
+  it('remembers when time last went in', () => {
+    const clock = fixedClock(NINE)
+    let state = startOn(emptyState(), clock)
+    clock.advance(3600)
+    state = pause(state, clock, scope)
+
+    expect(openEntry(state, scope)?.lastActivity).toBe(NINE + 3600 * 1000)
+  })
+
+  it('is called resting once it has had no time for the given days, not a day earlier', () => {
+    const state = stateOf(entryOf('a', { lastActivity: NINE }))
+
+    expect(restingEntries(state, NINE + 13 * DAY, 14)).toEqual([])
+    expect(restingEntries(state, NINE + 14 * DAY, 14).map((entry) => entry.id)).toEqual(['a'])
+  })
+
+  it('is not resting while a timer runs into it, or when it holds nothing to bill', () => {
+    const running: State = {
+      ...stateOf(entryOf('a', { lastActivity: NINE })),
+      timers: [{ id: 't', origin: 'local', remoteTimerId: null, scope, startedAt: NINE, entryId: 'a' }],
+    }
+    const empty = stateOf(entryOf('b', { lastActivity: NINE, seconds: 0 }))
+    const known = stateOf(entryOf('c', { lastActivity: NINE, seconds: 0, timeId: 2866 }))
+
+    expect(restingEntries(running, NINE + 30 * DAY, 14)).toEqual([])
+    expect(restingEntries(empty, NINE + 30 * DAY, 14)).toEqual([])
+    // A line in ProSonata is something to bill, even with nothing measured here.
+    expect(restingEntries(known, NINE + 30 * DAY, 14).map((entry) => entry.id)).toEqual(['c'])
+  })
+
+  it('leaves refused and parked entries to their own question', () => {
+    const refused = { at: NINE, call: 'POST /projecttimes', status: 409, message: 'x' }
+    const state = stateOf(
+      entryOf('a', { lastActivity: NINE, rejected: refused }),
+      entryOf('b', { lastActivity: NINE, awaitingDecision: true }),
+    )
+
+    expect(restingEntries(state, NINE + 30 * DAY, 14)).toEqual([])
+  })
+
+  it('stays silent after «keep» until it has rested as long again', () => {
+    const kept = keepResting(stateOf(entryOf('a', { lastActivity: NINE })), 'a', NINE + 20 * DAY)
+
+    expect(restingEntries(kept, NINE + 33 * DAY, 14)).toEqual([])
+    expect(restingEntries(kept, NINE + 34 * DAY, 14).map((entry) => entry.id)).toEqual(['a'])
+  })
+
+  it('gives open entries from before the field a starting point, and leaves the rest alone', () => {
+    const state = stateOf(entryOf('a'), entryOf('b', { lastActivity: NINE }), entryOf('c', { state: 'closed' }))
+
+    const stamped = stampActivity(state, NINE + DAY)
+
+    expect(stamped.entries.map((entry) => entry.lastActivity)).toEqual([NINE + DAY, NINE, undefined])
   })
 })

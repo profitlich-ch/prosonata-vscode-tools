@@ -63,6 +63,13 @@ export interface Config {
    * then it would be worse than none.
    */
   askOnNewBranch: boolean
+  /**
+   * Days an open entry may go without new time before it is called resting and
+   * its closing is suggested (KONZEPT.md §3, *Abschluss*). A safety net, not an
+   * everyday warning: in the first three weeks of the segment log no branch
+   * paused longer than a day between two stretches of work.
+   */
+  restingDays: number
 }
 
 export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
@@ -76,6 +83,7 @@ export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
   pauseOnWindowClose: true,
   sleepGapSeconds: 5 * 60,
   askOnNewBranch: true,
+  restingDays: 14,
 }
 
 export function stateDir(): string {

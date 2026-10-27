@@ -11,6 +11,7 @@ import {
   openEntriesIn,
   openEntry,
   rejectedEntries,
+  restingEntries,
   runningSeconds,
   sameScope,
   unwrittenSeconds,
@@ -210,11 +211,17 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     }
     const finishedIds = new Set(finished.map(({ entry: done }) => done.id))
 
+    // Each entry in one row only: a finished branch says more than a resting one,
+    // and both say more than «open».
+    const now = session.clock.now()
+    const resting = restingEntries(state, now, session.config.restingDays).filter((entry) => !finishedIds.has(entry.id))
+    const restingIds = new Set(resting.map((entry) => entry.id))
+
     // Only this working directory: an open entry of another project is none of
     // this panel's business, and the label `Offen · <branch>` would read like a
     // branch of the repository one is looking at.
     for (const open of openEntriesIn(state, context.scope.repoPath).filter(
-      (candidate) => candidate.text !== '' && !finishedIds.has(candidate.id),
+      (candidate) => candidate.text !== '' && !finishedIds.has(candidate.id) && !restingIds.has(candidate.id),
     )) {
       rows.push(
         new PanelRow(
@@ -277,6 +284,25 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
           `${refused.text ? `${refused.text} — ` : ''}${describeRejection(refused, project)}`,
           'error',
           { command: 'prosonata.handleRejected', title: 'Abgelehnten Eintrag behandeln', arguments: [refused.id] },
+        ),
+      )
+    }
+
+    /*
+     * Open for weeks with no new time, from every repository: what is forgotten
+     * lies in a repository one does not have open (KONZEPT.md §3, *Abschluss*).
+     * Read from the snapshot alone — the panel never writes.
+     */
+    for (const quiet of resting) {
+      const since = Math.max(quiet.lastActivity ?? now, quiet.restingKeptAt ?? 0)
+      const days = Math.floor((now - since) / (24 * 3600 * 1000))
+      const here = sameScope(quiet.scope, context.scope)
+      rows.push(
+        new PanelRow(
+          here ? `Ruht seit ${days} Tagen` : `Ruht seit ${days} Tagen · ${basename(quiet.scope.repoPath)}/${quiet.scope.branch}`,
+          `${quiet.text || '(ohne Text)'} · ${billedTime(quiet.foreignSeconds + quiet.seconds, grid)} h — abschliessen?`,
+          'watch',
+          { command: 'prosonata.handleResting', title: 'Ruhenden Eintrag behandeln', arguments: [quiet.id] },
         ),
       )
     }

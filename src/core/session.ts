@@ -28,6 +28,9 @@ import {
   findEntry,
   isEmptyRemainder,
   keepFromRunning,
+  keepResting,
+  restingEntries,
+  stampActivity,
   moveEntries,
   retryEntry,
   lastClosedEntry,
@@ -999,10 +1002,30 @@ export class Session {
     return this.flush(true)
   }
 
-  /** Drops a refused entry locally; ProSonata is not touched (KONZEPT.md §4). */
-  discardRejected(entryId: string): void {
+  /**
+   * Drops an entry locally — a refused or a resting one whose time already
+   * stands in ProSonata some other way. ProSonata is not touched (KONZEPT.md §4).
+   */
+  discardLocally(entryId: string): void {
     this.store.update((state) => discardEntry(state, entryId))
     this.journal.append({ kind: 'discarded', entryId })
+  }
+
+  /**
+   * Open entries resting for `restingDays`, across every repository
+   * (KONZEPT.md §3, *Abschluss*). Gives entries from before `lastActivity` their
+   * starting point first, which is why this writes and the panel, redrawing
+   * every second, reads `restingEntries` on its snapshot instead.
+   */
+  restingEntries(): TimeEntry[] {
+    const now = this.clock.now()
+    const state = this.store.update((current) => stampActivity(current, now))
+    return restingEntries(state, now, this.config.restingDays)
+  }
+
+  /** The answer «keep»: silent until the entry has rested as long again. */
+  keepResting(entryId: string): void {
+    this.store.update((state) => keepResting(state, entryId, this.clock.now()))
   }
 
   /** Sends everything that is due (KONZEPT.md §4). */

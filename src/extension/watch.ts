@@ -57,6 +57,8 @@ async function workOnce(active: Session, context: RepoContext): Promise<void> {
   // and the panel redraws every second.
   active.tidyDeletedBranches(context)
   active.finished = active.finishedEntries(context)
+  // Stamps entries from before `lastActivity`; the panel reads the rest itself.
+  active.restingEntries()
   reload()
 
   try {

@@ -11,6 +11,7 @@ import {
   changeText,
   closeEntry,
   handleRejected,
+  handleResting,
   openSettings,
   resolveSleep,
   sendNow,
@@ -76,6 +77,7 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.changeText', withContext(changeText))
   register(context, 'prosonata.resolveClosedElsewhere', withContext(askAboutClosedElsewhere))
   register(context, 'prosonata.handleRejected', (entryId?: string) => handleRejected(entryId))
+  register(context, 'prosonata.handleResting', (entryId?: string) => handleResting(entryId))
   register(context, 'prosonata.attachToLast', withContext(attachToLast))
   register(context, 'prosonata.log', withRepo(showLog))
   register(context, 'prosonata.browse', withContext(browseEntries))

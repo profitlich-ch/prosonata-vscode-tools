@@ -78,10 +78,48 @@ export async function handleRejected(entryId?: string): Promise<void> {
         { modal: true },
         'Verwerfen',
       )
-      if (confirmed === 'Verwerfen') session.discardRejected(entry.id)
+      if (confirmed === 'Verwerfen') session.discardLocally(entry.id)
     }
   } catch (error) {
     void vscode.window.showWarningMessage(`ProSonata: ${(error as Error).message}`)
+  }
+  reload()
+}
+
+/**
+ * An entry that has rested for `restingDays` (KONZEPT.md §3, *Abschluss*):
+ * close it, keep it for another period, or discard it because its time stands
+ * in ProSonata some other way. Reached from its row in the panel.
+ */
+export async function handleResting(entryId?: string): Promise<void> {
+  const session = currentSession()
+  if (!session) return
+
+  const entry = session.state().entries.find((candidate) => candidate.id === entryId)
+  if (!entry) return
+
+  const action = await vscode.window.showQuickPick(
+    [
+      { label: 'Abschliessen', detail: 'endgültiger Text, dann geht die Zeile so auf die Rechnung', action: 'close' as const },
+      { label: 'Behalten', detail: `der Branch geht weiter — erst in ${session.config.restingDays} Tagen wieder fragen`, action: 'keep' as const },
+      { label: 'Verwerfen', detail: 'nur hier — für Zeit, die schon anders in ProSonata steht', action: 'drop' as const },
+    ],
+    { title: `ProSonata: ${entry.text || entry.scope.branch} ruht` },
+  )
+  if (!action) return
+
+  if (action.action === 'close') {
+    await vscode.commands.executeCommand('prosonata.closeEntry', entry.id)
+    return
+  }
+  if (action.action === 'keep') session.keepResting(entry.id)
+  if (action.action === 'drop') {
+    const confirmed = await vscode.window.showWarningMessage(
+      `„${entry.text || entry.scope.branch}" verwerfen? ProSonata bleibt unberührt.`,
+      { modal: true },
+      'Verwerfen',
+    )
+    if (confirmed === 'Verwerfen') session.discardLocally(entry.id)
   }
   reload()
 }

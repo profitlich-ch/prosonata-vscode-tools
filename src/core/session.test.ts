@@ -991,11 +991,49 @@ describe('a project deleted in ProSonata', () => {
     session.journal.append({ kind: 'segment', entryId: 'kontakt-standorte', seconds: 1377 })
     await session.flush(true)
 
-    session.discardRejected('kontakt-standorte')
+    session.discardLocally('kontakt-standorte')
 
     expect(session.state().entries).toEqual([])
     expect(session.journal.unsent()).toEqual([])
     expect(api.entries.size).toBe(0)
+  })
+})
+
+/*
+ * An entry from before `lastActivity` counts from the first look; «keep» lands in
+ * the state, where every window reads it (KONZEPT.md §3, *Abschluss*).
+ */
+describe('a resting entry, through the session', () => {
+  it('counts an old entry from the first look, and keeps quiet after «keep»', () => {
+    const session = sessionWith(new FakeApi())
+    session.store.update((state) => ({
+      ...state,
+      entries: [
+        {
+          id: 'alt',
+          key: 'a3f9c1',
+          scope,
+          projectId: 166,
+          categoryId: 70,
+          text: 'Buchungsmodul',
+          seconds: 3600,
+          foreignSeconds: 0,
+          lastWritten: null,
+          timeId: null,
+          state: 'open',
+        },
+      ],
+    }))
+    const clock = session.clock as ReturnType<typeof fixedClock>
+
+    expect(session.restingEntries()).toEqual([])
+    expect(findEntry(session.state(), 'alt')?.lastActivity).toBe(NINE)
+
+    clock.advance(14 * 24 * 3600)
+    expect(session.restingEntries().map((entry) => entry.id)).toEqual(['alt'])
+
+    session.keepResting('alt')
+    expect(session.restingEntries()).toEqual([])
   })
 })
 
