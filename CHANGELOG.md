@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.21.0] — 2026-10-27
+
 ### Hinzugefügt
 
 - **Abgelehnte Einträge werden angehalten statt endlos wiederholt.** Lehnt
