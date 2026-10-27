@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.24.0] — 2026-10-27
+
 ### Geändert
 
 - **Wiederholte Fehler landen einmal im Journal.** Ein Key, der nicht mehr
