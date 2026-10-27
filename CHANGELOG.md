@@ -6,6 +6,8 @@ Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
 
 ## [Unreleased]
 
+## [0.25.0] — 2026-10-27
+
 ### Hinzugefügt
 
 - **Leere Reste werden in allen Repositories aufgeräumt**, nicht nur im
