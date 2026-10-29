@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [0.27.0] — 2026-10-29
+
 ### Added
 
 - **`prosonata take [branch]`** and “ProSonata: Take Open Entry from Another
