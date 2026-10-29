@@ -7,6 +7,7 @@ import { paths, readConfig, type Config } from './config.js'
 import { branchExists, describeRepo, mainBranch, workMerged, type GitRepo } from './git.js'
 import { entryIsOpen, findOfBranch } from './identity.js'
 import { Journal } from './journal.js'
+import { t, template } from './l10n.js'
 import { branchKey } from './marker.js'
 import { measuredPerEntry, type MergePlan } from './merge.js'
 import { forgetProject, modeFor, readRepoConfig, rememberProject, type RepoConfig, type RepoProject } from './repo-config.js'
@@ -88,7 +89,7 @@ export interface FinishedEntry {
 
 export class NotConfigured extends Error {
   constructor(readonly repoPath: string) {
-    super(`diesem Repository ist noch kein Projekt zugeordnet — führe "prosonata init" in ${repoPath} aus`)
+    super(t('no project is assigned to this repository yet — run "prosonata init" in {0}', repoPath))
     this.name = 'NotConfigured'
   }
 }
@@ -236,7 +237,7 @@ export class Session {
     try {
       await this.sync(context)
     } catch (error) {
-      this.journal.append({ kind: 'note', entryId: '-', message: `Abgleich nicht möglich: ${(error as Error).message}` })
+      this.journal.append({ kind: 'note', entryId: '-', ...template('sync not possible: {0}', (error as Error).message) })
     }
   }
 
@@ -877,7 +878,7 @@ export class Session {
    */
   async applyMerge(plan: MergePlan, seconds: number, text: string, grid: TimeGrid): Promise<void> {
     for (const entry of plan.drop) {
-      this.journal.append({ kind: 'note', entryId: '-', message: `verdichtet: ${entry.timeID} wird gelöscht` })
+      this.journal.append({ kind: 'note', entryId: '-', ...template('compacted: {0} is being deleted', entry.timeID) })
     }
 
     await this.api.updateEntry(plan.keep.timeID, {
@@ -888,7 +889,7 @@ export class Session {
 
     for (const entry of plan.drop) {
       await this.api.deleteEntry(entry.timeID)
-      this.journal.append({ kind: 'note', entryId: '-', message: `verdichtet: ${entry.timeID} gelöscht` })
+      this.journal.append({ kind: 'note', entryId: '-', ...template('compacted: {0} deleted', entry.timeID) })
     }
   }
 
@@ -901,7 +902,7 @@ export class Session {
    * report and ProSonata do not drift apart (KONZEPT.md §3).
    */
   async correctHours(entry: RemoteEntry, seconds: number, grid: TimeGrid, context: RepoContext): Promise<void> {
-    if (entry.isInvoiced) throw new Error('der Eintrag ist bereits fakturiert')
+    if (entry.isInvoiced) throw new Error(t('the entry is already invoiced'))
 
     await this.api.updateEntry(entry.timeID, { workingTime: workingTime(seconds, grid) })
 
@@ -1018,7 +1019,7 @@ export class Session {
    */
   async moveRejected(entryId: string, target: RepoProject, categoryId: number): Promise<SendResult> {
     const entry = findEntry(this.state(), entryId)
-    if (!entry) throw new Error('diesen Eintrag gibt es nicht mehr')
+    if (!entry) throw new Error(t('this entry no longer exists'))
     const fate = entry.rejected?.project
     const repoPath = entry.scope.repoPath
     const from = entry.projectId

@@ -4,6 +4,7 @@ import * as vscode from 'vscode'
 import { describeAttachment, describePlan } from '../core/attach.js'
 import { paths } from '../core/config.js'
 import { describeRepo } from '../core/git.js'
+import { t } from '../core/l10n.js'
 import { readRepoConfig, setMode, type RepoProject } from '../core/repo-config.js'
 import { describeRejection } from '../core/sender.js'
 import type { RepoContext, Session } from '../core/session.js'
@@ -24,16 +25,17 @@ import { closedAmong, currentSession, refreshBudget, reload } from './view.js'
 export async function askAboutClosedElsewhere(session: Session, context: RepoContext): Promise<void> {
   for (const entry of awaitingDecision(session.state(), context.scope)) {
     const rest = clock(unwrittenSeconds(entry))
+    const existing = t('Add to existing entry')
     const answer = await vscode.window.showInformationMessage(
-      `ProSonata: „${entry.text || context.scope.branch}" wurde auf einem anderen Rechner abgeschlossen. Hier sind noch ${rest} angefallen.`,
+      t('ProSonata: "{0}" was closed on another machine. {1} accrued here since.', entry.text || context.scope.branch, rest),
       { modal: false },
-      'Zum bestehenden Eintrag',
-      'Neuer Eintrag',
+      existing,
+      t('New entry'),
     )
     if (answer === undefined) continue
 
     try {
-      await session.resolveClosedElsewhere(entry.id, answer === 'Zum bestehenden Eintrag' ? 'add' : 'fresh')
+      await session.resolveClosedElsewhere(entry.id, answer === existing ? 'add' : 'fresh')
     } catch (error) {
       void vscode.window.showWarningMessage(`ProSonata: ${(error as Error).message}`)
     }
@@ -60,9 +62,9 @@ export async function handleRejected(entryId?: string): Promise<void> {
   const reason = describeRejection(entry, projectOf(entry))
   const action = await vscode.window.showQuickPick(
     [
-      { label: 'Auf anderes Projekt verschieben', detail: 'und gleich senden', action: 'move' as const },
-      { label: 'Erneut versuchen', detail: 'dieselben Angaben noch einmal senden', action: 'retry' as const },
-      { label: 'Verwerfen', detail: 'nur hier — für Zeit, die schon in ProSonata steht', action: 'drop' as const },
+      { label: t('Move to another project'), detail: t('and send right away'), action: 'move' as const },
+      { label: t('Try again'), detail: t('send the same details once more'), action: 'retry' as const },
+      { label: t('Discard'), detail: t('only here — for time that is already in ProSonata'), action: 'drop' as const },
     ],
     { title: `ProSonata: ${entry.text || entry.scope.branch} — ${reason}` },
   )
@@ -73,12 +75,16 @@ export async function handleRejected(entryId?: string): Promise<void> {
     if (action.action === 'move') await moveToProject(session, entry)
     if (action.action === 'drop') {
       const running = session.state().timers.some((timer) => timer.entryId === entry.id && timer.startedAt !== null)
+      const name = entry.text || entry.scope.branch
+      const discard = t('Discard')
       const confirmed = await vscode.window.showWarningMessage(
-        `„${entry.text || entry.scope.branch}" verwerfen? ProSonata bleibt unberührt.${running ? ' Der laufende Timer geht mit.' : ''}`,
+        running
+          ? t('Discard "{0}"? ProSonata stays untouched. The running timer goes with it.', name)
+          : t('Discard "{0}"? ProSonata stays untouched.', name),
         { modal: true },
-        'Verwerfen',
+        discard,
       )
-      if (confirmed === 'Verwerfen') session.discardLocally(entry.id)
+      if (confirmed === discard) session.discardLocally(entry.id)
     }
   } catch (error) {
     void vscode.window.showWarningMessage(`ProSonata: ${(error as Error).message}`)
@@ -100,11 +106,11 @@ export async function handleResting(entryId?: string): Promise<void> {
 
   const action = await vscode.window.showQuickPick(
     [
-      { label: 'Abschliessen', detail: 'endgültiger Text, dann geht die Zeile so auf die Rechnung', action: 'close' as const },
-      { label: 'Behalten', detail: `der Branch geht weiter — erst in ${session.config.restingDays} Tagen wieder fragen`, action: 'keep' as const },
-      { label: 'Verwerfen', detail: 'nur hier — für Zeit, die schon anders in ProSonata steht', action: 'drop' as const },
+      { label: t('Close'), detail: t('final text, then the line goes on the invoice as it is'), action: 'close' as const },
+      { label: t('Keep'), detail: t('the branch goes on — ask again only in {0} days', session.config.restingDays), action: 'keep' as const },
+      { label: t('Discard'), detail: t('only here — for time that is already in ProSonata some other way'), action: 'drop' as const },
     ],
-    { title: `ProSonata: ${entry.text || entry.scope.branch} ruht` },
+    { title: t('ProSonata: {0} is dormant', entry.text || entry.scope.branch) },
   )
   if (!action) return
 
@@ -114,29 +120,30 @@ export async function handleResting(entryId?: string): Promise<void> {
   }
   if (action.action === 'keep') session.keepResting(entry.id)
   if (action.action === 'drop') {
+    const discard = t('Discard')
     const confirmed = await vscode.window.showWarningMessage(
-      `„${entry.text || entry.scope.branch}" verwerfen? ProSonata bleibt unberührt.`,
+      t('Discard "{0}"? ProSonata stays untouched.', entry.text || entry.scope.branch),
       { modal: true },
-      'Verwerfen',
+      discard,
     )
-    if (confirmed === 'Verwerfen') session.discardLocally(entry.id)
+    if (confirmed === discard) session.discardLocally(entry.id)
   }
   reload()
 }
 
 async function pickRejected(refused: TimeEntry[]): Promise<TimeEntry | undefined> {
   if (refused.length === 0) {
-    void vscode.window.showInformationMessage('ProSonata hat keinen Eintrag abgelehnt.')
+    void vscode.window.showInformationMessage(t('ProSonata has not rejected any entries.'))
     return undefined
   }
   const picked = await vscode.window.showQuickPick(
     refused.map((entry) => ({
-      label: entry.text || '(ohne Text)',
+      label: entry.text || t('(no text)'),
       description: `${basename(entry.scope.repoPath)}/${entry.scope.branch}`,
       detail: describeRejection(entry, projectOf(entry)),
       entry,
     })),
-    { title: 'ProSonata: abgelehnte Einträge' },
+    { title: t('ProSonata: rejected entries') },
   )
   return picked?.entry
 }
@@ -153,7 +160,7 @@ async function moveToProject(session: Session, entry: TimeEntry): Promise<void> 
       detail: project.customerName,
       project,
     })),
-    { title: 'ProSonata: auf welches Projekt?', matchOnDescription: true, matchOnDetail: true },
+    { title: t('ProSonata: to which project?'), matchOnDescription: true, matchOnDetail: true },
   )
   if (!picked) return
 
@@ -188,9 +195,7 @@ export async function openSettings(): Promise<void> {
   try {
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(file))
   } catch {
-    void vscode.window.showWarningMessage(
-      'ProSonata: noch keine Konfiguration vorhanden — richte das Konto zuerst ein.',
-    )
+    void vscode.window.showWarningMessage(t('ProSonata: no configuration yet — set up the account first.'))
   }
 }
 
@@ -207,14 +212,15 @@ export async function resolveSleep(): Promise<void> {
   if (!active || active.openSleepGaps().length === 0) return
 
   const slept = clock(active.sleptSeconds())
+  const subtract = t('Subtract')
   const answer = await vscode.window.showInformationMessage(
-    `ProSonata: der Rechner schlief ${slept}, während der Timer lief. Diese Zeit abziehen?`,
-    'Abziehen',
-    'Behalten',
+    t('ProSonata: the machine slept {0} while the timer was running. Subtract this time?', slept),
+    subtract,
+    t('Keep'),
   )
   if (answer === undefined) return
 
-  if (answer === 'Abziehen') {
+  if (answer === subtract) {
     /*
      * What came off, not what was asked about. Every window runs the beat and
      * notices the same sleep; another one may have answered while this dialog
@@ -223,8 +229,8 @@ export async function resolveSleep(): Promise<void> {
     const removed = active.skipSleep()
     void vscode.window.showInformationMessage(
       removed > 0
-        ? `ProSonata: ${clock(removed)} abgezogen, der Timer läuft weiter.`
-        : 'ProSonata: nichts abzuziehen — die Schlafzeit war bereits entschieden.',
+        ? t('ProSonata: {0} subtracted, the timer keeps running.', clock(removed))
+        : t('ProSonata: nothing to subtract — the sleep time was already decided.'),
     )
   } else {
     active.keepSleep()
@@ -244,19 +250,19 @@ export async function sendNow(session: Session, context: RepoContext): Promise<v
   const result = await session.flush(true)
   for (const problem of result.tooLong) {
     void vscode.window.showWarningMessage(
-      `ProSonata: der Text hat ${problem.length} Zeichen, erlaubt sind ${problem.limit}. ` +
-        'ProSonata würde ihn wortlos abschneiden, deshalb wurde nichts gesendet. Kürze ihn.',
+      t('ProSonata: the text has {0} characters, {1} are allowed. ProSonata would cut it off without a word, so nothing was sent. Shorten it.', problem.length, problem.limit),
     )
   }
   await askAboutClosedElsewhere(session, context)
   if (result.missingCategory.length > 0) {
+    const choose = t('Choose category')
     void vscode.window
       .showWarningMessage(
-        'ProSonata: für dieses Projekt ist keine Zeitkategorie gewählt — ProSonata verlangt eine, deshalb wurde nichts gesendet.',
-        'Kategorie wählen',
+        t('ProSonata: no time category is chosen for this project — ProSonata requires one, so nothing was sent.'),
+        choose,
       )
       .then((answer) => {
-        if (answer === 'Kategorie wählen') void vscode.commands.executeCommand('prosonata.chooseCategory')
+        if (answer === choose) void vscode.commands.executeCommand('prosonata.chooseCategory')
       })
   }
   for (const failure of result.failed) {
@@ -266,7 +272,7 @@ export async function sendNow(session: Session, context: RepoContext): Promise<v
 
 export async function toggleMode(session: Session, context: RepoContext): Promise<void> {
   if (context.scope.branch === context.mainBranch) {
-    void vscode.window.showInformationMessage('ProSonata: auf dem Main-Branch ist jeder Commit sein eigener Eintrag.')
+    void vscode.window.showInformationMessage(t('ProSonata: on the main branch every commit is its own entry.'))
     return
   }
 
@@ -279,22 +285,22 @@ export async function toggleMode(session: Session, context: RepoContext): Promis
   const picked = await vscode.window.showQuickPick(
     [
       {
-        label: 'Ein Eintrag pro Branch',
-        detail: 'Für Abrechnung nach Leistung: eine Rechnungszeile für das, was geliefert wurde',
+        label: t('One entry per branch'),
+        detail: t('For billing by deliverable: one invoice line for what was delivered'),
         mode: 'branch' as const,
       },
       {
-        label: 'Ein Eintrag pro Branch und Tag',
-        detail: 'Für Abrechnung nach Zeit auf Branch-Arbeit: je Tag eine Zeile, mit Datum und Uhrzeiten',
+        label: t('One entry per branch and day'),
+        detail: t('For billing by time on branch work: one line per day, with date and times'),
         mode: 'branch-day' as const,
       },
       {
-        label: 'Ein Eintrag pro Commit',
-        detail: 'Für Abrechnung nach Zeit: jeder Commit wird seine eigene Zeile',
+        label: t('One entry per commit'),
+        detail: t('For billing by time: every commit becomes its own line'),
         mode: 'commit' as const,
       },
-    ].map((item) => ({ ...item, ...(item.mode === context.mode ? { description: 'aktuell' } : {}) })),
-    { title: `ProSonata: Zeiteinträge auf ${context.scope.branch}` },
+    ].map((item) => ({ ...item, ...(item.mode === context.mode ? { description: t('current') } : {}) })),
+    { title: t('ProSonata: time entries on {0}', context.scope.branch) },
   )
   if (!picked || picked.mode === context.mode) return
 
@@ -305,7 +311,7 @@ export async function toggleMode(session: Session, context: RepoContext): Promis
   // there with no prospect of ever being closed (KONZEPT.md §3).
   if (next === 'commit' && entry && entry.text !== '') {
     const text = await vscode.window.showInputBox({
-      title: 'ProSonata: endgültiger Text für den offenen Eintrag',
+      title: t('ProSonata: final text for the open entry'),
       value: entry.text,
     })
     if (text === undefined) return
@@ -324,13 +330,13 @@ export async function changeText(session: Session, context: RepoContext, entryId
   const state = session.state()
   const entry = entryId ? state.entries.find((candidate) => candidate.id === entryId) : openEntry(state, context.scope)
   if (!entry || entry.state === 'closed') {
-    void vscode.window.showInformationMessage(`ProSonata: auf ${context.scope.branch} ist nichts offen.`)
+    void vscode.window.showInformationMessage(t('ProSonata: nothing is open on {0}.', context.scope.branch))
     return
   }
 
   const text = await vscode.window.showInputBox({
-    title: 'ProSonata: Text des offenen Eintrags',
-    prompt: 'Der Eintrag bleibt offen; ein späterer Trailer ersetzt diesen Text weiterhin.',
+    title: t('ProSonata: text of the open entry'),
+    prompt: t('The entry stays open; a later trailer still replaces this text.'),
     value: entry.text,
   })
   if (text === undefined || text === '') return
@@ -344,13 +350,13 @@ export async function closeEntry(session: Session, context: RepoContext, entryId
   if (!entry) return
 
   const text = await vscode.window.showInputBox({
-    title: 'ProSonata: endgültiger Text für die Rechnung',
-    prompt: 'Der Marker verschwindet, und dieser Eintrag wird nie wieder geschrieben.',
+    title: t('ProSonata: final text for the invoice'),
+    prompt: t('The marker disappears, and this entry is never written again.'),
     value: entry.text,
   })
   if (text === undefined) return
   if (text.trim() === '') {
-    void vscode.window.showWarningMessage('ProSonata: ohne Text wird ein Eintrag nie gesendet — nichts getan.')
+    void vscode.window.showWarningMessage(t('ProSonata: an entry without text is never sent — nothing done.'))
     return
   }
 
@@ -367,12 +373,13 @@ export async function closeEntry(session: Session, context: RepoContext, entryId
  */
 export async function attachToLast(session: Session, context: RepoContext): Promise<void> {
   const result = await session.attachToLastClosed(context, async (plan) => {
+    const attach = t('Attach')
     const answer = await vscode.window.showWarningMessage(
-      'Zeit dem letzten Eintrag zuschlagen?',
+      t('Attach the time to the last entry?'),
       { modal: true, detail: describePlan(plan) },
-      'Zuschlagen',
+      attach,
     )
-    return answer === 'Zuschlagen'
+    return answer === attach
   })
 
   if (result.kind === 'done') void vscode.window.showInformationMessage(`ProSonata: ${describeAttachment(result)}`)

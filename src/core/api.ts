@@ -1,3 +1,4 @@
+import { t } from './l10n.js'
 import { parseWorkingTime } from './working-time.js'
 
 /**
@@ -266,10 +267,10 @@ export class HttpApi implements Api {
     // Without this the URL would be just the path, and fetch would fail with
     // "Failed to parse URL" — which says nothing about the actual problem.
     if (this.options.baseUrl === '') {
-      throw new ApiError(0, 'noch kein Konto eingerichtet — führe "prosonata init" aus')
+      throw new ApiError(0, t('no account set up yet — run "prosonata init"'))
     }
     if (this.options.apiKey === '') {
-      throw new ApiError(0, 'noch kein API-Key hinterlegt — führe "prosonata init" aus')
+      throw new ApiError(0, t('no API key stored yet — run "prosonata init"'))
     }
 
     const headers: Record<string, string> = {
@@ -289,7 +290,7 @@ export class HttpApi implements Api {
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       })
     } catch (cause) {
-      throw new ApiError(0, `keine Verbindung zu ProSonata: ${(cause as Error).message}`)
+      throw new ApiError(0, t('no connection to ProSonata: {0}', (cause as Error).message))
     }
 
     const text = await response.text()
@@ -312,7 +313,7 @@ export class HttpApi implements Api {
       // An HTML body means we did not reach the API at all — a wrong base URL.
       throw new ApiError(
         response.status,
-        response.ok ? 'ProSonata hat mit etwas anderem als JSON geantwortet' : `HTTP ${response.status}`,
+        response.ok ? t('ProSonata answered with something other than JSON') : `HTTP ${response.status}`,
         undefined,
         call,
       )

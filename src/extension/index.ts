@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 
-import { paths } from '../core/config.js'
+import { paths, rememberLanguage } from '../core/config.js'
+import { setLanguage } from '../core/l10n.js'
 import { LOG_SCHEME, logDocuments, showLog } from './log-view.js'
 import { Panel } from './panel.js'
 import { adjustTime, discardRunning } from './adjust-ui.js'
@@ -49,6 +50,9 @@ const WORK_MS = 30_000
 const PRUNE_MS = 60 * 60 * 1000
 
 export function activate(context: vscode.ExtensionContext): void {
+  setLanguage(vscode.env.language)
+  rememberLanguage(vscode.env.language)
+
   const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100)
   statusBar.command = 'prosonata.toggle'
   context.subscriptions.push(statusBar)

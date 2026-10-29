@@ -1,10 +1,30 @@
 # Changelog
 
-Alle nennenswerten Änderungen an diesem Projekt stehen hier. Das Format folgt
-[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), die Versionen folgen
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to this project are listed here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html). Entries up to 0.25.0
+are in German.
 
 ## [Unreleased]
+
+### Added
+
+- **English interface with German translation.** Commands, panel, dialogs,
+  CLI and hook messages and the segment log are English by default and German
+  wherever VS Code is set to German. The CLI and the hook follow `LC_ALL`,
+  `LC_MESSAGES` or `LANG`, otherwise the language VS Code last used, which the
+  extension records in `~/.prosonata/config.json`.
+- **English CLI argument values**: `grid exact`, `mode day`, `resume new`,
+  `log all`, `adjust "from 9:40"` / `"until 9:40"`. The German values still work.
+
+### Changed
+
+- **README and changelog are in English** from this version on.
+- **Journal notes are stored as an English template with their values**
+  (`message`, `args`), so a view can translate them. Earlier notes stay as
+  they are.
+- What goes into ProSonata is unchanged: open entries are still marked
+  `[LAUFEND]`, entries without text are still called `(in Arbeit)`.
 
 ## [0.25.0] — 2026-10-27
 

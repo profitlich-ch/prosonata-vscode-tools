@@ -2,6 +2,7 @@ import type { Api, RemoteEntry } from './api.js'
 import type { Config } from './config.js'
 import { localDate } from './clock.js'
 import { entryIsOpen, entryRunningSince, entryText, findOfBranch } from './identity.js'
+import { t } from './l10n.js'
 import { openEntry, parkClosedElsewhere } from './tracking.js'
 import type { Scope, State, TimeEntry } from './types.js'
 
@@ -121,9 +122,15 @@ export function describeRunningElsewhere(since: number, now: number): string {
   const yesterday = localDate(new Date(now - 24 * 3600 * 1000))
   const on = localDate(day)
 
-  if (on === today) return `auf einem anderen Rechner läuft seit ${time} ein Timer auf diesem Branch`
-  if (on === yesterday) return `auf einem anderen Rechner läuft seit gestern ${time} ein Timer auf diesem Branch`
+  if (on === today) return t('a timer has been running on this branch on another machine since {0}', time)
+  if (on === yesterday) {
+    return t('a timer has been running on this branch on another machine since yesterday {0}', time)
+  }
 
   const date = `${String(day.getDate()).padStart(2, '0')}.${String(day.getMonth() + 1).padStart(2, '0')}.`
-  return `ein anderer Rechner trägt seit ${date} ${time} eine laufende Messung auf diesem Branch — dort wurde vermutlich das Anhalten vergessen`
+  return t(
+    'another machine has shown a running measurement on this branch since {0} {1} — someone probably forgot to stop it there',
+    date,
+    time,
+  )
 }

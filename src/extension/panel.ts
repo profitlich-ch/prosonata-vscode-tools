@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 
 import { paths } from '../core/config.js'
 import { isInstalled, publishedCli } from '../core/hooks.js'
+import { t } from '../core/l10n.js'
 import { describeRejection } from '../core/sender.js'
 import {
   awaitingDecision,
@@ -94,15 +95,15 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     const rows: PanelRow[] = [
       // With the number: that is what a customer call and an invoice refer to,
       // and two projects of the same name are told apart by nothing else.
-      new PanelRow('Projekt', describeProject(project, context.projectId, this.budget(context.projectId)), 'briefcase', {
+      new PanelRow(t('Project'), describeProject(project, context.projectId, this.budget(context.projectId)), 'briefcase', {
         command: 'prosonata.chooseProject',
-        title: 'Projekt wählen',
+        title: t('Choose project'),
       }),
       // A ruler, not a clock: the row is about the measure things are rounded
       // to. A clock already stands for the timer two rows down.
-      new PanelRow('Zeitraster', grid.kind === 'exact' ? 'exakt' : `${grid.minutes} min`, 'symbol-ruler', {
+      new PanelRow(t('Rounding grid'), grid.kind === 'exact' ? t('exact') : `${grid.minutes} min`, 'symbol-ruler', {
         command: 'prosonata.chooseGrid',
-        title: 'Zeitraster wählen',
+        title: t('Choose rounding grid'),
       }),
       new PanelRow('Branch', context.scope.branch, 'git-branch'),
       /*
@@ -113,24 +114,24 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
        * therefore not clickable (KONZEPT.md §3).
        */
       new PanelRow(
-        'Zeiteintrag',
-        context.mode === 'branch' ? 'pro Branch' : 'pro Commit',
+        t('Time entry'),
+        context.mode === 'branch' ? t('per branch') : t('per commit'),
         // `clockface`, not `clock`: the latter is an alias for `history`, which
         // the log in the title bar already uses.
         'clockface',
         context.scope.branch === context.mainBranch
           ? undefined
-          : { command: 'prosonata.toggleMode', title: 'Zwischen pro Branch und pro Commit wechseln' },
+          : { command: 'prosonata.toggleMode', title: t('Switch between per branch and per commit') },
       ),
       // Directly above the timer: the category belongs to the work that is about
       // to run, and without one ProSonata refuses the entry.
       new PanelRow(
-        'Kategorie',
+        t('Category'),
         context.categoryId > 0
           ? context.config.categoryNames.get(context.projectId) ?? `#${context.categoryId}`
-          : 'keine — es wird nichts gesendet',
+          : t('none — nothing will be sent'),
         'tag',
-        { command: 'prosonata.chooseCategory', title: 'Kategorie wählen' },
+        { command: 'prosonata.chooseCategory', title: t('Choose category') },
       ),
     ]
 
@@ -144,10 +145,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     const total = currentSeconds(state, session.clock, context.scope)
     rows.push(
       new PanelRow(
-        timer?.startedAt ? 'Läuft' : 'Pausiert',
+        timer?.startedAt ? t('Running') : t('Paused'),
         `${clock(running)} · ${clock(total)}${entry?.text ? ` · ${entry.text}` : ''}`,
         timer?.startedAt ? 'debug-pause' : 'play',
-        { command: timer?.startedAt ? 'prosonata.pause' : 'prosonata.start', title: 'Starten oder pausieren' },
+        { command: timer?.startedAt ? 'prosonata.pause' : 'prosonata.start', title: t('Start or pause') },
         // Named so the inline action for correcting time can attach to it.
         'timer',
       ),
@@ -162,10 +163,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     if (context.mode === 'branch' && entry && entry.text === '' && unwrittenSeconds(entry) > 0) {
       rows.push(
         new PanelRow(
-          'Ohne Text',
-          `${hoursAndMinutes(unwrittenSeconds(entry))} h — steht als «${session.config.placeholderText}» in ProSonata`,
+          t('Without text'),
+          t('{0} h — shown as «{1}» in ProSonata', hoursAndMinutes(unwrittenSeconds(entry)), session.config.placeholderText),
           'warning',
-          { command: 'prosonata.changeText', title: 'Text setzen' },
+          { command: 'prosonata.changeText', title: t('Set text') },
         ),
       )
     }
@@ -180,10 +181,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     if (entry && entry.text === '' && unwrittenSeconds(entry) > 0 && lastClosedEntry(state, context.scope)) {
       rows.push(
         new PanelRow(
-          'Nicht gebucht',
-          `${hoursAndMinutes(unwrittenSeconds(entry))} h → letzter Eintrag`,
+          t('Not booked'),
+          t('{0} h → last entry', hoursAndMinutes(unwrittenSeconds(entry))),
           'fold-up',
-          { command: 'prosonata.attachToLast', title: 'Dem letzten Eintrag zuschlagen' },
+          { command: 'prosonata.attachToLast', title: t('Attach to the last entry') },
         ),
       )
     }
@@ -202,10 +203,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     for (const { entry: done, why } of finished) {
       rows.push(
         new PanelRow(
-          `Branch ${why === 'deleted' ? 'gelöscht' : 'gemergt'} · ${done.scope.branch}`,
-          `${done.text || '(ohne Text)'} · ${billedTime(done.foreignSeconds + done.seconds, grid)} h — abschliessen`,
+          why === 'deleted' ? t('Branch deleted · {0}', done.scope.branch) : t('Branch merged · {0}', done.scope.branch),
+          t('{0} · {1} h — close', done.text || t('(no text)'), billedTime(done.foreignSeconds + done.seconds, grid)),
           'pass',
-          { command: 'prosonata.closeEntry', title: 'Eintrag abschliessen', arguments: [done.id] },
+          { command: 'prosonata.closeEntry', title: t('Close entry'), arguments: [done.id] },
         ),
       )
     }
@@ -225,10 +226,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     )) {
       rows.push(
         new PanelRow(
-          open.scope.branch === context.scope.branch ? 'Offener Eintrag' : `Offen · ${open.scope.branch}`,
+          open.scope.branch === context.scope.branch ? t('Open entry') : t('Open · {0}', open.scope.branch),
           `${open.text} · ${billedTime(open.foreignSeconds + open.seconds, grid)} h${elsewhere(open)}`,
           'circle-outline',
-          { command: 'prosonata.closeEntry', title: 'Eintrag abschliessen', arguments: [open.id] },
+          { command: 'prosonata.closeEntry', title: t('Close entry'), arguments: [open.id] },
           'openEntry',
         ),
       )
@@ -237,10 +238,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     for (const parked of awaitingDecision(state, context.scope)) {
       rows.push(
         new PanelRow(
-          'Anderswo abgeschlossen',
-          `${clock(unwrittenSeconds(parked))} offen — entscheiden`,
+          t('Closed elsewhere'),
+          t('{0} open — decide', clock(unwrittenSeconds(parked))),
           'question',
-          { command: 'prosonata.resolveClosedElsewhere', title: 'Entscheiden' },
+          { command: 'prosonata.resolveClosedElsewhere', title: t('Decide') },
         ),
       )
     }
@@ -256,10 +257,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       const since = new Date(gaps[0]!.from)
       rows.push(
         new PanelRow(
-          'Rechner schlief',
-          `${clock(slept)} ab ${since.toTimeString().slice(0, 5)} — abziehen?`,
+          t('Machine slept'),
+          t('{0} from {1} — subtract?', clock(slept), since.toTimeString().slice(0, 5)),
           'debug-disconnect',
-          { command: 'prosonata.resolveSleep', title: 'Schlafzeit entscheiden' },
+          { command: 'prosonata.resolveSleep', title: t('Decide on sleep time') },
         ),
       )
     }
@@ -280,10 +281,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
           : undefined
       rows.push(
         new PanelRow(
-          here ? 'Abgelehnt' : `Abgelehnt · ${basename(refused.scope.repoPath)}/${refused.scope.branch}`,
+          here ? t('Rejected') : t('Rejected · {0}/{1}', basename(refused.scope.repoPath), refused.scope.branch),
           `${refused.text ? `${refused.text} — ` : ''}${describeRejection(refused, project)}`,
           'error',
-          { command: 'prosonata.handleRejected', title: 'Abgelehnten Eintrag behandeln', arguments: [refused.id] },
+          { command: 'prosonata.handleRejected', title: t('Handle rejected entry'), arguments: [refused.id] },
         ),
       )
     }
@@ -299,10 +300,12 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       const here = sameScope(quiet.scope, context.scope)
       rows.push(
         new PanelRow(
-          here ? `Ruht seit ${days} Tagen` : `Ruht seit ${days} Tagen · ${basename(quiet.scope.repoPath)}/${quiet.scope.branch}`,
-          `${quiet.text || '(ohne Text)'} · ${billedTime(quiet.foreignSeconds + quiet.seconds, grid)} h — abschliessen?`,
+          here
+            ? t('Dormant for {0} days', days)
+            : t('Dormant for {0} days · {1}/{2}', days, basename(quiet.scope.repoPath), quiet.scope.branch),
+          t('{0} · {1} h — close?', quiet.text || t('(no text)'), billedTime(quiet.foreignSeconds + quiet.seconds, grid)),
           'watch',
-          { command: 'prosonata.handleResting', title: 'Ruhenden Eintrag behandeln', arguments: [quiet.id] },
+          { command: 'prosonata.handleResting', title: t('Handle dormant entry'), arguments: [quiet.id] },
         ),
       )
     }
@@ -316,10 +319,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       const trouble = session.lastTrouble
       rows.push(
         new PanelRow(
-          'Wartet auf Versand',
+          t('Waiting to be sent'),
           trouble === null ? String(state.pending.length) : `${state.pending.length} — ${trouble}`,
           trouble === null ? 'cloud-upload' : 'warning',
-          { command: 'prosonata.send', title: 'Jetzt senden' },
+          { command: 'prosonata.send', title: t('Send now') },
         ),
       )
     }
@@ -332,10 +335,10 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     if (isInstalled(context.repo.root) && publishedCli() === null) {
       rows.push(
         new PanelRow(
-          'Hook bucht nichts',
-          `${paths.cli()} fehlt`,
+          t('Hook books nothing'),
+          t('{0} is missing', paths.cli()),
           'warning',
-          { command: 'prosonata.chooseProject', title: 'Hook neu einrichten' },
+          { command: 'prosonata.chooseProject', title: t('Set up hook again') },
         ),
       )
     }
@@ -352,7 +355,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
  * other, both right, and nothing saying why (KONZEPT.md §3).
  */
 function elsewhere(entry: TimeEntry): string {
-  return entry.foreignSeconds > 0 ? ` (${hoursAndMinutes(entry.foreignSeconds)} h anderswo)` : ''
+  return entry.foreignSeconds > 0 ? ` ${t('({0} h elsewhere)', hoursAndMinutes(entry.foreignSeconds))}` : ''
 }
 
 function describeProject(project: RepoProject | undefined, projectId: number, budget?: Budget): string {
@@ -360,12 +363,12 @@ function describeProject(project: RepoProject | undefined, projectId: number, bu
   // Only with a plan to measure against: "15,25 h" alone says nothing about
   // whether the pot is full or empty.
   if (!budget || budget.planned <= 0) return name
-  return `${name} · ${hours(budget.needed)} von ${hours(budget.planned)} h`
+  return t('{0} · {1} of {2} h', name, hours(budget.needed), hours(budget.planned))
 }
 
-/** `15,25` — decimal hours, as the budget is agreed, with a German comma. */
+/** `15.25` or `15,25` — decimal hours, as the budget is agreed, in the display language. */
 function hours(value: number): string {
-  return value.toFixed(2).replace(/[.,]?0+$/, '').replace('.', ',')
+  return new Intl.NumberFormat(vscode.env.language, { maximumFractionDigits: 2, useGrouping: false }).format(value)
 }
 
 /** `1:23:45`. Seconds included, so a running timer is visibly running. */

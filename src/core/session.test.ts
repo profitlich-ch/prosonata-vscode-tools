@@ -78,7 +78,7 @@ describe('starting the timer', () => {
 
   it('starts anyway when ProSonata cannot be reached', async () => {
     const api = new FakeApi()
-    api.failNext = new ApiError(0, 'keine Verbindung zu ProSonata: fetch failed')
+    api.failNext = new ApiError(0, 'no connection to ProSonata: fetch failed')
 
     const session = sessionWith(api)
     await session.start(context)
@@ -779,7 +779,7 @@ describe('correcting entries that are already in ProSonata', () => {
     await session.applyMerge(plan, 10_800, 'Buchungsmodul', EXACT)
 
     // Without the note, an interruption would leave an entry nobody knows to remove.
-    const notes = session.journal.read().filter((line) => line.message?.includes(String(plan.drop[0]!.timeID)))
+    const notes = session.journal.read().filter((line) => line.args?.includes(String(plan.drop[0]!.timeID)))
     expect(notes.length).toBeGreaterThanOrEqual(1)
   })
 
@@ -804,7 +804,7 @@ describe('correcting entries that are already in ProSonata', () => {
 
     await expect(
       session.correctHours({ ...entry, isInvoiced: true }, 9000, EXACT, context),
-    ).rejects.toThrow(/fakturiert/)
+    ).rejects.toThrow(/invoiced/)
     expect(api.entries.get(entry.timeID)!.hours).toBe(2)
   })
 })

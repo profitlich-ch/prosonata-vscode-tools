@@ -1,419 +1,419 @@
-ProSonata Tools für Visual Studio Code
+ProSonata Tools for Visual Studio Code
 ===========
 
-Diese VS-Code-Erweiterung ermöglicht es, [ProSonata](https://www.prosonata.de)-Zeiteinträge direkt aus VS Code anzulegen, gebunden an Commits und Branches, per ProSonata-API. Statt in der SaaS-Oberfläche von ProSonata einen Timer zu starten und die Beschreibung von Hand einzutragen, startest du den Timer in VS Code, und die gemessene Zeit wird zu einem Zeiteintrag pro Branch — oder, umschaltbar, pro Branch und Tag oder pro Commit — mit einer Beschreibung, die aus dem Commit stammt.
+This VS Code extension creates [ProSonata](https://www.prosonata.de) time entries straight from VS Code, bound to commits and branches, through the ProSonata API. Instead of starting a timer in ProSonata's web interface and typing the description by hand, you start the timer in VS Code, and the measured time becomes one time entry per branch — or, switchable, per branch and day or per commit — with a description taken from the commit.
 
-Die Idee: Ein Zeiteintrag stellt eine Leistung dar, die dem Kunden verrechenbar ist. Wer nach Leistung abrechnet, dem ist gleich, ob sie an einem Tag entsteht oder an mehreren; wer nach Zeit abrechnet, bekommt dafür die beiden anderen Modi.
+The idea: a time entry represents a piece of work the client can be billed for. If you bill by deliverable, it doesn't matter whether the work took one day or several; if you bill by time, the two other modes are for you.
 
-Dies ist kein offizielles ProSonata-Produkt. Es steht nicht im Marketplace, du musst es von Hand installieren.
+This is not an official ProSonata product. It is not in the Marketplace; you have to install it by hand.
+
+## Language
+
+The interface is English, with a German translation. The extension follows VS Code's display language. The CLI and the git hook take the language from `LC_ALL`, `LC_MESSAGES` or `LANG`, and otherwise from the language VS Code last used.
+
+What goes into ProSonata stays German: an open entry is marked `[LAUFEND]`, and an entry without text is called `(in Arbeit)`. Both can be changed in `~/.prosonata/config.json` (`markerWord`, `placeholderText`).
 
 ## Installation
 
-Nach Installation/Update das Fenster neu laden (Entwickler: Fenster neu laden), und die Erweiterung erscheint in jedem VS-Code-Fenster. Updates müssen manuell installiert werden.
+After installing or updating, reload the window (Developer: Reload Window), and the extension appears in every VS Code window. Updates have to be installed by hand.
 
-### Fertiges Paket
+### Ready-made package
 
-Für Installation und Update die `.vsix` des jüngsten
-[Release](https://github.com/profitlich-ch/prosonata-vscode-tools/releases)
-laden und installieren:
+To install or update, download the `.vsix` of the latest
+[release](https://github.com/profitlich-ch/prosonata-vscode-tools/releases)
+and install it:
 
-#### Ohne Terminal
+#### Without a terminal
 
-Befehlspalette → Aus VSIX installieren…
+Command Palette → Extensions: Install from VSIX…
 
-#### Im Terminal
+#### In a terminal
 
 ```sh
 code --install-extension prosonata-vscode-tools-<version>.vsix
 ```
 
-### Aus dem Quellcode
+### From source
 
-Voraussetzung ist eine Node-Umgebung. Gebaut, gepackt und installiert wird in
-einem Schritt — am Ende steht dieselbe `.vsix` wie oben:
+You need a Node environment. Building, packaging and installing happen in one
+step — the result is the same `.vsix` as above:
 
 ```sh
 npm install
 npm run install-vsix
 ```
 
-Fürs Update dasselbe noch einmal, nach `git pull`.
+To update, do the same again after `git pull`.
 
-## Konfiguration
+## Configuration
 
-Öffne in der Aktivitätsleiste den Eintrag **:Profitlich** und klicke ‹ProSonata: Konto einrichten›. Es fragt nach der ProSonata Basis-URL und einem Benutzer-API-Key und schreibt beides mit Modus 0600 nach `~/.prosonata/config.json`.
+Open **:Profitlich** in the Activity Bar and click ‹ProSonata: Set Up Account›. It asks for the ProSonata base URL and a user API key and writes both to `~/.prosonata/config.json` with mode 0600.
 
-**Nutze einen persönlichen Benutzer-Key, keine App-Integration**, damit die Zeiteinträge mit deinem User verknüpft sind.
+**Use a personal user key, not an app integration**, so the time entries are linked to your user.
 
-Denselben Befehl später erneut aufrufen, um **Key oder Basis-URL zu wechseln** — etwa wenn der Key abläuft. Die Basis-URL steht dann schon da, und ein leer gelassenes Key-Feld behält den bisherigen. Alle übrigen Einstellungen in `config.json` bleiben unberührt; die Datei selbst öffnet das Zahnrad in der Titelleiste des Panels. Dort stehen auch die Vorgaben, die kein Dialog abfragt: das Zeitraster, die Sendeverzögerung, die Schwellen für die Warnungen und die Schlaferkennung.
+Run the same command again later to **change the key or the base URL** — when the key expires, for instance. The base URL is already filled in, and leaving the key field empty keeps the current one. All other settings in `config.json` stay untouched; the gear in the panel's title bar opens the file itself. That is also where the defaults live that no dialog asks for: the rounding grid, the sending delay, the warning thresholds and sleep detection.
 
-## Einstellungen pro Repository
+## Settings per repository
 
-Die Reihenfolge steht fest, und ein Schritt darin ist eine Sperre:
+The order is fixed, and one step in it is a gate:
 
 ```mermaid
 flowchart TD
-    A["<b>Konto einrichten</b><br/>Basis-URL und Benutzer-Key nach ~/.prosonata/config.json"] --> B
-    B["<b>Projekt für dieses Repository wählen</b><br/>verknüpft das Repository und installiert den post-commit-Hook"] --> C
-    C{"Zeitkategorie<br/>gewählt?"}
-    C -- "nein" --> D["ProSonata verlangt eine.<br/>Es wird <b>nichts</b> geschrieben,<br/>und das Panel sagt es."]
+    A["<b>Set Up Account</b><br/>base URL and user key to ~/.prosonata/config.json"] --> B
+    B["<b>Choose Project for This Repository</b><br/>links the repository and installs the post-commit hook"] --> C
+    C{"Time category<br/>chosen?"}
+    C -- "no" --> D["ProSonata requires one.<br/><b>Nothing</b> is written,<br/>and the panel says so."]
     D --> C
-    C -- "ja" --> E["Der Timer kann laufen"]
-    E -.-> F["Jederzeit später: Zeitraster und Modus.<br/>Der Wechsel auf «ein Eintrag pro Commit»<br/>schliesst den offenen Branch-Eintrag."]
+    C -- "yes" --> E["The timer can run"]
+    E -.-> F["Any time later: rounding grid and mode.<br/>Switching to “one entry per commit”<br/>closes the open branch entry."]
 ```
 
-Klicke **ProSonata: Projekt für dieses Repository wählen** — es verknüpft das Repository mit einem Projekt und installiert den `post-commit`-Hook. Neben dem Projekt steht danach sein Budget, etwa «15,25 von 20 h». Geholt wird es beim Öffnen des Fensters und jedes Mal, wenn ein abgeschlossener Zeiteintrag in ProSonata angekommen ist — nicht laufend.
+Click **ProSonata: Choose Project for This Repository** — it links the repository to a project and installs the `post-commit` hook. The project then shows its budget, such as “15.25 of 20 h”. It is fetched when the window opens and every time a closed time entry has reached ProSonata — not continuously.
 
-Direkt danach fragt die Erweiterung nach der **Zeitkategorie**. ProSonata verlangt sie bei jedem Zeiteintrag; solange keine gewählt ist, wird nichts geschrieben. Ändern lässt sie sich jederzeit über die Zeile *Kategorie* im Panel, und die Änderung greift auch auf die noch offenen Zeiteinträge durch.
+Right after that the extension asks for the **time category**. ProSonata requires one on every time entry; as long as none is chosen, nothing is written. You can change it at any time through the *Category* row in the panel, and the change also applies to the entries that are still open.
 
-Auch das Projekt lässt sich später korrigieren. Weil ein Wechsel fast immer ein Versehen richtigstellt, wandern alle noch nicht fertigen Zeiteinträge dieses Repositories mit — auch die, die in ProSonata bereits stehen, und samt der laufenden Messung. Liegen bleibt nur, was abgeschlossen ist und dessen Abschluss ProSonata schon erreicht hat; ist ein solcher Eintrag dort sogar fakturiert, entsteht statt einer Änderung ein Folgeeintrag im neuen Projekt.
+The project can be corrected later as well. Since a change almost always fixes a mistake, all unfinished time entries of this repository move along — including those already in ProSonata, and the running measurement. Only what is closed, and whose closing has already reached ProSonata, stays behind; if such an entry is already invoiced there, a follow-up entry is created in the new project instead of a change.
 
-Zusätzlich kannst du das Zeitraster wählen und den Modus: ein Eintrag pro Branch, pro Branch und Tag, oder pro Commit (siehe [Funktionsweise](#funktionsweise)). Das Zeitraster wirkt auf alle noch offenen Zeiteinträge, sobald diese das nächste Mal geschrieben werden. Der Wechsel auf «ein Eintrag pro Commit» dagegen schliesst den offenen Branch-Eintrag und fragt vorher nach seinem endgültigen Text.
+You can also choose the rounding grid and the mode: one entry per branch, per branch and day, or per commit (see [How it works](#how-it-works)). The rounding grid applies to all open time entries the next time they are written. Switching to “one entry per commit”, on the other hand, closes the open branch entry and asks for its final text first.
 
-Das **Zeitraster gilt allein für den Zeiteintrag**, der nach ProSonata geht — nie für die Segmente. Gemessen und im Log gezeigt wird sekundengenau; gerundet wird erst beim Schreiben, und zwar einmal je Zeiteintrag — nicht jedes Segment für sich. Gerundet wird **aufwärts**, auf die nächste Stufe: Bei einem Raster von 15 Minuten werden aus gemessenen 2:05 h gebuchte 2:15 h. Weil je Eintrag gerundet wird, **wächst die Aufrundung mit der Zahl der Einträge**: Auf `main` mit drei Commits von je zwanzig Minuten werden daraus dreimal eine halbe Stunde, also 1:30 h statt einer Stunde. Ein Branch-Eintrag, der dieselbe Arbeit sammelt, wird einmal gerundet. Gezeigt wird diese Zahl überall als Stunden:Minuten; in ProSonata selbst steht sie als Dezimalstunde (2.25), weil die API es so speichert.
+The **rounding grid applies only to the time entry** that goes to ProSonata — never to the segments. Measuring and the log are exact to the second; rounding happens only when writing, and once per time entry — not for each segment. Rounding goes **up** to the next step: with a 15-minute grid, a measured 2:05 h is booked as 2:15 h. Because rounding happens per entry, **the rounding grows with the number of entries**: on `main` with three commits of twenty minutes each, that is three half hours, so 1:30 h instead of one hour. A branch entry collecting the same work is rounded once. This figure is shown everywhere as hours:minutes; ProSonata itself shows it as decimal hours (2.25), because that is how the API stores it.
 
-Wählt ein Repository kein eigenes Raster, gilt die Vorgabe aus `~/.prosonata/config.json` (`"grid"`). Sie steht auf `exakt` und lässt sich nur dort ändern — wer grundsätzlich viertelstündlich abrechnet, setzt sie einmal und muss es nicht in jedem Repository wiederholen.
+If a repository chooses no grid of its own, the default from `~/.prosonata/config.json` (`"grid"`) applies. It is set to `exact` and can only be changed there — if you always bill by the quarter hour, set it once instead of in every repository.
 
-Alle Befehle stehen auch als [CLI Befehle](#cli-befehle) zur Verfügung.
+Every command is also available on the [command line](#cli-commands).
 
-## Funktionsweise
+## How it works
 
-Während der Arbeit in VS Code werden Zeiten als **Segmente** lokal auf dem
-Computer gespeichert. Ein **Zeiteintrag** ist das, was in ProSonata gespeichert wird.
-Ein Zeiteintrag entsteht aus beliebig vielen Segmenten.
+While you work in VS Code, times are stored locally on your computer as
+**segments**. A **time entry** is what is stored in ProSonata. A time entry is
+made of any number of segments.
 
-Nach ProSonata geschrieben wird nicht erst am Schluss: Zehn Minuten nach dem
-**Start** des Timers legt das Werkzeug den Zeiteintrag an — noch ohne Text, unter
-einem Platzhalter — und aktualisiert ihn danach bei jedem weiteren Schreibvorgang
-mit der gewachsenen Summe. Ein Branch-Eintrag steht also von Anfang an in
-ProSonata und wächst dort mit. Der Abschluss ist nur das letzte Update.
+Writing to ProSonata does not wait for the end: ten minutes after the timer
+**starts**, the tool creates the time entry — still without text, under a
+placeholder — and then updates it with the grown total on every further write.
+A branch entry is therefore in ProSonata from the start and grows there.
+Closing is just the last update.
 
-| Wo du arbeitest | Was ProSonata bekommt | Gedacht für |
+| Where you work | What ProSonata gets | Meant for |
 |---|---|---|
-| Auf einem Branch | **Ein Eintrag pro Branch**, der über dessen ganze Lebensdauer wächst | Abrechnung nach Leistung: eine Zeile für das, was geliefert wurde |
-| Auf einem Branch, umgeschaltet | **Ein Eintrag pro Branch und Tag** — geschnitten an jeder Mitternacht | Abrechnung nach Zeit auf Branch-Arbeit: je Tag eine Zeile mit Datum und Uhrzeiten |
-| Auf dem Main-Branch | **Ein Eintrag pro Commit** | Abrechnung nach Zeit: Wartung, jeder Commit eine Zeile |
+| On a branch | **One entry per branch**, growing over the branch's whole life | Billing by deliverable: one line for what was delivered |
+| On a branch, switched | **One entry per branch and day** — cut at every midnight | Billing by time on branch work: one line per day with date and times |
+| On the main branch | **One entry per commit** | Billing by time: maintenance, each commit one line |
 
-Die Konzeptidee: Ein Branch ist das Stück Arbeit, das ein Kunde als Einheit bezahlt. Commits sind eher Zwischenschritte, die der Kunde nicht zu sehen braucht. Wird hingegen auf dem Main-Branch gearbeitet, ist es Wartung und jeder Commit ist es wert, als Zeiteintrag erfasst zu werden. Der Modus lässt sich je Branch umschalten («ProSonata: Modus für Zeiteinträge wählen»).
+The idea behind it: a branch is the piece of work a client pays for as a unit. Commits are intermediate steps the client doesn't need to see. Work on the main branch, however, is maintenance, and each commit is worth its own time entry. The mode can be switched per branch (“ProSonata: Choose Time Entry Mode”).
 
-Was ein Commit auslöst, hängt vom Modus ab — das Segment wird in jedem Fall am Commit-Zeitpunkt geschnitten:
+What a commit does depends on the mode — the segment is cut at the moment of the commit in every case:
 
 ```mermaid
 flowchart TD
-    C([Commit]) --> S["laufendes Segment wird<br/>am Commit-Zeitpunkt geschnitten"]
-    S --> M{Modus}
-    M -- "pro Commit<br/>(Main-Branch)" --> A["Eintrag <b>abgeschlossen</b><br/>Text: Trailer, sonst Subject<br/>Timer läuft in einen Nachfolger"]
-    M -- "pro Branch" --> B["Eintrag <b>bleibt offen</b><br/>ein Trailer ersetzt den Text"]
-    M -- "pro Branch und Tag" --> D["wie pro Branch —<br/>um Mitternacht wird der Tag abgeschlossen,<br/>der Nachfolger erbt den Text"]
+    C([Commit]) --> S["running segment is cut<br/>at the moment of the commit"]
+    S --> M{Mode}
+    M -- "per commit<br/>(main branch)" --> A["entry <b>closed</b><br/>text: trailer, otherwise subject<br/>timer runs on into a successor"]
+    M -- "per branch" --> B["entry <b>stays open</b><br/>a trailer replaces the text"]
+    M -- "per branch and day" --> D["like per branch —<br/>at midnight the day is closed,<br/>the successor inherits the text"]
     A --> W
     B --> W
     D --> W
-    W["Schreibvorgang vorgemerkt, geht zehn Minuten später hinaus:<br/>immer die <b>absolute Summe</b>, nie eine Differenz"]
+    W["write queued, goes out ten minutes later:<br/>always the <b>absolute total</b>, never a difference"]
 ```
 
-Der Text des Zeiteintrags kommt aus dem Commit, aus einem mit `Prosonata:` beginnenden Trailer:
+The text of the time entry comes from the commit, from a trailer starting with `Prosonata:`:
 
 ```txt
-fix: Rundungsfehler in der zweiten Rabattstufe
+fix: rounding error in the second discount tier
 
-Prosonata: Rabattberechnung im Shop korrigiert
+Prosonata: Discount calculation in the shop corrected
 ```
 
-Auf dem Main-Branch, wo jeder Commit seinen eigenen Eintrag abschliesst, gilt
-die Betreffzeile, wenn es keinen Trailer gibt. Auf einem Branch dagegen zählt nur der Trailer; der zuletzt in einem Commit geschriebene gewinnt, normale Betreffzeilen
-bleiben aussen vor. Ein Eintrag ohne Text steht in ProSonata als `[LAUFEND] (in Arbeit)` —
-der erste Trailer ersetzt den Platzhalter. Er wird gebraucht, damit ein zweiter
-Computer den Eintrag findet, bevor der erste Commit fällt; gesucht wird über die
-Kennung, und die gibt es erst nach dem ersten Schreibvorgang. Auf einem Branch
-erinnert die Seitenleiste mit der Zeile **Ohne Text** daran, dass die
-Rechnungszeile noch fehlt. Abschliessen lässt sich ein Eintrag ohne Text nicht:
-Er stünde endgültig namenlos beim Kunden.
+On the main branch, where each commit closes its own entry, the subject line
+applies when there is no trailer. On a branch only the trailer counts; the one
+written last in a commit wins, plain subject lines are ignored. An entry without
+text appears in ProSonata as `[LAUFEND] (in Arbeit)` — the first trailer replaces
+the placeholder. It is needed so a second computer finds the entry before the
+first commit; the search goes by ID, and the ID only exists after the first
+write. On a branch, the sidebar reminds you with the row **No text** that the
+invoice line is still missing. An entry without text cannot be closed: it would
+end up nameless with the client for good.
 
-Was das Werkzeug über einen Zeiteintrag wissen muss, steht in ProSonatas Feld
-`apiComments`, das auf keiner Rechnung erscheint: die Kennung des Branches,
-damit weitere Computer den Eintrag wiederfinden, ob er offen ist, und seit wann
-ein Timer läuft. Auf der Rechnungszeile bleibt nur ein Hinweis für den Menschen:
+What the tool needs to know about a time entry is kept in ProSonata's
+`apiComments` field, which appears on no invoice: the ID of the branch, so other
+computers find the entry again, whether it is open, and since when a timer has
+been running. The invoice line only carries a hint for people:
 
-| Zustand | Text in ProSonata |
+| State | Text in ProSonata |
 |---|---|
-| offen | `[LAUFEND] Text` |
-| abgeschlossen | `Text` |
+| open | `[LAUFEND] Text` |
+| closed | `Text` |
 
-Das `[LAUFEND]` fällt beim Fakturieren auf, falls ein Abschluss einmal
-ausbleibt. Wird es in ProSonata von Hand entfernt, schadet das nicht: Den
-Zustand trägt das Feld. Einträge aus der Zeit vor dem Feld tragen die Kennung
-noch im Text, etwa `[LAUFEND:a3f9c1] Text`; sie werden weiter erkannt und beim
-nächsten Schreiben umgestellt.
+The `[LAUFEND]` stands out when invoicing, should a closing ever be missing.
+Removing it by hand in ProSonata does no harm: the field carries the state.
+Entries from before the field still carry the ID in the text, such as
+`[LAUFEND:a3f9c1] Text`; they are still recognised and converted on the next
+write.
 
-In den Feldern **Start** und **Ende** steht dafür die Spanne des Arbeitstages —
-Beginn des ersten und Ende des jüngsten Segments. Erstreckt sich ein Eintrag über
-mehrere Tage, bleiben beide leer: Eine Spanne sagt nur über einen einzelnen Tag
-etwas aus.
+The **Start** and **End** fields hold the span of the working day — the start of
+the first and the end of the latest segment. If an entry spans several days,
+both stay empty: a span only means something for a single day.
 
-## Auf mehreren Computern
+## On several computers
 
-Die Kennung des Branches entsteht aus dem ersten Commit des Repositories und dem
-Branchnamen — in jedem Klon dieselbe. Der zweite Computer findet den Zeiteintrag
-deshalb wieder und **ergänzt** ihn, statt einen zweiten anzulegen. Vorausgesetzt
-ist, dass nicht beide gleichzeitig messen.
+The ID of a branch comes from the first commit of the repository and the branch
+name — the same in every clone. The second computer therefore finds the time
+entry again and **adds to** it instead of creating a second one. This assumes
+the two don't measure at the same time.
 
-Jeder Computer merkt sich den **fremden Anteil** und schreibt `fremd + eigen`.
-Woher er den fremden Anteil kennt: an der Differenz zwischen dem, was er zuletzt
-selbst geschrieben hat, und dem, was in ProSonata steht.
+Each computer remembers the **foreign share** and writes `foreign + own`. It
+knows the foreign share from the difference between what it last wrote itself
+and what is in ProSonata.
 
 ```mermaid
 sequenceDiagram
-    participant B as Büro
+    participant O as Office
     participant P as ProSonata
-    participant Z as Zuhause
-    B->>P: misst 3:00, schreibt 3:00
-    Note over B: zuletzt geschrieben 3:00<br/>fremd 0:00 · eigen 3:00
-    Z->>P: sucht die Kennung a3f9c1, findet 3:00
-    Note over Z: übernimmt den Eintrag<br/>fremd 3:00 · eigen 0:00
-    Z->>P: misst 1:00, liest 3:00 = zuletzt geschrieben → fremd bleibt<br/>schreibt 4:00
-    Note over Z: zuletzt geschrieben 4:00
-    B->>P: misst 0:30, liest 4:00 ≠ 3:00 → jemand war da: fremd 1:00<br/>schreibt fremd 1:00 + eigen 3:30 = 4:30
+    participant H as Home
+    O->>P: measures 3:00, writes 3:00
+    Note over O: last written 3:00<br/>foreign 0:00 · own 3:00
+    H->>P: looks up the ID a3f9c1, finds 3:00
+    Note over H: takes over the entry<br/>foreign 3:00 · own 0:00
+    H->>P: measures 1:00, reads 3:00 = last written → foreign unchanged<br/>writes 4:00
+    Note over H: last written 4:00
+    O->>P: measures 0:30, reads 4:00 ≠ 3:00 → someone was here: foreign 1:00<br/>writes foreign 1:00 + own 3:30 = 4:30
 ```
 
-Der geschriebene Wert hängt nur vom eigenen Zustand ab, nie vom gerade
-Gelesenen — ein wiederholter Schreibvorgang verdoppelt deshalb nichts.
+The value written depends only on the computer's own state, never on what it
+just read — so a repeated write never doubles anything.
 
-Zwei **Personen** stören einander dagegen nicht: Zeiten gehören in ProSonata
-Benutzern, und jede führt ihren eigenen Eintrag pro Branch.
+Two **people**, on the other hand, don't get in each other's way: times belong
+to users in ProSonata, and each keeps their own entry per branch.
 
-Läuft auf einem anderen Computer gerade ein Timer auf demselben Branch, sagt es
-dir das beim Starten — mit dem Tag, an dem er gestartet wurde. Ist das länger als
-gestern her, heisst es nicht mehr «läuft seit», sondern «dort wurde vermutlich
-das Anhalten vergessen». Mehr als sagen kann die Erweiterung nicht: Ein Timer auf
-einem zugeklappten Rechner lässt sich von hier nicht anhalten.
+If a timer is currently running on the same branch on another computer, you are
+told when you start — with the day it was started. If that was before
+yesterday, it no longer says “running since” but “stopping was probably
+forgotten there”. The extension can't do more than tell you: a timer on a closed
+laptop can't be stopped from here.
 
-Schliesst ein Computer den Eintrag ab, während auf dem anderen noch Zeit
-angefallen ist, wird dort gefragt: **zum abgeschlossenen Eintrag hinzufügen**
-oder **einen neuen anlegen**. Geschrieben wird bis zur Antwort nichts, und der
-abgeschlossene Eintrag wird nie ungefragt wieder angefasst.
+If one computer closes the entry while time has accumulated on the other, the
+other one asks: **add to the closed entry** or **create a new one**. Nothing is
+written until you answer, and the closed entry is never touched without asking.
 
-## Wenn ein Timer vergessen geht
+## When a timer is forgotten
 
-Läuft ein Segment stundenlang am Stück, fragt die Erweiterung, **wie viel davon
-zählt** — alles, eine eigene Dauer, oder nichts. Sie rät nicht: Ein Timer, der
-über Nacht lief, hat Wanduhrzeit gemessen, und was davon Arbeit war, weisst nur
-du. Antwortest du «zwei Stunden», sind das die **ersten** zwei — gearbeitet
-wurde am Anfang, vergessen wurde das Anhalten.
+If a segment runs for hours on end, the extension asks **how much of it
+counts** — all of it, a duration of your own, or nothing. It doesn't guess: a
+timer that ran overnight measured wall-clock time, and only you know how much
+of it was work. If you answer “two hours”, those are the **first** two — the
+work was at the start, the stopping was forgotten.
 
-Hat der Rechner zwischendurch **geschlafen**, weiss die Erweiterung das genau:
-Zeitgeber feuern nicht, solange ein Rechner ausgesetzt ist, und ein Takt, der
-nach Stunden zurückkommt, belegt, dass an dieser Maschine nichts lief. Im Panel
-erscheint dann eine Zeile mit der gemessenen Dauer — abziehen oder behalten.
-Nach dem Abzug läuft der Timer ab dem Aufwachen weiter.
+If the computer **slept** in between, the extension knows exactly: timers don't
+fire while a machine is suspended, and a beat that comes back hours later proves
+that nothing ran on this machine. The panel then shows a row with the measured
+duration — deduct or keep. After deducting, the timer continues from the moment
+of waking up.
 
 ```mermaid
 gantt
-    title Ein Timer läuft über Nacht
+    title A timer runs overnight
     dateFormat YYYY-MM-DD HH:mm
     axisFormat %H:%M
-    section Gemessen
-    Timer lief 15 h                        :crit, 2026-08-17 18:00, 2026-08-18 09:00
-    section Erkannt
-    Rechner schlief — Lücke im Takt        :2026-08-17 23:00, 2026-08-18 07:00
-    section Antwort «2 Stunden zählen»
-    behalten, der Anfang                   :active, 2026-08-17 18:00, 2026-08-17 20:00
-    verworfen                              :done, 2026-08-17 20:00, 2026-08-18 09:00
+    section Measured
+    Timer ran 15 h                         :crit, 2026-08-17 18:00, 2026-08-18 09:00
+    section Detected
+    Computer slept — gap in the beat       :2026-08-17 23:00, 2026-08-18 07:00
+    section Answer “count 2 hours”
+    kept, the start                        :active, 2026-08-17 18:00, 2026-08-17 20:00
+    discarded                              :done, 2026-08-17 20:00, 2026-08-18 09:00
 ```
 
-Ohne auf diese Frage zu warten, lässt sich ein laufendes Segment jederzeit **ganz
-verwerfen** — der Fall «committet, Anhalten vergessen, danach nicht mehr
-gearbeitet». Die Zeile steht zuoberst im Korrektur-Dialog und nennt den Betrag.
-Gebucht wird nichts, der Timer hält an, und im Log bleibt die verworfene Dauer
-als `gekürzt von …` stehen.
+Without waiting for that question, a running segment can be **discarded
+entirely** at any time — the case “committed, forgot to stop, didn't work
+afterwards”. The option sits at the top of the adjustment dialog and names the
+amount. Nothing is booked, the timer stops, and the log keeps the discarded
+duration as `trimmed from …`.
 
-**Vor- und zurückdrehen** lässt sich die Zeit über das Stift-Symbol an der
-Timer-Zeile oder über «ProSonata: Zeit korrigieren». Getippt wird entweder eine
-Dauer oder eine Uhrzeit:
+You can **turn the time forward and back** with the pencil icon on the timer
+row or with “ProSonata: Adjust Time”. Type either a duration or a clock time:
 
-| Eingabe | Bedeutung |
+| Input | Meaning |
 |---|---|
-| `25` | bietet `+25` und `−25` an |
-| `-25`, `+1:30` | genau diese Richtung |
-| `ab 9:40` | ich arbeite seit 9:40 — der Beginn des laufenden Segments wandert dorthin |
-| `bis 9:40` | ich habe um 9:40 aufgehört — es wird bis dahin gebucht und der Timer angehalten |
+| `25` | offers `+25` and `−25` |
+| `-25`, `+1:30` | exactly this direction |
+| `from 9:40` | I've been working since 9:40 — the start of the running segment moves there |
+| `until 9:40` | I stopped at 9:40 — time is booked up to then and the timer stops |
 
-**Uhrzeiten setzen einen laufenden Timer voraus.** Sie ändern das laufende
-Segment; steht der Timer, gibt es keines, das sie meinen könnten. Nachtragen
-lässt sich dann über eine Dauer — `+20` bucht zwanzig Minuten, ohne zu
-behaupten, wann sie angefallen sind. Im Log steht eine solche Korrektur deshalb
-ohne Anfangszeit.
+The German `ab 9:40` and `bis 9:40` work as well.
 
-Jede Zeile zeigt vorher, was sie bewirkt: `7:13:09 → 7:08:09`. Weiter zurück als
-bis zum **Ende des letzten Segments** reicht keine Korrektur — ein
-abgeschlossenes Segment sagt ja gerade, dass bis dahin alles richtig erfasst
-ist. Wird deshalb gekürzt, sagt dieselbe Zeile, was stattdessen geht und woran
-es liegt: „erst ab 14:25 → so weit reicht das letzte Segment".
-Unter null fällt ein Eintrag ebenfalls nie.
+**Clock times need a running timer.** They change the running segment; when
+the timer is stopped, there is none they could refer to. Then add time as a
+duration — `+20` books twenty minutes without claiming when they happened. The
+log therefore shows such an adjustment without a start time.
 
-Beim Schliessen des letzten VS-Code-Fensters wird pausiert. Abschalten lässt
-sich das mit `"pauseOnWindowClose": false` in `~/.prosonata/config.json`.
+Every option shows beforehand what it does: `7:13:09 → 7:08:09`. No adjustment
+reaches further back than the **end of the last segment** — a closed segment
+says precisely that everything up to then was recorded correctly. If an
+adjustment is cut short for that reason, the same option says what is possible
+instead and why: “only from 14:25 → that's as far as the last segment reaches”.
+An entry never drops below zero either.
 
-Die Statusleiste zeigt, was der Branch **insgesamt** gesammelt hat — die Zahl,
-die auf die Rechnung geht. Das laufende Segment steht im Tooltip, zusammen mit
-Branch und Versandstand. Im Panel stehen beide Zahlen nebeneinander, das
-laufende Segment zuerst: `0:42:13 · 3:48:02`.
+Closing the last VS Code window pauses the timer. Turn this off with
+`"pauseOnWindowClose": false` in `~/.prosonata/config.json`.
 
-## Nacharbeit nach dem Commit
+The status bar shows what the branch has collected **in total** — the figure
+that goes on the invoice. The running segment is in the tooltip, together with
+the branch and the sending status. The panel shows both figures side by side,
+the running segment first: `0:42:13 · 3:48:02`.
 
-Auf `main` schliesst jeder Commit seinen Zeiteintrag. Wer danach noch
-nacharbeitet — der letzte Blick, das Deployment, der Anruf — und nicht mehr
-committet, hat Zeit gemessen, die zum eben gemachten Commit gehört. Sie ginge
-sonst erst mit dem **nächsten** Commit hinaus, unter dessen Text.
+## Follow-up work after a commit
 
-Dafür steht in der Seitenleiste **Nicht gebucht**, sobald solche Zeit daliegt.
-Zugeschlagen wird immer dem zuletzt
-abgeschlossenen Eintrag dieses Branches, und zwar als reine Summe — Text und
-Datum dort bleiben, wie sie sind. Bestätigt wird vorher, mit den Zahlen:
+On `main`, each commit closes its time entry. If you keep working afterwards —
+the last check, the deployment, the phone call — and don't commit again, you
+have measured time that belongs to the commit you just made. Otherwise it would
+only go out with the **next** commit, under that commit's text.
 
-    5 Minuten an «Kirby Update, Startseite Linkfarbe» (2026-08-02)
-    2:00 h wird 2:15 h
+For this the sidebar shows **Not booked** as soon as such time is there. It is
+always attached to the last closed entry of this branch, as a plain total — the
+text and date there stay as they are. You confirm first, with the figures:
 
-Die zweite Zeile ist der Grund für die Rückfrage: Das Zeitraster rundet **auf**,
-eine Viertelstunde als Raster macht aus fünf Minuten also eine Viertelstunde.
-Ein bereits **fakturierter** Eintrag wird abgelehnt — das geht nur noch in
-ProSonata selbst. Steht der offene Eintrag schon dort, verschwindet er beim
-Zuschlagen: Seine Zeit ist ja umgezogen. Nur wenn ein anderer Computer in ihn
-gemessen hat, bleibt er stehen und das Zuschlagen wird abgelehnt.
+    5 minutes to “Kirby update, home page link colour” (2026-08-02)
+    2:00 h becomes 2:15 h
 
-## Zeiteinträge durchsehen
+The second line is the reason for asking: the rounding grid rounds **up**, so a
+quarter-hour grid turns five minutes into a quarter of an hour. An entry that
+is already **invoiced** is refused — that can only be done in ProSonata itself.
+If the open entry is already in ProSonata, it disappears when attached: its
+time has moved. Only if another computer measured into it does it stay, and
+attaching is refused.
 
-Das Listen-Symbol in der Titelleiste des ProSonata-Panels holt die Zeiteinträge
-des aktuellen Repositories aus ProSonata in eine Liste, in der sich mehrere
-wählen lassen; über die Befehlspalette heisst es «ProSonata: Zeiteinträge
-durchsehen».
-Drei Handlungen stehen daran:
+## Browsing time entries
 
-- **Text und Stunden ändern** — das Stift-Symbol an einer Zeile. Stunden werden
-  als `h:mm` oder Dezimalzahl getippt; geschrieben wird die neue Summe, auf das
-  Raster gerundet.
-- **Zusammenlegen** — mehrere wählen, ein Eintrag bleibt, die übrigen werden
-  gelöscht, nachdem die Summe sicher auf dem bleibenden steht. Vorgeschlagen
-  werden die Stunden aus den gemessenen Segmenten, **einmal** auf das Raster
-  gerundet: Wer im Nachhinein zusammenlegt, sagt damit, das sei in einem Rutsch
-  gemacht worden, und ein Rutsch wird einmal gerundet, nicht dreimal. Decken die
-  Segmente die Einträge nicht — etwa weil ein anderer Rechner gemessen hat —,
-  steht die Summe aus ProSonata da, mit dem Hinweis, warum.
-- **Löschen** — nach Rückfrage mit den Zahlen.
+The list icon in the title bar of the ProSonata panel fetches the time entries
+of the current repository from ProSonata into a list where several can be
+selected; in the Command Palette it is called “ProSonata: Browse Time Entries”.
+It offers three actions:
 
-**Fakturierte Einträge bleiben stehen**, bei allen drei Handlungen: Sie gehören
-der Rechnung. Das Segmentprotokoll wird nicht nachgezogen; es bleibt das Archiv
-der Messung, berichtigt wird die Abrechnung.
+- **Change text and hours** — the pencil icon on a row. Type hours as `h:mm` or
+  as a decimal number; the new total is written, rounded to the grid.
+- **Merge** — select several; one entry stays, the others are deleted once the
+  total is safely on the remaining one. The suggested hours come from the
+  measured segments, rounded to the grid **once**: merging afterwards says the
+  work was done in one go, and one go is rounded once, not three times. If the
+  segments don't cover the entries — because another computer measured, for
+  instance — the total from ProSonata is shown, with a note explaining why.
+- **Delete** — after confirming with the figures.
 
-## Der Log
+**Invoiced entries stay** in all three actions: they belong to the invoice. The
+segment log is not adjusted; it remains the archive of the measurement, while
+the billing is what gets corrected.
 
-Das Uhr-Symbol daneben öffnet alle gemessenen
-Segmente als gesetzte Vorschau, nach Tagen gruppiert, mit einer Branch-Auswahl
-davor. Bearbeiten lässt sie sich nicht: Das Protokoll ist ein Archiv, und was
-abgerechnet wird, steht im Zeiteintrag. Korrigiert wird deshalb über die
-Zeitkorrektur, nicht im Text.
+## The log
 
-Wird ein Zeiteintrag abgeschlossen, steht dort eine eigene Zeile — ohne Zeiten,
-mit seiner Summe und dem Vermerk **Zeiteintrag**. Alles darüber gehört zu ihm;
-so siehst du, welche Segmente in welche Rechnungsposition geflossen sind, ohne
-dass der Text auf jeder Zeile wiederholt wird. Zeigst du einen einzelnen Branch,
-entfällt die Branch-Spalte.
+The clock icon next to it opens all measured segments as a rendered preview,
+grouped by day, with a branch picker in front. It can't be edited: the log is
+an archive, and what is billed is in the time entry. Corrections therefore go
+through time adjustment, not the text.
 
-Die Branch-Liste stammt aus dem Protokoll unter `~/.prosonata/segments.jsonl`,
-nicht aus Git — **gelöschte Branches behalten damit ihre Stunden**. Das
-Protokoll wird nie gekürzt; es beantwortet als einziges, wie viel an welchem
-*Tag* gearbeitet wurde. Ein Zeiteintrag trägt nur eine Summe und das Datum
-seines letzten Schreibvorgangs.
+When a time entry is closed, it gets a row of its own — without times, with its
+total and the note **Time entry**. Everything above belongs to it; that way you
+see which segments went into which invoice line without the text being repeated
+on every row. When you show a single branch, the branch column is left out.
 
-Aufgezeichnet wird, was auf diesem Computer gemessen wurde. Was auf einem
-anderen anfiel, steht in ProSonata, aber nicht hier.
+The branch list comes from the log in `~/.prosonata/segments.jsonl`, not from
+git — **deleted branches keep their hours**. The log is never trimmed; it is
+the only thing that tells how much was worked on which *day*. A time entry only
+carries a total and the date of its last write.
+
+What is recorded is what was measured on this computer. What happened on
+another one is in ProSonata, but not here.
 
 
-## CLI Befehle
+## CLI commands
 
 ```sh
-prosonata init                    Konto und dieses Repository einrichten, Hook installieren
-prosonata start                   Timer dieses Branches starten oder fortsetzen
-prosonata pause [h:mm|Minuten]    Timer pausieren; mit Dauer wird nur diese gebucht
-prosonata status                  was läuft, was ist offen, was wartet
-prosonata send                    alles senden, was gerade fällig ist
+prosonata init                    set up account and this repository, install the hook
+prosonata start                   start or resume this branch's timer
+prosonata pause [h:mm|minutes]    pause the timer; with a duration, only that is booked
+prosonata status                  what is running, what is open, what is waiting
+prosonata send                    send everything that is due now
 
-prosonata project                 Projekt dieses Repositories wählen
-prosonata category                Zeitkategorie dieses Projekts wählen
-prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
-prosonata mode [branch|tag|commit] ein Eintrag pro Branch, pro Branch und Tag, oder pro Commit
-prosonata close [Nr] [Text]       offenen Zeiteintrag abschliessen und senden; mit Nr den eines anderen Branches
-prosonata text <Text>             Text des offenen Zeiteintrags ändern
-prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
-prosonata attach                  Zeit dem Eintrag des letzten Commits zuschlagen
-prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
-prosonata rejected [Nr retry|move|drop]
-                                  abgelehnte Einträge: erneut senden, auf anderes Projekt, verwerfen
-prosonata resting [Nr close|keep|drop]
-                                  seit Wochen ruhende Einträge: abschliessen, behalten, verwerfen
-prosonata tidy                    leere Reste gelöschter Branches in allen Repositories entfernen
-prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
-prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
+prosonata project                 choose this repository's project
+prosonata category                choose this project's time category
+prosonata grid [exact|5|15|30]    round to this many minutes
+prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit
+prosonata close [no] [text]       close the open time entry and send it; with a number, another branch's
+prosonata text <text>             change the text of the open time entry
+prosonata discard                 discard the running segment without booking it
+prosonata attach                  attach time to the entry of the last commit
+prosonata resume [add|new]        resolve an entry closed elsewhere
+prosonata rejected [no retry|move|drop]
+                                  rejected entries: send again, move to another project, discard
+prosonata resting [no close|keep|drop]
+                                  entries dormant for weeks: close, keep, discard
+prosonata tidy                    remove empty leftovers of deleted branches in all repositories
+prosonata log [branch|all|?]      measured segments, this branch's if none is given
+prosonata adjust <value>          adjust time: ±25, ±1:30, "from 9:40", "until 9:40"
 ```
 
-Was ein Argument nimmt, fragt danach, wenn es weggelassen wird — mit Argument
-läuft der Befehl ohne Rückfrage durch und taugt damit auch für Skripte.
+A command that takes an argument asks for it when it is left out — with the
+argument it runs without asking, which also makes it fit for scripts. The
+earlier German argument values (`exakt`, `tag`, `neu`, `alle`, `ab`, `bis`)
+still work.
 
-## Was die Extension nicht tut
+## What the extension doesn't do
 
-- **Keine Aktivitätserkennung.** Aktivität im Dateisystem ist nicht dasselbe wie
-  abrechenbare Zeit. Das Werkzeug warnt, es bucht nie von selbst.
-- **Kein automatischer Start** bei Checkout, Merge oder beim Öffnen des Editors.
-- **Kein Anhalten aus der Ferne.** Läuft auf einem anderen Computer ein Timer,
-  warnt es — anhalten kann es ihn nicht, und die Zeit für dich buchen erst
-  recht nicht.
-- **Keine Speicherung im Repository.** Sie lägen im Repository des Kunden und
-  zeigten ihm den Aufwand pro Commit. Alle Segmente liegen lokal auf dem Computer.
-- **Zum Commit-Zeitpunkt wird nichts gesendet.** Ein Schreibvorgang geht raus,
-  sobald er älter als zehn Minuten ist, damit ein zurückgenommener Commit gar
-  nicht erst bei ProSonata ankommt.
+- **No activity detection.** Activity in the file system is not the same as
+  billable time. The tool warns; it never books on its own.
+- **No automatic start** on checkout, merge or when the editor opens.
+- **No remote stop.** If a timer is running on another computer, it warns — it
+  can't stop it, let alone book the time for you.
+- **No storage in the repository.** It would sit in the client's repository and
+  show them the effort per commit. All segments stay locally on the computer.
+- **Nothing is sent at commit time.** A write goes out once it is older than
+  ten minutes, so a commit that is taken back never reaches ProSonata at all.
 
-## Entwicklung
+## Development
 
-### Eine Änderung ausprobieren
+### Trying out a change
 
-Dafür wird nichts installiert. **F5** startet ein zweites VS-Code-Fenster, in dem
-die Erweiterung direkt aus diesem Arbeitsverzeichnis läuft. Zur Auswahl stehen
-zwei Startkonfigurationen:
+Nothing gets installed for this. **F5** opens a second VS Code window in which
+the extension runs straight from this working directory. There are two launch
+configurations:
 
-- **Extension im echten Konto** — mit deinem `~/.prosonata` und deinen Projekten.
-  Was du dort tust, landet in ProSonata.
-- **Extension in der Sandbox** — mit eigenem Zustandsverzeichnis und einem
-  Wegwerf-Repository unter `.sandbox`, das bereits Projekt, Kategorie und Hook
-  hat. Die Basis-URL zeigt ins Leere, gesendet wird also nichts; alle
-  Schreibvorgänge sammeln sich sichtbar in der Warteschlange.
+- **Extension in the real account** — with your `~/.prosonata` and your projects.
+  What you do there lands in ProSonata.
+- **Extension in the sandbox** — with its own state directory and a throwaway
+  repository under `.sandbox` that already has a project, category and hook.
+  The base URL points nowhere, so nothing is sent; all writes collect visibly
+  in the queue.
 
-Die Sandbox muss vorher angelegt werden — der Befehl baut sie jedes Mal neu:
+The sandbox has to be created first — the command rebuilds it every time:
 
 ```sh
 npm run sandbox                   # offline
-npm run sandbox -- --live 166 70  # echtes Konto, Projekt 166, Kategorie 70
+npm run sandbox -- --live 166 70  # real account, project 166, category 70
 ```
 
-Die zwei Striche vor `--live` müssen sein: Ohne sie schluckt npm das Argument,
-und die Sandbox läuft offline weiter, als hätte man nichts gesagt.
+The two dashes before `--live` are required: without them npm swallows the
+argument, and the sandbox stays offline as if nothing had been said.
 
-### Prüfen und bauen
+### Checking and building
 
 ```sh
-npm run check    # Typen, Tests, Build in einem
-npm run watch    # baut bei jeder Änderung neu
+npm run check    # types, tests, build in one go
+npm run watch    # rebuilds on every change
 ```
 
-`src/core` enthält alle Regeln und importiert nie `vscode` — deshalb kann der
-Hook sie verwenden. `src/cli` und `src/extension` sind zwei Frontends über
-demselben Kern: Ein Commit aus dem Terminal verhält sich genau wie einer aus dem
-Editor.
+`src/core` contains all the rules and never imports `vscode` — which is why the
+hook can use it. `src/cli` and `src/extension` are two frontends over the same
+core: a commit from the terminal behaves exactly like one from the editor.
 
-Die vollständige Begründung, inklusive der verworfenen Alternativen und der
-Gründe dafür, steht in [KONZEPT.md](KONZEPT.md). Das API-Verhalten, auf das sich
-das Werkzeug stützt, wurde gegen ein Live-Konto gemessen; die Requests liegen in
-[bruno/](bruno/).
+Visible texts go through `t()` from `src/core/l10n.ts`, in English; the German
+translation is in `l10n/bundle.l10n.de.json`, the command titles in
+`package.nls.json` and `package.nls.de.json`. A test fails when a text has no
+German translation.
 
-## Lizenz
+The full reasoning, including the rejected alternatives and why, is in
+[KONZEPT.md](KONZEPT.md) (German). The API behaviour the tool relies on was
+measured against a live account; the requests are in [bruno/](bruno/).
 
-MIT — siehe [LICENSE](LICENSE).
+## License
+
+MIT — see [LICENSE](LICENSE).

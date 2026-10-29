@@ -302,9 +302,10 @@ describe('an entry ProSonata refuses', () => {
       message: 'Database insert data conflict.',
       project: 'deleted',
     })
-    expect(journal.read().at(-1)?.message).toBe(
-      'POST /projecttimes → 409: Database insert data conflict. (Projekt gelöscht)',
-    )
+    expect(journal.read().at(-1)).toMatchObject({
+      message: '{0} → {1}: {2} (project deleted)',
+      args: ['POST /projecttimes', '409', 'Database insert data conflict.'],
+    })
   })
 
   it('is held as well when the refused write is a change, not a creation', async () => {
@@ -369,14 +370,14 @@ describe('an entry ProSonata refuses', () => {
     const named = { id: 178, name: 'Kontaktkarten', no: 'COR-26021' }
 
     expect(describeRejection(entry({ rejected: { ...rejected, project: 'deleted' } }), named)).toBe(
-      'Projekt COR-26021 Kontaktkarten gibt es in ProSonata nicht mehr',
+      'project COR-26021 Kontaktkarten no longer exists in ProSonata',
     )
     expect(describeRejection(entry({ rejected }), named)).toBe('Database insert data conflict. (409)')
   })
 
   it('says so in the line about the queue', () => {
     const empty: SendResult = { sent: [], failed: [], tooLong: [], missingCategory: [], awaitingDecision: [], deferred: [], rejected: [] }
-    expect(describeTrouble({ ...empty, rejected: ['e1'] })).toBe('ein Eintrag von ProSonata abgelehnt')
+    expect(describeTrouble({ ...empty, rejected: ['e1'] })).toBe('one entry rejected by ProSonata')
   })
 
   it('is folded onto the state as it stands now, keeping time booked meanwhile', () => {
@@ -822,22 +823,22 @@ describe('naming why a queue is stuck', () => {
 
   it('names a refused key rather than swallowing it', () => {
     const failed = [{ entryId: 'e1', error: new ApiError(403, 'Forbidden') }]
-    expect(describeTrouble({ ...empty, failed })).toMatch(/API-Key oder Rechte/)
+    expect(describeTrouble({ ...empty, failed })).toMatch(/API key or permissions/)
   })
 
   it('tells a spent quota from a real failure', () => {
-    expect(describeTrouble({ ...empty, deferred: ['e1'] })).toMatch(/Kontingent/)
+    expect(describeTrouble({ ...empty, deferred: ['e1'] })).toMatch(/quota/)
     const failed = [{ entryId: 'e1', error: new ApiError(429, 'Too many') }]
-    expect(describeTrouble({ ...empty, failed })).toMatch(/Kontingent/)
+    expect(describeTrouble({ ...empty, failed })).toMatch(/quota/)
   })
 
   it('names the length when a text is over the limit', () => {
     const tooLong = [{ entryId: 'e1', length: 940, limit: 800 }]
-    expect(describeTrouble({ ...empty, tooLong })).toBe('Text zu lang: 940 von 800 Zeichen')
+    expect(describeTrouble({ ...empty, tooLong })).toBe('text too long: 940 of 800 characters')
   })
 
   it('names the missing category, which no retry would fix', () => {
-    expect(describeTrouble({ ...empty, missingCategory: ['e1'] })).toMatch(/Zeitkategorie/)
+    expect(describeTrouble({ ...empty, missingCategory: ['e1'] })).toMatch(/time category/)
   })
 })
 

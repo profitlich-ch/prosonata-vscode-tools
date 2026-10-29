@@ -2,6 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'n
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 
+import { t } from './l10n.js'
 import { DEFAULT_MARKER_WORD } from './marker.js'
 import type { TimeGrid } from './working-time.js'
 
@@ -70,6 +71,11 @@ export interface Config {
    * paused longer than a day between two stretches of work.
    */
   restingDays: number
+  /**
+   * VS Code's display language, written by the extension. The CLI and the hook
+   * use it when the environment names none (KONZEPT.md §10).
+   */
+  language?: string
 }
 
 export const DEFAULTS: Omit<Config, 'baseUrl' | 'apiKey'> = {
@@ -109,7 +115,7 @@ export const paths = {
 
 export class MissingConfig extends Error {
   constructor(public readonly file: string) {
-    super(`keine Konfiguration in ${file} — führe "prosonata init" aus`)
+    super(t('no configuration in {0} — run "prosonata init"', file))
     this.name = 'MissingConfig'
   }
 }
@@ -139,6 +145,32 @@ export function writeConfig(config: Config, file = paths.config()): void {
   writeFileSync(file, JSON.stringify(config, null, 2), { mode: 0o600 })
   // An existing file keeps its mode, so set it explicitly.
   chmodSync(file, 0o600)
+}
+
+/**
+ * Records the display language for the CLI and the hook. Only an existing file
+ * is touched, and only when the value changes: without an account there is
+ * nothing to speak for yet, and the extension calls this on every start. A
+ * broken file is left for the setup to report, not for activation to trip on.
+ */
+export function rememberLanguage(language: string, file = paths.config()): void {
+  if (!existsSync(file)) return
+  try {
+    const raw = JSON.parse(readFileSync(file, 'utf8')) as Partial<Config>
+    if (raw.language === language) return
+    writeFileSync(file, JSON.stringify({ ...raw, language }, null, 2), { mode: 0o600 })
+  } catch {
+    // See above.
+  }
+}
+
+/** The language the extension last recorded, if any; never fails. */
+export function rememberedLanguage(file = paths.config()): string | undefined {
+  try {
+    return (JSON.parse(readFileSync(file, 'utf8')) as Partial<Config>).language
+  } catch {
+    return undefined
+  }
 }
 
 function trimSlash(value: string): string {

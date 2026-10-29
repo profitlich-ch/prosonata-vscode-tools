@@ -1,6 +1,7 @@
 import * as vscode from 'vscode'
 
 import { noteFor, planAdjustment, readAdjustment, type Adjustment } from '../core/adjust.js'
+import { t } from '../core/l10n.js'
 import type { RepoContext, Session } from '../core/session.js'
 import { currentSeconds, runningSeconds } from '../core/tracking.js'
 import { clock } from './panel.js'
@@ -19,8 +20,8 @@ import { reload } from './view.js'
  */
 export async function adjustTime(session: Session, context: RepoContext): Promise<void> {
   const pick = vscode.window.createQuickPick<Offer>()
-  pick.title = 'ProSonata: Zeit korrigieren'
-  pick.placeholder = '±Minuten, ±h:mm, «ab 9:40» oder «bis 9:40»'
+  pick.title = t('ProSonata: adjust time')
+  pick.placeholder = t('±minutes, ±h:mm, «from 9:40» or «until 9:40»')
   pick.items = standingOffers(session, context)
   pick.onDidChangeValue((value) => {
     const offers = readAdjustment(value, session.clock.now())
@@ -34,8 +35,8 @@ export async function adjustTime(session: Session, context: RepoContext): Promis
      */
     pick.title =
       offers.length > 0 && possible.length === 0
-        ? 'ProSonata: ohne laufenden Timer keine Uhrzeit — nimm eine Dauer, etwa -0:06'
-        : 'ProSonata: Zeit korrigieren'
+        ? t('ProSonata: no time of day without a running timer — use a duration, such as -0:06')
+        : t('ProSonata: adjust time')
     pick.items = possible.length === 0 && offers.length === 0
       ? standingOffers(session, context)
       : possible.map((offer) => describe(offer, session, context))
@@ -62,14 +63,18 @@ export async function adjustTime(session: Session, context: RepoContext): Promis
   const note = noteFor(plan, chosen)
   if (plan.action === 'impossible' || (plan.delta === 0 && plan.action !== 'stop')) {
     void vscode.window.showWarningMessage(
-      `ProSonata: nichts geändert${note === null ? '.' : ` — ${note}.`}`,
+      note === null ? t('ProSonata: nothing changed.') : t('ProSonata: nothing changed — {0}.', note),
     )
     return
   }
 
   const after = currentSeconds(session.state(), session.clock, context.scope)
-  const stopped = plan.action === 'stop' && plan.at !== undefined ? `, angehalten um ${hourOf(plan.at)}` : ''
-  void vscode.window.setStatusBarMessage(`ProSonata: ${clock(before)} → ${clock(after)}${stopped}`, 4000)
+  void vscode.window.setStatusBarMessage(
+    plan.action === 'stop' && plan.at !== undefined
+      ? t('ProSonata: {0} → {1}, stopped at {2}', clock(before), clock(after), hourOf(plan.at))
+      : `ProSonata: ${clock(before)} → ${clock(after)}`,
+    4000,
+  )
 }
 
 /**
@@ -83,22 +88,26 @@ export async function adjustTime(session: Session, context: RepoContext): Promis
 export async function discardRunning(session: Session, context: RepoContext, confirm: boolean): Promise<void> {
   const running = runningSeconds(session.state(), session.clock, context.scope)
   if (running <= 0) {
-    void vscode.window.showInformationMessage('ProSonata: es läuft gerade kein Timer.')
+    void vscode.window.showInformationMessage(t('ProSonata: no timer is running right now.'))
     return
   }
 
   if (confirm) {
+    const discard = t('Discard')
     const answer = await vscode.window.showWarningMessage(
-      'Laufendes Segment verwerfen?',
-      { modal: true, detail: `${clock(running)} werden nicht gebucht, der Timer hält an. Im Log bleibt die verworfene Dauer stehen.` },
-      'Verwerfen',
+      t('Discard the running segment?'),
+      {
+        modal: true,
+        detail: t('{0} will not be booked, and the timer stops. The discarded duration stays in the log.', clock(running)),
+      },
+      discard,
     )
-    if (answer !== 'Verwerfen') return
+    if (answer !== discard) return
   }
 
   session.keepFromRunning(context, 0)
   reload()
-  void vscode.window.setStatusBarMessage(`ProSonata: ${clock(running)} verworfen, Timer angehalten`, 4000)
+  void vscode.window.setStatusBarMessage(t('ProSonata: {0} discarded, timer stopped', clock(running)), 4000)
 }
 
 /** `17:17` — the hour a plan settles on. */
@@ -121,7 +130,7 @@ function standingOffers(session: Session, context: RepoContext): Offer[] {
   const offers: Adjustment[] = [-15, -5, 5, 15].map((minutes) => ({
     kind: 'amount',
     seconds: minutes * 60,
-    label: `${minutes > 0 ? '+' : '−'}${Math.abs(minutes)} Minuten`,
+    label: t('{0}{1} minutes', minutes > 0 ? '+' : '−', Math.abs(minutes)),
   }))
 
   const lines = offers.map((offer) => describe(offer, session, context))
@@ -130,9 +139,9 @@ function standingOffers(session: Session, context: RepoContext): Offer[] {
 
   return [
     {
-      label: 'Laufendes Segment verwerfen',
+      label: t('Discard the running segment'),
       description: clock(running),
-      detail: 'der Timer hält an, gebucht wird nichts',
+      detail: t('the timer stops, nothing is booked'),
       // For the same reason as in `describe`: this list is also shown while
       // something unreadable is being typed, and then it must stay whole.
       alwaysShow: true,
@@ -155,7 +164,7 @@ function describe(
    * For a stop, the hour that will be recorded — which is not always the hour
    * that was typed: a timer that started later cannot end earlier than it began.
    */
-  const stopped = plan.action === 'stop' && plan.at !== undefined ? ` · hält um ${hourOf(plan.at)} an` : ''
+  const stopped = plan.action === 'stop' && plan.at !== undefined ? ` · ${t('stops at {0}', hourOf(plan.at))}` : ''
 
   return {
     label: adjustment.label,
@@ -177,8 +186,8 @@ function describe(
 /** `1:30` or `90` — hours and minutes, or plain minutes. Null when cancelled. */
 export async function askForDuration(running: number): Promise<number | null> {
   const given = await vscode.window.showInputBox({
-    title: 'ProSonata: wie viel davon zählt?',
-    prompt: 'Stunden:Minuten, oder eine Zahl als Minuten',
+    title: t('ProSonata: how much of it counts?'),
+    prompt: t('Hours:minutes, or a number as minutes'),
     value: clock(running).slice(0, -3),
   })
   if (given === undefined) return null
@@ -186,7 +195,7 @@ export async function askForDuration(running: number): Promise<number | null> {
   const [hours, minutes] = given.split(':')
   const seconds = minutes === undefined ? Number(hours) * 60 : Number(hours) * 3600 + Number(minutes) * 60
   if (!Number.isFinite(seconds) || seconds < 0) {
-    void vscode.window.showWarningMessage(`ProSonata: „${given}" ist keine Dauer — nichts geändert.`)
+    void vscode.window.showWarningMessage(t('ProSonata: «{0}» is not a duration — nothing changed.', given))
     return null
   }
   return seconds

@@ -1812,11 +1812,34 @@ Zwei Dinge gelten deshalb **unabhängig** von einer Veröffentlichung, allein we
   pro Commit abrechnet, stellt ihn um, statt das Werkzeug zu meiden.
   Die **`detail`-Grenze** muss konfigurierbar sein, weil ProSonata sie je Konto anhebt und
   die API sie nicht verrät – Default 800, vom Hersteller zugesagt.
-- **Englisch** für Code, Bezeichner und Kommentare. **Deutsch für alles Sichtbare**: Namen
-  der Befehle, Panel, Dialoge, Meldungen der CLI, README und Changelog. ProSonata ist ein
-  deutsches Produkt, seine Fachbegriffe sind es auch; eine englische Oberfläche darüber wäre
-  eine Übersetzungsschicht, die niemand braucht. Fehlertexte aus `core`, die den Benutzer
-  erreichen, zählen zur Oberfläche.
+- **Englisch** für Code, Bezeichner, Kommentare und das Journal. **Die Oberfläche ist
+  englisch, mit deutscher Übersetzung**: Namen der Befehle, Panel, Dialoge, Meldungen der CLI
+  und des Hooks, das Segment-Log. Fehlertexte aus `core`, die den Benutzer erreichen, zählen
+  zur Oberfläche. Englisch ist der Standard, weil eine Extension im Marketplace es so erwartet;
+  Deutsch erscheint, wo VS Code oder die Umgebung deutsch eingestellt ist.
+  - Die Texte aus `package.json` stehen in `package.nls.json` und `package.nls.de.json`. Alle
+    übrigen gehen durch `t()` aus `@vscode/l10n`, mit dem englischen Text als Schlüssel; die
+    deutsche Fassung steht in `l10n/bundle.l10n.de.json` und wird in Extension und CLI
+    eingebündelt – die CLI läuft als Kopie fern vom Paket (Abschnitt 8). Ein Test fällt, wenn
+    ein Text im Code keine deutsche Fassung hat; sonst erschiene er still englisch.
+  - Die Sprache von CLI und Hook: `LC_ALL`, `LC_MESSAGES`, `LANG`, sonst die Sprache, die die
+    Extension zuletzt in `config.json` geschrieben hat, sonst Englisch. Ein GUI-Client ruft den
+    Hook oft ohne Umgebungsvariablen auf.
+  - Notizen im Journal sind englische Vorlagen mit ihren Werten, nicht fertige Sätze. So kann
+    eine Anzeige sie übersetzen, denn die Vorlage ist zugleich der Schlüssel im Bundle.
+  - **Was nach ProSonata geht, bleibt deutsch**: der Marker `[LAUFEND]` und der Platzhaltertext
+    `(in Arbeit)`. Sie stehen in Zeiteinträgen, der Marker wird dort wieder gelesen – ein
+    Rechner mit älterer Fassung erkennte einen neuen nicht und legte doppelte Einträge an.
+    Beides ist konfigurierbar; erscheint ProSonata einmal in anderen Sprachen, wird es angepasst.
+  - **README, Changelog und Commit-Messages sind englisch**, ab 0.26.0; ältere Einträge im
+    Changelog bleiben deutsch. README und Changelog sind im Marketplace die Seite der
+    Extension. `KONZEPT.md`, `CLAUDE.md` und `docs/` bleiben deutsch.
+
+  *Bis 0.25.0 war alles Sichtbare deutsch: ProSonata sei ein deutsches Produkt, eine englische
+  Oberfläche darüber eine Übersetzungsschicht, die niemand braucht. Abgelöst am 2026-10-29 –
+  Englisch als Standard mit deutscher Übersetzung ist bei VS-Code-Extensions üblich und nimmt
+  deutschsprachigen Nutzern nichts. Der Einwand bleibt: Wer VS Code englisch eingestellt hat,
+  sieht englische Begriffe über einem deutschen Produkt.*
 - **MIT-Lizenz** von Anfang an, `README.md` und `CHANGELOG.md` mitführen.
 - **Fehlerbehandlung sichtbar machen.** Andere Accounts haben andere Pakete, Rechtestufen und
   Limits. HTTP 429 und 403 gehören abgefangen und verständlich gemeldet, nicht verschluckt.

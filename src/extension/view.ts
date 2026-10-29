@@ -2,6 +2,7 @@ import * as vscode from 'vscode'
 
 import { MissingConfig, readConfig } from '../core/config.js'
 import { describeRepo, type GitRepo } from '../core/git.js'
+import { t } from '../core/l10n.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
 import { currentSeconds, openEntry, runningSeconds } from '../core/tracking.js'
 import type { State } from '../core/types.js'
@@ -150,12 +151,12 @@ export function withContext<A extends unknown[]>(
   return async (...args: A) => {
     const active = currentSession()
     if (!active) {
-      void vscode.window.showWarningMessage('ProSonata: noch kein Konto eingerichtet — führe "prosonata init" aus.')
+      void vscode.window.showWarningMessage(t('ProSonata: no account set up yet — run "prosonata init".'))
       return
     }
     const context = currentContext()
     if (!context) {
-      void vscode.window.showWarningMessage('ProSonata: diesem Repository ist noch kein Projekt zugeordnet — führe "prosonata init" aus.')
+      void vscode.window.showWarningMessage(t('ProSonata: this repository has no project assigned yet — run "prosonata init".'))
       return
     }
     try {
@@ -178,14 +179,14 @@ export function withRepo<A extends unknown[]>(
   return async (...args: A) => {
     const active = currentSession()
     if (!active) {
-      void vscode.window.showWarningMessage('ProSonata: noch kein Konto eingerichtet — richte es zuerst ein.')
+      void vscode.window.showWarningMessage(t('ProSonata: no account set up yet — set one up first.'))
       return
     }
 
     const folder = vscode.workspace.workspaceFolders?.[0]
     const repo = folder ? describeRepo(folder.uri.fsPath) : null
     if (!repo) {
-      void vscode.window.showWarningMessage('ProSonata: dieser Ordner ist kein Git-Repository.')
+      void vscode.window.showWarningMessage(t('ProSonata: this folder is not a Git repository.'))
       return
     }
 
@@ -263,8 +264,8 @@ export function draw(): void {
   statusBar.text = `${icon} ${clock(total)}${others}`
   statusBar.tooltip = [
     context.scope.branch,
-    here?.startedAt ? `laufendes Segment ${clock(segment)}` : 'pausiert',
-    state.pending.length > 0 ? `${state.pending.length} warten auf Versand` : 'nichts wartet auf Versand',
+    here?.startedAt ? t('running segment {0}', clock(segment)) : t('paused'),
+    state.pending.length > 0 ? t('{0} waiting to be sent', state.pending.length) : t('nothing waiting to be sent'),
   ].join(' · ')
   statusBar.show()
 

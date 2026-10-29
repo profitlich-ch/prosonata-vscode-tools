@@ -243,12 +243,12 @@ describe('a timer running on another machine', () => {
 
   it('says the hour when it began today', () => {
     expect(describeRunningElsewhere(EIGHT_TWELVE, new Date(2026, 6, 30, 11, 0, 0).getTime())).toBe(
-      'auf einem anderen Rechner läuft seit 08:12 ein Timer auf diesem Branch',
+      'a timer has been running on this branch on another machine since 08:12',
     )
   })
 
   it('names yesterday as yesterday', () => {
-    expect(describeRunningElsewhere(EIGHT_TWELVE, new Date(2026, 6, 31, 11, 0, 0).getTime())).toContain('seit gestern 08:12')
+    expect(describeRunningElsewhere(EIGHT_TWELVE, new Date(2026, 6, 31, 11, 0, 0).getTime())).toContain('since yesterday 08:12')
   })
 
   // Older than that it is no longer news that somebody is working — it is the
@@ -256,7 +256,7 @@ describe('a timer running on another machine', () => {
   it('calls an older mark what it probably is', () => {
     const message = describeRunningElsewhere(EIGHT_TWELVE, new Date(2026, 7, 3, 11, 0, 0).getTime())
 
-    expect(message).toContain('seit 30.07. 08:12')
-    expect(message).toContain('Anhalten vergessen')
+    expect(message).toContain('since 30.07. 08:12')
+    expect(message).toContain('forgot to stop it')
   })
 })

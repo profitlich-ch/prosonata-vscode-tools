@@ -4,6 +4,7 @@ import { inProsonataOrder, type Category, type Project } from '../core/api.js'
 import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { type GitRepo } from '../core/git.js'
 import { hookNeedsRepair, installHook, publishCli } from '../core/hooks.js'
+import { t } from '../core/l10n.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid } from '../core/repo-config.js'
 import { applyCategory, applyProject, unfinishedOnOtherProject } from '../core/tracking.js'
 import type { Session } from '../core/session.js'
@@ -20,8 +21,8 @@ import { currentContext, currentSession, extensionRoot, refreshBudget, reload, r
 export async function setUpAccount(): Promise<void> {
   const known = readIfPresent()
   const baseUrl = await vscode.window.showInputBox({
-    title: 'ProSonata: Basis-URL',
-    prompt: 'Bis und mit /api/v1',
+    title: t('ProSonata: base URL'),
+    prompt: t('Up to and including /api/v1'),
     placeHolder: 'https://<subdomain>.prosonata.software/api/v1',
     value: known?.baseUrl ?? '',
     ignoreFocusOut: true,
@@ -29,16 +30,16 @@ export async function setUpAccount(): Promise<void> {
   if (baseUrl === undefined) return
 
   const apiKey = await vscode.window.showInputBox({
-    title: 'ProSonata: persönlicher API-Key',
+    title: t('ProSonata: personal API key'),
     prompt: known
-      ? 'Leer lassen behält den bisherigen Key'
-      : 'Ein Benutzer-Key, keine App-Integration — eine Integration ist kein Benutzer',
+      ? t('Leave empty to keep the current key')
+      : t('A user key, not an app integration — an integration is not a user'),
     password: true,
     ignoreFocusOut: true,
   })
   if (apiKey === undefined) return
   if (apiKey.trim() === '' && !known) {
-    void vscode.window.showWarningMessage('ProSonata: ohne API-Key lässt sich nichts einrichten.')
+    void vscode.window.showWarningMessage(t('ProSonata: nothing can be set up without an API key.'))
     return
   }
 
@@ -46,7 +47,7 @@ export async function setUpAccount(): Promise<void> {
   resetSession()
   reload()
   void vscode.window.showInformationMessage(
-    `ProSonata: nach ${paths.config()} geschrieben. Wähle jetzt ein Projekt für dieses Repository.`,
+    t('ProSonata: written to {0}. Now choose a project for this repository.', paths.config()),
   )
   await vscode.commands.executeCommand('prosonata.chooseProject')
 }
@@ -70,10 +71,10 @@ export async function chooseProject(session: Session, repo: GitRepo): Promise<vo
     ].map((project) => ({
       label: project.projectName,
       description: project.projectNo,
-      detail: `${project.customerName} · ${project.timeNeeded} von ${project.timePlanned} h`,
+      detail: t('{0} · {1} of {2} h', project.customerName, project.timeNeeded, project.timePlanned),
       project,
     })),
-    { title: 'ProSonata: Projekt für dieses Repository', matchOnDescription: true, matchOnDetail: true },
+    { title: t('ProSonata: project for this repository'), matchOnDescription: true, matchOnDetail: true },
   )
   if (!picked) return
 
@@ -118,17 +119,20 @@ async function askCarryOver(session: Session, repo: GitRepo, project: Project): 
       return known ? (known.no ? `${known.no} ${known.name}` : known.name) : `#${id}`
     })
     .join(', ')
+  const move = t('Move')
   const answer = await vscode.window.showInformationMessage(
-    `${others.length === 1 ? 'Ein unfertiger Eintrag steht' : `${others.length} unfertige Einträge stehen`} auf ${from}. Nach ${project.projectNo} ${project.projectName} mitnehmen?`,
+    others.length === 1
+      ? t('One unfinished entry is on {0}. Move it to {1} {2}?', from, project.projectNo, project.projectName)
+      : t('{0} unfinished entries are on {1}. Move them to {2} {3}?', others.length, from, project.projectNo, project.projectName),
     {
       modal: true,
-      detail: 'Mitnehmen, wenn das bisherige Projekt ein Irrtum war. Dort lassen, wenn ab jetzt neue Arbeit beginnt.',
+      detail: t('Move if the previous project was a mistake. Leave there if new work begins from now on.'),
     },
-    'Mitnehmen',
-    'Dort lassen',
+    move,
+    t('Leave there'),
   )
   if (answer === undefined) return null
-  return answer === 'Mitnehmen'
+  return answer === move
 }
 
 /**
@@ -151,15 +155,15 @@ export async function chooseCategory(session: Session, repo: GitRepo, project?: 
     (category) => category.linkedCustomerID === null || category.linkedCustomerID === customerId,
   )
   if (categories.length === 0) {
-    void vscode.window.showWarningMessage('ProSonata: dieses Konto hat keine aktiven Zeitkategorien.')
+    void vscode.window.showWarningMessage(t('ProSonata: this account has no active time categories.'))
     return
   }
 
   const current = config.categories.get(projectId)
-  const picked = await vscode.window.showQuickPick(
-    groupedItems(categories, current),
-    { title: `ProSonata: Zeitkategorie für ${project?.projectName ?? config.projects.find((p) => p.id === projectId)?.name ?? `#${projectId}`}` },
-  )
+  const projectName = project?.projectName ?? config.projects.find((p) => p.id === projectId)?.name ?? `#${projectId}`
+  const picked = await vscode.window.showQuickPick(groupedItems(categories, current), {
+    title: t('ProSonata: time category for {0}', projectName),
+  })
   if (!picked?.category) return
 
   rememberCategory(repo.root, projectId, picked.category.category, picked.category.categoryName)
@@ -185,11 +189,11 @@ function groupedItems(categories: Category[], current: number | undefined): (vsc
   for (const category of sorted) {
     if (grouped && category.groupName !== group) {
       group = category.groupName
-      items.push({ label: group ?? 'Ohne Gruppe', kind: vscode.QuickPickItemKind.Separator })
+      items.push({ label: group ?? t('No group'), kind: vscode.QuickPickItemKind.Separator })
     }
     items.push({
       label: category.categoryName,
-      description: category.category === current ? 'aktuell' : '',
+      description: category.category === current ? t('current') : '',
       category,
     })
   }
@@ -211,8 +215,7 @@ function cliForHook(): string | null {
     return paths.cli()
   } catch (error) {
     void vscode.window.showWarningMessage(
-      `ProSonata: die CLI konnte nicht nach ${paths.cli()} gelegt werden — ${(error as Error).message}. ` +
-        'Der post-commit-Hook bleibt, wie er ist.',
+      t('ProSonata: the CLI could not be placed at {0} — {1}. The post-commit hook stays as it is.', paths.cli(), (error as Error).message),
     )
     return null
   }
@@ -225,18 +228,16 @@ export function installHookHere(repoRoot: string): void {
   try {
     installHook(repoRoot, { node: process.execPath, cli })
   } catch (error) {
-    void vscode.window.showWarningMessage(`ProSonata: der post-commit-Hook konnte nicht installiert werden — ${(error as Error).message}`)
+    void vscode.window.showWarningMessage(t('ProSonata: the post-commit hook could not be installed — {0}', (error as Error).message))
   }
 }
 
 export async function chooseGrid(_session: Session, repo: GitRepo): Promise<void> {
   const options: { label: string; grid: TimeGrid }[] = [
-    { label: 'exakt', grid: { kind: 'exact' } },
-    { label: '5 Minuten', grid: { kind: 'minutes', minutes: 5 } },
-    { label: '15 Minuten', grid: { kind: 'minutes', minutes: 15 } },
-    { label: '30 Minuten', grid: { kind: 'minutes', minutes: 30 } },
+    { label: t('exact'), grid: { kind: 'exact' } },
+    ...[5, 15, 30].map((minutes) => ({ label: t('{0} minutes', minutes), grid: { kind: 'minutes' as const, minutes } })),
   ]
-  const picked = await vscode.window.showQuickPick(options, { title: 'ProSonata: Zeitraster' })
+  const picked = await vscode.window.showQuickPick(options, { title: t('ProSonata: rounding grid') })
   if (picked) setGrid(repo.root, picked.grid)
 }
 
@@ -252,8 +253,6 @@ export function repairHookIfNeeded(): void {
     installHook(repo.repo.root, { node: process.execPath, cli })
   } catch (error) {
     // The message names the file, and for a tracked hook that is the whole point.
-    void vscode.window.showWarningMessage(
-      `ProSonata: der post-commit-Hook konnte nicht repariert werden — ${(error as Error).message}`,
-    )
+    void vscode.window.showWarningMessage(t('ProSonata: the post-commit hook could not be repaired — {0}', (error as Error).message))
   }
 }

@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import * as vscode from 'vscode'
 
 import { fetchPrune, remoteBranchGone, workMerged } from '../core/git.js'
+import { t } from '../core/l10n.js'
 import type { RepoContext, Session } from '../core/session.js'
 import { describeRunningElsewhere } from '../core/sync.js'
 import { openEntry, runningSeconds } from '../core/tracking.js'
@@ -104,14 +105,15 @@ function watchHead(active: Session, context: RepoContext): void {
   const from = active.reconcileBranchSwitch(context)
   if (from === null) return askAboutNewBranch(active, context)
 
+  const keepCounting = t('Keep counting here')
   void vscode.window
     .showInformationMessage(
-      `ProSonata: der Branch hat gewechselt. Die bisherige Zeit ging an ${from}. Hier weiterzählen?`,
-      'Hier weiterzählen',
-      'Pausiert lassen',
+      t('ProSonata: the branch has changed. The time so far went to {0}. Keep counting here?', from),
+      keepCounting,
+      t('Leave paused'),
     )
     .then((answer) => {
-      if (answer === 'Hier weiterzählen') void vscode.commands.executeCommand('prosonata.start')
+      if (answer === keepCounting) void vscode.commands.executeCommand('prosonata.start')
     })
 }
 
@@ -137,14 +139,15 @@ function askAboutNewBranch(active: Session, context: RepoContext): void {
   if (askedAbout.has(context.key) || !active.neverMeasured(context)) return
 
   askedAbout.add(context.key)
+  const startTimer = t('Start timer')
   void vscode.window
     .showInformationMessage(
-      `ProSonata: ${context.scope.branch} ist neu. Timer starten?`,
-      'Timer starten',
-      'Nicht jetzt',
+      t('ProSonata: {0} is new. Start the timer?', context.scope.branch),
+      startTimer,
+      t('Not now'),
     )
     .then((answer) => {
-      if (answer === 'Timer starten') void vscode.commands.executeCommand('prosonata.start')
+      if (answer === startTimer) void vscode.commands.executeCommand('prosonata.start')
     })
 }
 
@@ -204,16 +207,18 @@ async function askAboutLongRun(active: Session, context: RepoContext): Promise<v
    */
   snoozedUntil.set(context.key, active.clock.now() + SNOOZE_MS)
 
+  const keepAll = t('Keep it all')
+  const discard = t('Discard')
   const answer = await vscode.window.showWarningMessage(
-    `ProSonata: der Timer läuft seit ${clock(running)} ohne Unterbruch. Wie viel davon zählt?`,
-    'Alles behalten',
-    'Anders angeben',
-    'Verwerfen',
+    t('ProSonata: the timer has been running for {0} without a break. How much of it counts?', clock(running)),
+    keepAll,
+    t('Enter another amount'),
+    discard,
   )
 
-  if (answer === undefined || answer === 'Alles behalten') return
+  if (answer === undefined || answer === keepAll) return
 
-  const kept = answer === 'Verwerfen' ? 0 : await askForDuration(running)
+  const kept = answer === discard ? 0 : await askForDuration(running)
   if (kept === null) return
 
   active.keepFromRunning(context, kept)
@@ -244,12 +249,15 @@ export async function prune(): Promise<void> {
   const gone = remoteBranchGone(context.repo.root, context.scope.branch)
   if (!merged && !gone) return
 
+  const close = t('Close')
   const answer = await vscode.window.showInformationMessage(
-    `ProSonata: "${entry.text}" sieht fertig aus — ${merged ? 'der Branch ist gemerged' : 'der Remote-Branch ist weg'}. Eintrag abschliessen?`,
-    'Abschliessen',
-    'Später',
+    merged
+      ? t('ProSonata: "{0}" looks finished — the branch is merged. Close the entry?', entry.text)
+      : t('ProSonata: "{0}" looks finished — the remote branch is gone. Close the entry?', entry.text),
+    close,
+    t('Later'),
   )
-  if (answer === 'Abschliessen') await vscode.commands.executeCommand('prosonata.closeEntry')
+  if (answer === close) await vscode.commands.executeCommand('prosonata.closeEntry')
 }
 
 /**

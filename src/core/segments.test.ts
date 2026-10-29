@@ -99,13 +99,13 @@ describe('the report', () => {
       grid: { kind: 'exact' },
     })
 
-    expect(text).toContain('gekürzt von 13:58')
+    expect(text).toContain('shortened from 13:58')
     expect(text).toContain('1:30')
   })
 
   it('says so when a branch has nothing', () => {
     expect(renderReport([segment()], { branch: 'gibt-es-nicht', grid: { kind: 'exact' } })).toContain(
-      'Keine Segmente aufgezeichnet',
+      'No segments recorded',
     )
   })
 })
@@ -133,7 +133,7 @@ describe('a correction', () => {
       grid: { kind: 'exact' },
     })
 
-    expect(text).toContain('Korrektur')
+    expect(text).toContain('Adjustment')
   })
 })
 
@@ -160,7 +160,7 @@ describe('a correction without a span', () => {
     const text = renderReport([correction], { branch: null, grid: { kind: 'exact' } })
 
     expect(text).toContain('| — |')
-    expect(text).toContain('Korrektur')
+    expect(text).toContain('Adjustment')
   })
 })
 
@@ -197,7 +197,7 @@ describe('the billed total', () => {
     const text = renderReport([of('e1', 16 * 60), of('e2', 16 * 60)], { branch: null, grid: quarters })
 
     // 0:30 apiece. The sum of 0:32 rounded in one go would be 0:45.
-    expect(text).toContain('abgerechnet 1:00 h')
+    expect(text).toContain('billed 1:00 h')
   })
 
   it('grows with the number of entries, because the grid rounds up', () => {
@@ -205,22 +205,22 @@ describe('the billed total', () => {
 
     // Three times twenty minutes: 0:30 each. Rounded in one go the hour would
     // stay an hour — this is the half hour a busy day of commits costs.
-    expect(renderReport(three, { branch: null, grid: quarters })).toContain('abgerechnet 1:30 h')
+    expect(renderReport(three, { branch: null, grid: quarters })).toContain('billed 1:30 h')
   })
 
   it('counts several segments of one entry together', () => {
     const text = renderReport([of('e1', 20 * 60), of('e1', 20 * 60)], { branch: null, grid: quarters })
 
     // 0:40 in one entry becomes 0:45. Rounding each segment would give 1:00.
-    expect(text).toContain('abgerechnet 0:45 h')
+    expect(text).toContain('billed 0:45 h')
   })
 
   // Saying the same number twice reads like a mistake.
   it('is left out entirely when the grid changes nothing', () => {
     const text = renderReport([of('e1', 15 * 60)], { branch: null, grid: quarters })
 
-    expect(text).toContain('**0:15 h** in 1 Segmenten.')
-    expect(text).not.toContain('abgerechnet')
+    expect(text).toContain('**0:15 h** in 1 segments.')
+    expect(text).not.toContain('billed')
   })
 })
 
@@ -239,7 +239,7 @@ describe('the line that closes an entry', () => {
   it('shows what the entry became, and no times of its own', () => {
     const text = renderReport([segment({ seconds: 3600 }), closing(4500)], { branch: null, grid: { kind: 'exact' } })
 
-    expect(text).toContain('| — | — | 1:15 | feature/buchung | **Zeiteintrag** |')
+    expect(text).toContain('| — | — | 1:15 | feature/buchung | **Time entry** |')
   })
 
   // The time is already in the segments above it. Counting it again would double
@@ -247,7 +247,7 @@ describe('the line that closes an entry', () => {
   it('adds nothing to the day and is not counted as a segment', () => {
     const text = renderReport([segment({ seconds: 3600 }), closing(4500)], { branch: null, grid: { kind: 'exact' } })
 
-    expect(text).toContain('**1:00 h** in 1 Segmenten.')
+    expect(text).toContain('**1:00 h** in 1 segments.')
     expect(text).toContain('## 2026-07-30 — 1:00 h')
   })
 
@@ -258,14 +258,14 @@ describe('the line that closes an entry', () => {
 
 describe('the branch column', () => {
   it('is there when several branches are shown', () => {
-    expect(renderReport([segment()], { branch: null, grid: { kind: 'exact' } })).toContain('| Von | Bis | Dauer | Branch | Ende |')
+    expect(renderReport([segment()], { branch: null, grid: { kind: 'exact' } })).toContain('| From | Until | Duration | Branch | End |')
   })
 
   // On a single branch it would repeat the heading on every row.
   it('is gone when the report is about one branch', () => {
     const text = renderReport([segment()], { branch: 'feature/buchung', grid: { kind: 'exact' } })
 
-    expect(text).toContain('| Von | Bis | Dauer | Ende |')
+    expect(text).toContain('| From | Until | Duration | End |')
     expect(text).not.toContain('feature/buchung |')
   })
 })

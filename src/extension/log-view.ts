@@ -1,5 +1,6 @@
 import * as vscode from 'vscode'
 
+import { t } from '../core/l10n.js'
 import { readRepoConfig } from '../core/repo-config.js'
 import { describeBranch, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
@@ -23,26 +24,27 @@ import type { GitRepo } from '../core/git.js'
 export async function showLog(session: Session, repo: GitRepo): Promise<void> {
   const segments = session.segments.read().filter((segment) => segment.repoPath === repo.root)
   if (segments.length === 0) {
-    void vscode.window.showInformationMessage('ProSonata: für dieses Repository ist noch kein Segment aufgezeichnet.')
+    void vscode.window.showInformationMessage(t('ProSonata: no segment has been recorded for this repository yet.'))
     return
   }
 
   const branches = branchesIn(segments, repo.root)
+  const allBranches = t('All branches')
   const picked = await vscode.window.showQuickPick(
     [
-      { label: 'Alle Branches', description: describeBranch({ branch: '', repoPath: repo.root, seconds: segments.reduce((sum, s) => sum + s.seconds, 0), last: branches[0]!.last }), branch: null as string | null },
+      { label: allBranches, description: describeBranch({ branch: '', repoPath: repo.root, seconds: segments.reduce((sum, s) => sum + s.seconds, 0), last: branches[0]!.last }), branch: null as string | null },
       ...branches.map((summary) => ({
         label: summary.branch,
         description: describeBranch(summary),
         branch: summary.branch as string | null,
       })),
     ],
-    { title: 'ProSonata: Log — Branch wählen' },
+    { title: t('ProSonata: log — choose branch') },
   )
   if (!picked) return
 
   const grid = readRepoConfig(repo.root).grid ?? session.config.grid
-  const uri = logDocuments.set(picked.branch ?? 'Alle Branches', renderReport(segments, { branch: picked.branch, grid }))
+  const uri = logDocuments.set(picked.branch ?? allBranches,renderReport(segments, { branch: picked.branch, grid }))
   try {
     await vscode.commands.executeCommand('markdown.showPreview', uri)
   } catch {

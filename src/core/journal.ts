@@ -26,7 +26,9 @@ export interface JournalLine {
   text?: string
   sha?: string
   timeId?: number
+  /** For a note: an English template, its values in `args` (KONZEPT.md §10). */
   message?: string
+  args?: string[]
 }
 
 /** Above this the file is trimmed, keeping the most recent part. */

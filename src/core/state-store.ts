@@ -1,6 +1,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync, writeSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 
+import { t } from './l10n.js'
 import { emptyState, FORMAT_VERSION, type State } from './types.js'
 
 /**
@@ -22,7 +23,7 @@ const TEMP_MAX_AGE_MS = 5 * 60 * 1000
 
 export class VersionConflict extends Error {
   constructor() {
-    super('state.json hat sich geändert, während wir daran gearbeitet haben')
+    super(t('state.json changed while we were working on it'))
     this.name = 'VersionConflict'
   }
 }

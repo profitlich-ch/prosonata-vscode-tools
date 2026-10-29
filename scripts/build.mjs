@@ -49,9 +49,9 @@ const cli = {
 if (watch) {
   const contexts = await Promise.all([esbuild.context(extension), esbuild.context(cli)])
   await Promise.all(contexts.map((context) => context.watch()))
-  console.log('beobachte Änderungen')
+  console.log('watching for changes')
 } else {
   await Promise.all([esbuild.build(extension), esbuild.build(cli)])
   chmodSync(cli.outfile, 0o755)
-  console.log('gebaut: dist/extension.cjs und dist/cli.cjs')
+  console.log('built: dist/extension.cjs and dist/cli.cjs')
 }

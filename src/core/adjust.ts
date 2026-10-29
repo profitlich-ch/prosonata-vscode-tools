@@ -8,11 +8,14 @@
  *
  *   +25, -25, 25          minutes
  *   +1:30, -1:30          hours and minutes
- *   bis 9:40              count only up to then: everything after it goes
- *   ab 9:40               count from then on: the time since is added
+ *   until 9:40            count only up to then: everything after it goes
+ *   from 9:40             count from then on: the time since is added
  *
- * In `core` because both front ends must read the same words the same way.
+ * `bis` and `ab` are understood as well. In `core` because both front ends
+ * must read the same words the same way.
  */
+
+import { t } from './l10n.js'
 
 /**
  * What was meant, not yet what it does. An anchor is absolute: „ab 9:40" says
@@ -115,7 +118,7 @@ export function planAdjustment(adjustment: Adjustment, situation: Situation): Pl
  */
 export function noteFor(plan: Plan, adjustment: Adjustment): string | null {
   if (plan.action === 'impossible') {
-    return 'Uhrzeiten ändern das laufende Segment. Nimm eine Dauer, etwa −0:06.'
+    return t('Clock times change the running segment. Use a duration, such as −0:06.')
   }
   if (plan.skipped < 60) return null
 
@@ -125,21 +128,23 @@ export function noteFor(plan: Plan, adjustment: Adjustment): string | null {
    */
   if (plan.action === 'shift' && plan.at !== undefined) {
     const limit = hour(plan.at)
-    if (adjustment.kind === 'startAt') return `erst ab ${limit} → so weit reicht das letzte Segment`
-    if (plan.delta === 0) return `nicht möglich → letztes Segment reicht bis ${limit}`
+    if (adjustment.kind === 'startAt') return t('only from {0} → that is as far as the last segment reaches', limit)
+    if (plan.delta === 0) return t('not possible → last segment reaches until {0}', limit)
 
     return plan.delta > 0
-      ? `nur +${formatAmount(plan.delta)} → letztes Segment reicht bis ${limit}`
-      : `nur −${formatAmount(-plan.delta)} → so lange läuft das Segment erst`
+      ? t('only +{0} → last segment reaches until {1}', formatAmount(plan.delta), limit)
+      : t('only −{0} → the segment has not been running longer', formatAmount(-plan.delta))
   }
 
   if (plan.action === 'stop' && plan.at !== undefined) {
-    return `gebucht wird bis ${hour(plan.at)} → erst ab dann lief der Timer`
+    return t('booked until {0} → the timer only ran from then on', hour(plan.at))
   }
 
   // The segments of this computer, not the entry: a share measured elsewhere
   // is visible in the entry but cannot be taken back from here.
-  return `nur ${plan.delta > 0 ? '+' : '−'}${formatAmount(Math.abs(plan.delta))} → mehr haben die Segmente nicht`
+  return plan.delta > 0
+    ? t('only +{0} → the segments hold no more', formatAmount(plan.delta))
+    : t('only −{0} → the segments hold no more', formatAmount(Math.abs(plan.delta)))
 }
 
 function hour(at: number): string {
@@ -181,23 +186,25 @@ export function readAdjustment(input: string, now: number): Adjustment[] {
   const text = input.trim()
   if (text === '') return []
 
-  const anchored = /^(ab|bis)\s+(.+)$/i.exec(text)
+  // `ab` and `bis` are the German words, kept so that both languages are read.
+  const anchored = /^(from|until|ab|bis)\s+(.+)$/i.exec(text)
   if (anchored) {
     const at = timeOfDay(anchored[2]!, now)
     if (at === null) return []
     const time = anchored[2]!.trim()
+    const word = anchored[1]!.toLowerCase()
 
-    return anchored[1]!.toLowerCase() === 'ab'
-      ? [{ kind: 'startAt', at, label: `ab ${time} zählen` }]
-      : [{ kind: 'stopAt', at, label: `nur bis ${time} zählen` }]
+    return word === 'from' || word === 'ab'
+      ? [{ kind: 'startAt', at, label: t('count from {0}', time) }]
+      : [{ kind: 'stopAt', at, label: t('count only until {0}', time) }]
   }
 
   // A bare clock time is ambiguous on purpose: both readings are offered.
   const at = timeOfDay(text, now)
   if (at !== null) {
     return [
-      { kind: 'startAt', at, label: `ab ${text} zählen` },
-      { kind: 'stopAt', at, label: `nur bis ${text} zählen` },
+      { kind: 'startAt', at, label: t('count from {0}', text) },
+      { kind: 'stopAt', at, label: t('count only until {0}', text) },
     ]
   }
 
@@ -219,7 +226,7 @@ export function readAdjustment(input: string, now: number): Adjustment[] {
 
 function formatAmount(seconds: number): string {
   const minutes = Math.round(seconds / 60)
-  if (minutes === 1) return '1 Minute'
-  if (minutes < 60) return `${minutes} Minuten`
-  return `${Math.floor(minutes / 60)}:${String(minutes % 60).padStart(2, '0')} Stunden`
+  if (minutes === 1) return t('1 minute')
+  if (minutes < 60) return t('{0} minutes', minutes)
+  return t('{0}:{1} hours', Math.floor(minutes / 60), String(minutes % 60).padStart(2, '0'))
 }

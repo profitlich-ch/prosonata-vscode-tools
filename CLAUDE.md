@@ -4,6 +4,17 @@ VS-Code-Extension mit CLI und Git-Hook. Kein Toolkit-Konsument: Die Konventionen
 `template-toolkit/CLAUDE.md` gelten hier **nicht**. Es gilt die globale `CLAUDE.md`, dazu was
 hier steht. Fachliche Entscheidungen und ihre Begründungen stehen in [KONZEPT.md](KONZEPT.md).
 
+## Sprache
+
+**Commit-Messages, README und Changelog sind englisch**, seit 0.26.0 – die Oberfläche ist
+englisch mit deutscher Übersetzung (KONZEPT.md §10). `KONZEPT.md`, diese Datei und `docs/`
+bleiben deutsch.
+
+**Jeder sichtbare Text geht durch `t()`** aus `core/l10n.ts`, englisch, mit der deutschen Fassung
+in `l10n/bundle.l10n.de.json`; Titel aus `package.json` in `package.nls.json` und
+`package.nls.de.json`. Das erste Argument von `t()` ist ein String-Literal mit `{0}`-Platzhaltern,
+kein Template-String – nur so findet der Test die fehlenden Übersetzungen.
+
 ## Jede neue Version wird installiert
 
 Ein Release ist erst fertig, wenn die neue Fassung auch läuft. Nach dem Versions-Commit:

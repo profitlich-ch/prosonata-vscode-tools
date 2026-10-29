@@ -17,7 +17,7 @@ describe('an unconfigured account', () => {
   it('reports a missing key the same way', async () => {
     const api = new HttpApi({ baseUrl: 'https://x/api/v1', apiKey: '' })
 
-    await expect(api.listProjects()).rejects.toThrow(/API-Key/)
+    await expect(api.listProjects()).rejects.toThrow(/API key/)
   })
 
   it('never reaches the network', async () => {

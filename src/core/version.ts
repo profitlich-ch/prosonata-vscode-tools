@@ -6,4 +6,4 @@
  */
 declare const __VERSION__: string
 
-export const VERSION: string = typeof __VERSION__ === 'string' ? __VERSION__ : 'unbekannt'
+export const VERSION: string = typeof __VERSION__ === 'string' ? __VERSION__ : 'unknown'

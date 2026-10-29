@@ -30,6 +30,7 @@ import {
 } from '../core/tracking.js'
 import { workingTime, type TimeGrid } from '../core/working-time.js'
 import { describeRejection, type SendResult } from '../core/sender.js'
+import { t } from '../core/l10n.js'
 
 /**
  * The command line. Same core as the extension, so a commit from the terminal
@@ -40,35 +41,10 @@ import { describeRejection, type SendResult } from '../core/sender.js'
  * `ps` would break `ps aux` for anyone who installed this (KONZEPT.md §8).
  */
 
-const USAGE = `prosonata — Zeiterfassung, gebunden an Commits und Branches
-
-  prosonata init                    Konto und dieses Repository einrichten, Hook installieren
-  prosonata start                   Timer dieses Branches starten oder fortsetzen
-  prosonata pause [h:mm|Minuten]    Timer pausieren; mit Dauer wird nur diese gebucht
-  prosonata status                  was läuft, was ist offen, was wartet
-  prosonata send                    alles senden, was gerade fällig ist
-
-  prosonata project                 Projekt dieses Repositories wählen
-  prosonata category                Zeitkategorie dieses Projekts wählen
-  prosonata grid [exakt|5|15|30]    auf so viele Minuten runden
-  prosonata mode [branch|tag|commit] ein Eintrag pro Branch, pro Branch und Tag, oder pro Commit
-  prosonata close [Nr] [Text]       offenen Zeiteintrag abschliessen und senden; mit Nr den eines anderen Branches
-  prosonata text <Text>             Text des offenen Zeiteintrags ändern
-  prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
-  prosonata attach                  Zeit seit dem letzten Commit dem Eintrag jenes Commits zuschlagen
-  prosonata resume [add|neu]        anderswo abgeschlossenen Eintrag entscheiden
-  prosonata rejected [Nr retry|move|drop]
-                                    abgelehnte Einträge: erneut senden, auf anderes Projekt, verwerfen
-  prosonata resting [Nr close|keep|drop]
-                                    seit Wochen ruhende Einträge: abschliessen, behalten, verwerfen
-  prosonata tidy                    leere Reste gelöschter Branches in allen Repositories entfernen
-  prosonata log [Branch|alle|?]     gemessene Segmente, ohne Branch die dieses
-  prosonata adjust <Wert>           Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
-
-  prosonata post-commit             wird vom Hook gerufen, nicht zum Tippen gedacht
-
-Was ein Argument nimmt, fragt danach, wenn es weggelassen wird.
-`
+/** A function, not a constant: `t()` must run after index.ts has chosen the language. */
+function usage(): string {
+  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hook\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [no] [text]       close the open time entry and send it; with no the one of another branch\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [no retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [no close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
+}
 
 export async function main(argv: string[], cwd = process.cwd()): Promise<number> {
   const command = argv[0] ?? 'status'
@@ -119,10 +95,10 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
       case 'help':
       case '--help':
       case '-h':
-        process.stdout.write(USAGE)
+        process.stdout.write(usage())
         return 0
       default:
-        process.stderr.write(`unbekannter Befehl: ${command}\n\n${USAGE}`)
+        process.stderr.write(`${t('unknown command: {0}', command)}\n\n${usage()}`)
         return 2
     }
   } catch (error) {
@@ -143,18 +119,18 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
 async function init(cwd: string): Promise<number> {
   const known = knownConfig()
   const baseUrl =
-    (await ask(`Basis-URL${known ? ` [${known.baseUrl}]` : ' (https://<subdomain>.prosonata.software/api/v1)'}: `)) ||
+    (await ask(known ? t('Base URL [{0}]: ', known.baseUrl) : t('Base URL (https://<subdomain>.prosonata.software/api/v1): '))) ||
     known?.baseUrl ||
     ''
-  const apiKey = (await ask(`Persönlicher API-Key${known ? ' [unverändert lassen: leer]' : ''}: `)) || known?.apiKey || ''
+  const apiKey = (await ask(known ? t('Personal API key [leave unchanged: empty]: ') : t('Personal API key: '))) || known?.apiKey || ''
 
   if (baseUrl === '' || apiKey === '') {
-    process.stderr.write('Basis-URL und API-Key werden beide gebraucht — nichts geändert\n')
+    process.stderr.write(`${t('base URL and API key are both needed — nothing changed')}\n`)
     return 2
   }
 
   writeConfig(configWith(known, { baseUrl, apiKey }))
-  process.stdout.write(`nach ${paths.config()} geschrieben, Modus 0600\n`)
+  process.stdout.write(`${t('written to {0}, mode 0600', paths.config())}\n`)
   return await chooseProject(cwd)
 }
 
@@ -178,11 +154,11 @@ async function chooseProject(cwd: string): Promise<number> {
 
   const projects = await session.api.listProjects()
   if (projects.length === 0) {
-    process.stderr.write('keine offenen Projekte gefunden — prüfe den Key und seine Rechte\n')
+    process.stderr.write(`${t('no open projects found — check the key and its permissions')}\n`)
     return 1
   }
 
-  const project = await pick(projects, (candidate) => `${candidate.projectNo}  ${candidate.projectName}`, 'Projektnummer: ')
+  const project = await pick(projects, (candidate) => `${candidate.projectNo}  ${candidate.projectName}`, t('Project number: '))
   if (!project) return 1
 
   /*
@@ -194,14 +170,18 @@ async function chooseProject(cwd: string): Promise<number> {
   if (others.length > 0) {
     const answer = (
       await ask(
-        `${others.length === 1 ? 'ein unfertiger Eintrag steht' : `${others.length} unfertige Einträge stehen`} auf einem anderen Projekt — mitnehmen (m), dort lassen (d)? `,
+        others.length === 1
+          ? t('one unfinished entry is on another project — take it along (t), leave it there (l)? ')
+          : t('{0} unfinished entries are on another project — take them along (t), leave them there (l)? ', others.length),
       )
     ).toLowerCase()
-    if (answer !== 'm' && answer !== 'd') {
-      process.stdout.write('nichts geändert\n')
+    // The letters of both languages: `t`/`l` in English, `m`/`d` in German.
+    const takeAlong = answer === 't' || answer === 'm'
+    if (!takeAlong && answer !== 'l' && answer !== 'd') {
+      process.stdout.write(`${t('nothing changed')}\n`)
       return 1
     }
-    carry = answer === 'm'
+    carry = takeAlong
   }
 
   rememberProject(repo.root, { id: project.projectID, name: project.projectName, no: project.projectNo })
@@ -215,11 +195,11 @@ async function chooseProject(cwd: string): Promise<number> {
 
   const cli = publishCliOrOwnPath()
   const hook = installHook(repo.root, { node: process.execPath, cli })
-  process.stdout.write(`Hook ${HOOK_ACTION[hook.action]}: ${hook.path}\n`)
+  process.stdout.write(`${HOOK_LINE[hook.action](hook.path)}\n`)
   if (hook.excluded) {
-    process.stdout.write('  liegt im Arbeitsverzeichnis (core.hooksPath) und steht in .git/info/exclude\n')
+    process.stdout.write(`  ${t('lies in the working tree (core.hooksPath) and is listed in .git/info/exclude')}\n`)
   }
-  process.stdout.write(`bereit — "${project.projectName}" in ${repo.root}\n`)
+  process.stdout.write(`${t('ready — "{0}" in {1}', project.projectName, repo.root)}\n`)
   return 0
 }
 
@@ -231,7 +211,7 @@ async function chooseCategory(cwd: string): Promise<number> {
 
   const project = (await session.api.listProjects()).find((candidate) => candidate.projectID === context.projectId)
   if (!project) {
-    process.stderr.write(`Projekt ${context.projectId} steht nicht mehr in der Liste — wähle eines mit "prosonata project"\n`)
+    process.stderr.write(`${t('project {0} is no longer in the list — choose one with "prosonata project"', context.projectId)}\n`)
     return 1
   }
 
@@ -254,11 +234,11 @@ async function askForCategory(session: Session, repoRoot: string, project: Proje
   const category = await pick(
     categories,
     (candidate) => candidate.categoryName,
-    'Kategorienummer: ',
+    t('Category number: '),
     grouped ? (candidate) => candidate.groupName : undefined,
   )
   if (!category) {
-    process.stderr.write('keine Kategorie gewählt — ProSonata verlangt eine, es wird also nichts gesendet\n')
+    process.stderr.write(`${t('no category chosen — ProSonata requires one, so nothing will be sent')}\n`)
     return 0
   }
 
@@ -266,7 +246,7 @@ async function askForCategory(session: Session, repoRoot: string, project: Proje
   session.store.update((state) =>
     applyCategory(state, repoRoot, project.projectID, category.category, session.clock.now()),
   )
-  process.stdout.write(`Kategorie: ${category.categoryName}\n`)
+  process.stdout.write(`${t('Category: {0}', category.categoryName)}\n`)
   return category.category
 }
 
@@ -276,15 +256,15 @@ async function chooseGrid(cwd: string, argument: string): Promise<number> {
   const context = session.context(cwd)
   if (!context) return notARepo()
 
-  const wanted = argument !== '' ? argument : await ask('Zeitraster — exakt, 5, 15 oder 30 Minuten: ')
+  const wanted = argument !== '' ? argument : await ask(t('Rounding grid — exact, 5, 15 or 30 minutes: '))
   const grid = parseGrid(wanted)
   if (!grid) {
-    process.stderr.write(`kein Zeitraster: ${wanted} — nimm "exakt" oder eine Anzahl Minuten\n`)
+    process.stderr.write(`${t('not a rounding grid: {0} — use "exact" or a number of minutes', wanted)}\n`)
     return 2
   }
 
   setGrid(context.repo.root, grid)
-  process.stdout.write(`Zeitraster: ${grid.kind === 'exact' ? 'exakt' : `${grid.minutes} min`}\n`)
+  process.stdout.write(`${grid.kind === 'exact' ? t('Rounding grid: exact') : t('Rounding grid: {0} min', grid.minutes)}\n`)
   return 0
 }
 
@@ -299,23 +279,34 @@ async function chooseMode(cwd: string, argument: string): Promise<number> {
   if (!context) return notARepo()
 
   if (context.scope.branch === context.mainBranch) {
-    process.stderr.write('auf dem Main-Branch ist jeder Commit sein eigener Eintrag — nichts umzuschalten\n')
+    process.stderr.write(`${t('on the main branch every commit is its own entry — nothing to switch')}\n`)
     return 1
   }
 
-  // `tag` on the command line, `branch-day` in the config: the German word is
+  // `day` on the command line, `branch-day` in the config: the short word is
   // what a person types, the config key is what the extension already writes.
-  const names: Record<string, EntryMode> = { branch: 'branch', tag: 'branch-day', 'branch-day': 'branch-day', commit: 'commit' }
-  const labels: Record<EntryMode, string> = { branch: 'Branch', 'branch-day': 'Branch und Tag', commit: 'Commit' }
+  // `tag` is the German word, kept for those who learned it.
+  const names: Record<string, EntryMode> = {
+    branch: 'branch',
+    day: 'branch-day',
+    tag: 'branch-day',
+    'branch-day': 'branch-day',
+    commit: 'commit',
+  }
 
-  const typed = argument !== '' ? argument : await ask('Modus — branch, tag oder commit: ')
+  const typed = argument !== '' ? argument : await ask(t('Mode — branch, day or commit: '))
   const wanted = names[typed]
   if (wanted === undefined) {
-    process.stderr.write(`kein Modus: ${typed} — nimm "branch", "tag" oder "commit"\n`)
+    process.stderr.write(`${t('not a mode: {0} — use "branch", "day" or "commit"', typed)}\n`)
     return 2
   }
   if (wanted === context.mode) {
-    process.stdout.write(`bereits ein Eintrag pro ${labels[wanted]}\n`)
+    const already: Record<EntryMode, string> = {
+      branch: t('already one entry per branch'),
+      'branch-day': t('already one entry per branch and day'),
+      commit: t('already one entry per commit'),
+    }
+    process.stdout.write(`${already[wanted]}\n`)
     return 0
   }
 
@@ -324,13 +315,18 @@ async function chooseMode(cwd: string, argument: string): Promise<number> {
   if (wanted === 'commit') {
     const entry = openEntry(session.state(), context.scope)
     if (entry && entry.text !== '') {
-      const text = (await ask(`Endgültiger Text für den offenen Eintrag [${entry.text}]: `)) || entry.text
+      const text = (await ask(t('Final text for the open entry [{0}]: ', entry.text))) || entry.text
       session.closeEntry(entry.id, text)
     }
   }
 
   setMode(context.repo.root, context.key, wanted)
-  process.stdout.write(`ein Eintrag pro ${labels[wanted]} auf ${context.scope.branch}\n`)
+  const switched: Record<EntryMode, string> = {
+    branch: t('one entry per branch on {0}', context.scope.branch),
+    'branch-day': t('one entry per branch and day on {0}', context.scope.branch),
+    commit: t('one entry per commit on {0}', context.scope.branch),
+  }
+  process.stdout.write(`${switched[wanted]}\n`)
   return 0
 }
 
@@ -351,19 +347,19 @@ async function closeEntry(cwd: string, argument: string): Promise<number> {
     : undefined
   const entry = named ?? openEntry(session.state(), context.scope)
   if (!entry) {
-    process.stderr.write(`auf ${context.scope.branch} ist nichts offen\n`)
+    process.stderr.write(`${t('nothing open on {0}', context.scope.branch)}\n`)
     return 1
   }
 
   const given = named ? rest.join(' ').trim() : argument
-  const text = given !== '' ? given : (await ask(`Endgültiger Text${entry.text ? ` [${entry.text}]` : ''}: `)) || entry.text
+  const text = given !== '' ? given : (await askFinalText(entry.text)) || entry.text
   if (text === '') {
-    process.stderr.write('ein Eintrag ohne Text wird nie gesendet — nichts getan\n')
+    process.stderr.write(`${t('an entry without text is never sent — nothing done')}\n`)
     return 1
   }
 
   session.closeEntry(entry.id, text)
-  process.stdout.write(`abgeschlossen: ${text}\n`)
+  process.stdout.write(`${t('closed: {0}', text)}\n`)
   return report(await session.flush(true))
 }
 
@@ -381,12 +377,14 @@ function discard(cwd: string): number {
 
   const running = runningSeconds(session.state(), session.clock, context.scope)
   if (running <= 0) {
-    process.stderr.write('es läuft gerade kein Timer\n')
+    process.stderr.write(`${t('no timer is running')}\n`)
     return 2
   }
 
   session.keepFromRunning(context, 0)
-  process.stdout.write(`${format(running)} verworfen — pausiert, ${format(session.seconds(context))} auf ${context.scope.branch}\n`)
+  process.stdout.write(
+    `${t('{0} discarded — paused, {1} on {2}', format(running), format(session.seconds(context)), context.scope.branch)}\n`,
+  )
   return 0
 }
 
@@ -400,12 +398,12 @@ async function attach(cwd: string): Promise<number> {
   if (!context) return notARepo()
 
   const result = await session.attachToLastClosed(context, async (plan) => {
-    const answer = await ask(`${describePlan(plan)}\nZuschlagen? [j/N] `)
-    return /^(j|ja|y|yes)$/i.test(answer.trim())
+    const answer = await ask(t('{0}\nAttach? [y/N] ', describePlan(plan)))
+    return yes(answer)
   })
 
   if (result.kind === 'done') {
-    process.stdout.write(`zugeschlagen: ${describeAttachment(result)}\n`)
+    process.stdout.write(`${t('attached: {0}', describeAttachment(result))}\n`)
     return 0
   }
   process.stderr.write(`${describeAttachment(result)}\n`)
@@ -424,22 +422,22 @@ async function resume(cwd: string, argument: string): Promise<number> {
 
   const parked = awaitingDecision(session.state(), context.scope)
   if (parked.length === 0) {
-    process.stdout.write(`auf ${context.scope.branch} wartet nichts auf eine Entscheidung\n`)
+    process.stdout.write(`${t('nothing on {0} is waiting for a decision', context.scope.branch)}\n`)
     return 0
   }
 
   for (const entry of parked) {
     process.stdout.write(
-      `"${entry.text || context.scope.branch}" wurde auf einem anderen Rechner abgeschlossen, hier sind noch ${format(unwrittenSeconds(entry))} angefallen\n`,
+      `${t('"{0}" was closed on another machine, {1} more accrued here', entry.text || context.scope.branch, format(unwrittenSeconds(entry)))}\n`,
     )
-    const wanted = argument !== '' ? argument : await ask('Hinzufügen oder neu? [add|neu]: ')
+    const wanted = argument !== '' ? argument : await ask(t('Add or new? [add|new]: '))
     if (wanted !== 'add' && wanted !== 'neu' && wanted !== 'new') {
-      process.stderr.write(`keine Antwort: ${wanted} — nimm "add" oder "neu"\n`)
+      process.stderr.write(`${t('not an answer: {0} — use "add" or "new"', wanted)}\n`)
       return 2
     }
 
     await session.resolveClosedElsewhere(entry.id, wanted === 'add' ? 'add' : 'fresh')
-    process.stdout.write(wanted === 'add' ? 'zum bestehenden Eintrag hinzugefügt\n' : 'wird ein neuer Eintrag\n')
+    process.stdout.write(`${wanted === 'add' ? t('added to the existing entry') : t('becomes a new entry')}\n`)
   }
   return 0
 }
@@ -452,18 +450,18 @@ async function changeText(cwd: string, argument: string): Promise<number> {
 
   const entry = openEntry(session.state(), context.scope)
   if (!entry) {
-    process.stderr.write(`auf ${context.scope.branch} ist nichts offen\n`)
+    process.stderr.write(`${t('nothing open on {0}', context.scope.branch)}\n`)
     return 1
   }
 
-  const text = argument !== '' ? argument : await ask(`Text${entry.text ? ` [${entry.text}]` : ''}: `)
+  const text = argument !== '' ? argument : await ask(entry.text ? t('Text [{0}]: ', entry.text) : t('Text: '))
   if (text === '') {
-    process.stderr.write('kein Text angegeben — nichts geändert\n')
+    process.stderr.write(`${t('no text given — nothing changed')}\n`)
     return 1
   }
 
   session.store.update((state) => setText(state, entry.id, text, session.clock.now()))
-  process.stdout.write(`Text: ${text}\n`)
+  process.stdout.write(`${t('Text: {0}', text)}\n`)
   return 0
 }
 
@@ -476,7 +474,7 @@ async function start(cwd: string): Promise<number> {
   if (session.runningElsewhereSince !== null) {
     process.stderr.write(`${describeRunningElsewhere(session.runningElsewhereSince, session.clock.now())}\n`)
   }
-  process.stdout.write(`läuft auf ${context.scope.branch} — ${nameOfProject(context)}\n`)
+  process.stdout.write(`${t('running on {0} — {1}', context.scope.branch, nameOfProject(context))}\n`)
   return 0
 }
 
@@ -494,15 +492,15 @@ function pause(cwd: string, argument: string): number {
   } else {
     const kept = parseDuration(argument)
     if (kept === null) {
-      process.stderr.write(`keine Dauer: ${argument} — nimm "1:30" oder eine Zahl als Minuten\n`)
+      process.stderr.write(`${t('not a duration: {0} — use "1:30" or a number of minutes', argument)}\n`)
       return 2
     }
     const running = runningSeconds(session.state(), session.clock, context.scope)
     session.keepFromRunning(context, kept)
-    process.stdout.write(`von ${format(running)} wurden ${format(Math.min(kept, running))} gebucht\n`)
+    process.stdout.write(`${t('{1} of {0} booked', format(running), format(Math.min(kept, running)))}\n`)
   }
 
-  process.stdout.write(`pausiert — ${format(session.seconds(context))} auf ${context.scope.branch}\n`)
+  process.stdout.write(`${t('paused — {0} on {1}', format(session.seconds(context)), context.scope.branch)}\n`)
   return 0
 }
 
@@ -524,45 +522,51 @@ async function status(cwd: string): Promise<number> {
   // the line would report a timer running somewhere else entirely.
   const timer = findTimer(state, context.scope)
 
-  process.stdout.write(`${nameOfProject(context)} — ${context.scope.branch} (${context.mode === 'branch' ? 'ein Eintrag pro Branch' : 'ein Eintrag pro Commit'})\n`)
-  process.stdout.write(`  ${timer?.startedAt ? 'läuft' : 'pausiert'}  ${format(session.seconds(context))}\n`)
+  // `branch-day` shows as per commit, as it always has; only the words changed here.
+  process.stdout.write(
+    `${nameOfProject(context)} — ${context.scope.branch} (${context.mode === 'branch' ? t('one entry per branch') : t('one entry per commit')})\n`,
+  )
+  process.stdout.write(`  ${timer?.startedAt ? t('running') : t('paused')}  ${format(session.seconds(context))}\n`)
   if (entry) {
-    process.stdout.write(`  offener Eintrag  ${entry.text || '(noch kein Text)'}  ${billedTime(entry.foreignSeconds + entry.seconds, context.config.grid ?? session.config.grid)} h\n`)
+    process.stdout.write(
+      `  ${t('open entry')}  ${entry.text || t('(no text yet)')}  ${billedTime(entry.foreignSeconds + entry.seconds, context.config.grid ?? session.config.grid)} h\n`,
+    )
   }
   const running = runningSeconds(state, session.clock, context.scope)
   if (running >= session.config.longRunWarningSeconds) {
-    process.stdout.write(`  läuft seit ${format(running)} ohne Unterbruch — "prosonata pause [h:mm]" bucht nur einen Teil\n`)
+    process.stdout.write(`  ${t('running for {0} without a break — "prosonata pause [h:mm]" books only part of it', format(running))}\n`)
   }
   for (const parked of awaitingDecision(state, context.scope)) {
-    process.stdout.write(
-      `  anderswo abgeschlossen  ${format(unwrittenSeconds(parked))} offen — "prosonata resume" entscheidet\n`,
-    )
+    process.stdout.write(`  ${t('closed elsewhere  {0} open — "prosonata resume" decides', format(unwrittenSeconds(parked)))}\n`)
   }
   for (const { entry: done, why } of session.finishedEntries(context)) {
+    const args = [done.id.slice(0, 8), done.scope.branch, done.text || t('(no text)'), format(done.foreignSeconds + done.seconds)] as const
     process.stdout.write(
-      `  Branch ${why === 'deleted' ? 'gelöscht' : 'gemergt'}  ${done.id.slice(0, 8)}  ${done.scope.branch}  ${done.text || '(ohne Text)'}  ${format(done.foreignSeconds + done.seconds)} — "prosonata close ${done.id.slice(0, 8)} [Text]"\n`,
+      `  ${why === 'deleted' ? t('branch deleted  {0}  {1}  {2}  {3} — "prosonata close {0} [text]"', ...args) : t('branch merged  {0}  {1}  {2}  {3} — "prosonata close {0} [text]"', ...args)}\n`,
     )
   }
   if (context.categoryId <= 0) {
-    process.stdout.write('  keine Zeitkategorie — es wird nichts gesendet, bis eine gewählt ist\n')
+    process.stdout.write(`  ${t('no time category — nothing is sent until one is chosen')}\n`)
   }
   if (state.pending.length > 0) {
-    process.stdout.write(`  wartet auf Versand: ${state.pending.length}\n`)
+    process.stdout.write(`  ${t('waiting to be sent: {0}', state.pending.length)}\n`)
   }
   // Every repository's, not only this one: on 26 October 2026 the stuck entries
   // belonged to another repository, and nothing here would have shown them.
   const resting = session.restingEntries()
   if (resting.length > 0) {
-    process.stdout.write(`  ruhend seit ${session.config.restingDays} Tagen oder länger: ${resting.length} — "prosonata resting <Nr> close|keep|drop"\n`)
+    process.stdout.write(
+      `  ${t('dormant for {0} days or longer: {1} — "prosonata resting <no> close|keep|drop"', session.config.restingDays, resting.length)}\n`,
+    )
     for (const quiet of resting) {
       process.stdout.write(
-        `    ${quiet.id.slice(0, 8)}  ${basename(quiet.scope.repoPath)}/${quiet.scope.branch}  ${quiet.text || '(ohne Text)'}  ${format(quiet.foreignSeconds + quiet.seconds)}\n`,
+        `    ${quiet.id.slice(0, 8)}  ${basename(quiet.scope.repoPath)}/${quiet.scope.branch}  ${quiet.text || t('(no text)')}  ${format(quiet.foreignSeconds + quiet.seconds)}\n`,
       )
     }
   }
   const refused = rejectedEntries(state)
   if (refused.length > 0) {
-    process.stdout.write(`  von ProSonata abgelehnt: ${refused.length} — "prosonata rejected <Nr> retry|move|drop"\n`)
+    process.stdout.write(`  ${t('rejected by ProSonata: {0} — "prosonata rejected <no> retry|move|drop"', refused.length)}\n`)
     listRejected(refused, '    ')
   }
 
@@ -573,9 +577,11 @@ async function status(cwd: string): Promise<number> {
    */
   const published = publishedCli()
   if (published) {
-    process.stdout.write(`  Hook ruft ${published.path} (${published.version})\n`)
+    process.stdout.write(`  ${t('hook calls {0} ({1})', published.path, published.version)}\n`)
   } else if (isInstalled(context.repo.root)) {
-    process.stdout.write(`  ${paths.cli()} fehlt — der Hook bucht nichts. Öffne das Repository in VS Code oder rufe "prosonata project".\n`)
+    process.stdout.write(
+      `  ${t('{0} is missing — the hook books nothing. Open the repository in VS Code or run "prosonata project".', paths.cli())}\n`,
+    )
   }
   return 0
 }
@@ -590,21 +596,23 @@ async function flush(cwd: string): Promise<number> {
 /** What came of a send, in the same words wherever it is triggered from. */
 function report(result: SendResult): number {
   for (const problem of result.tooLong) {
-    process.stderr.write(`Text zu lang (${problem.length} von ${problem.limit}) — kürze ihn, ProSonata würde ihn wortlos abschneiden\n`)
+    process.stderr.write(
+      `${t('text too long ({0} of {1}) — shorten it, ProSonata would cut it off without a word', problem.length, problem.limit)}\n`,
+    )
   }
   if (result.awaitingDecision.length > 0) {
-    process.stderr.write('auf einem anderen Rechner abgeschlossen — "prosonata resume" entscheidet, wohin die restliche Zeit geht\n')
+    process.stderr.write(`${t('closed on another machine — "prosonata resume" decides where the remaining time goes')}\n`)
   }
   if (result.missingCategory.length > 0) {
-    process.stderr.write('keine Zeitkategorie für dieses Projekt — wähle eine mit "prosonata category", ProSonata verlangt sie\n')
+    process.stderr.write(`${t('no time category for this project — choose one with "prosonata category", ProSonata requires it')}\n`)
   }
   for (const failure of result.failed) {
-    process.stderr.write(`konnte nicht gesendet werden: ${failure.error.message}\n`)
+    process.stderr.write(`${t('could not be sent: {0}', failure.error.message)}\n`)
   }
   if (result.rejected.length > 0) {
-    process.stderr.write(`von ProSonata abgelehnt: ${result.rejected.length} — "prosonata rejected" zeigt, was zu tun ist\n`)
+    process.stderr.write(`${t('rejected by ProSonata: {0} — "prosonata rejected" shows what to do', result.rejected.length)}\n`)
   }
-  process.stdout.write(`gesendet: ${result.sent.length}\n`)
+  process.stdout.write(`${t('sent: {0}', result.sent.length)}\n`)
   return result.failed.length > 0 || result.rejected.length > 0 ? 1 : 0
 }
 
@@ -620,20 +628,22 @@ async function rejected(argument: string): Promise<number> {
 
   if (!ref) {
     if (refused.length === 0) {
-      process.stdout.write('ProSonata hat keinen Eintrag abgelehnt\n')
+      process.stdout.write(`${t('ProSonata has rejected no entry')}\n`)
       return 0
     }
     listRejected(refused, '  ')
-    process.stdout.write('\n  "prosonata rejected <Nr> retry"  erneut senden\n')
-    process.stdout.write('  "prosonata rejected <Nr> move"   auf ein anderes Projekt verschieben und senden\n')
-    process.stdout.write('  "prosonata rejected <Nr> drop"   verwerfen — die Zeit steht schon in ProSonata\n')
+    process.stdout.write(`\n  ${t('"prosonata rejected <no> retry"  send again')}\n`)
+    process.stdout.write(`  ${t('"prosonata rejected <no> move"   move to another project and send')}\n`)
+    process.stdout.write(`  ${t('"prosonata rejected <no> drop"   discard — the time is already in ProSonata')}\n`)
     return 0
   }
 
   const matches = refused.filter((entry) => entry.id.startsWith(ref))
   const entry = matches[0]
   if (!entry || matches.length > 1) {
-    process.stderr.write(`${matches.length > 1 ? 'mehrdeutig' : 'kein abgelehnter Eintrag'}: ${ref} — "prosonata rejected" listet sie\n`)
+    process.stderr.write(
+      `${matches.length > 1 ? t('ambiguous: {0} — "prosonata rejected" lists them', ref) : t('no rejected entry: {0} — "prosonata rejected" lists them', ref)}\n`,
+    )
     return 2
   }
 
@@ -644,19 +654,22 @@ async function rejected(argument: string): Promise<number> {
       return await moveRejected(session, entry)
     case 'drop': {
       const running = session.state().timers.some((timer) => timer.entryId === entry.id && timer.startedAt !== null)
+      const label = entry.text || t('(no text)')
       const answer = await ask(
-        `${entry.text || '(ohne Text)'} verwerfen? Nur hier, ProSonata bleibt unberührt${running ? '; der laufende Timer geht mit' : ''} [j/N] `,
+        running
+          ? t('Discard {0}? Only here, ProSonata stays untouched; the running timer goes with it [y/N] ', label)
+          : t('Discard {0}? Only here, ProSonata stays untouched [y/N] ', label),
       )
-      if (answer.toLowerCase() !== 'j') {
-        process.stdout.write('nichts verworfen\n')
+      if (!yes(answer)) {
+        process.stdout.write(`${t('nothing discarded')}\n`)
         return 1
       }
       session.discardLocally(entry.id)
-      process.stdout.write('verworfen\n')
+      process.stdout.write(`${t('discarded')}\n`)
       return 0
     }
     default:
-      process.stderr.write(`was soll mit ${ref} geschehen? retry, move oder drop\n`)
+      process.stderr.write(`${t('what should happen to {0}? retry, move or drop', ref)}\n`)
       return 2
   }
 }
@@ -673,55 +686,57 @@ async function resting(argument: string): Promise<number> {
 
   if (!ref) {
     if (quiet.length === 0) {
-      process.stdout.write(`kein Eintrag ruht seit ${session.config.restingDays} Tagen\n`)
+      process.stdout.write(`${t('no entry has been dormant for {0} days', session.config.restingDays)}\n`)
       return 0
     }
     for (const entry of quiet) {
       process.stdout.write(
-        `  ${entry.id.slice(0, 8)}  ${basename(entry.scope.repoPath)}/${entry.scope.branch}  ${entry.text || '(ohne Text)'}  ${format(entry.foreignSeconds + entry.seconds)}\n`,
+        `  ${entry.id.slice(0, 8)}  ${basename(entry.scope.repoPath)}/${entry.scope.branch}  ${entry.text || t('(no text)')}  ${format(entry.foreignSeconds + entry.seconds)}\n`,
       )
     }
-    process.stdout.write('\n  "prosonata resting <Nr> close [Text]"  abschliessen und senden\n')
-    process.stdout.write(`  "prosonata resting <Nr> keep"          behalten — in ${session.config.restingDays} Tagen wieder fragen\n`)
-    process.stdout.write('  "prosonata resting <Nr> drop"          verwerfen — die Zeit steht schon anders in ProSonata\n')
+    process.stdout.write(`\n  ${t('"prosonata resting <no> close [text]"  close and send')}\n`)
+    process.stdout.write(`  ${t('"prosonata resting <no> keep"          keep — ask again in {0} days', session.config.restingDays)}\n`)
+    process.stdout.write(`  ${t('"prosonata resting <no> drop"          discard — the time is already in ProSonata some other way')}\n`)
     return 0
   }
 
   const matches = quiet.filter((entry) => entry.id.startsWith(ref))
   const entry = matches[0]
   if (!entry || matches.length > 1) {
-    process.stderr.write(`${matches.length > 1 ? 'mehrdeutig' : 'kein ruhender Eintrag'}: ${ref} — "prosonata resting" listet sie\n`)
+    process.stderr.write(
+      `${matches.length > 1 ? t('ambiguous: {0} — "prosonata resting" lists them', ref) : t('no dormant entry: {0} — "prosonata resting" lists them', ref)}\n`,
+    )
     return 2
   }
 
   switch (action) {
     case 'close': {
       const given = rest.join(' ').trim()
-      const text = given !== '' ? given : (await ask(`Endgültiger Text${entry.text ? ` [${entry.text}]` : ''}: `)) || entry.text
+      const text = given !== '' ? given : (await askFinalText(entry.text)) || entry.text
       if (text === '') {
-        process.stderr.write('ein Eintrag ohne Text wird nie gesendet — nichts getan\n')
+        process.stderr.write(`${t('an entry without text is never sent — nothing done')}\n`)
         return 1
       }
       session.closeEntry(entry.id, text)
-      process.stdout.write(`abgeschlossen: ${text}\n`)
+      process.stdout.write(`${t('closed: {0}', text)}\n`)
       return report(await session.flush(true))
     }
     case 'keep':
       session.keepResting(entry.id)
-      process.stdout.write(`behalten — gefragt wird wieder in ${session.config.restingDays} Tagen ohne neue Zeit\n`)
+      process.stdout.write(`${t('kept — asked again after {0} days without new time', session.config.restingDays)}\n`)
       return 0
     case 'drop': {
-      const answer = await ask(`${entry.text || '(ohne Text)'} verwerfen? Nur hier, ProSonata bleibt unberührt [j/N] `)
-      if (answer.toLowerCase() !== 'j') {
-        process.stdout.write('nichts verworfen\n')
+      const answer = await ask(t('Discard {0}? Only here, ProSonata stays untouched [y/N] ', entry.text || t('(no text)')))
+      if (!yes(answer)) {
+        process.stdout.write(`${t('nothing discarded')}\n`)
         return 1
       }
       session.discardLocally(entry.id)
-      process.stdout.write('verworfen\n')
+      process.stdout.write(`${t('discarded')}\n`)
       return 0
     }
     default:
-      process.stderr.write(`was soll mit ${ref} geschehen? close, keep oder drop\n`)
+      process.stderr.write(`${t('what should happen to {0}? close, keep or drop', ref)}\n`)
       return 2
   }
 }
@@ -733,9 +748,13 @@ async function resting(argument: string): Promise<number> {
  */
 function tidy(): number {
   const removed = Session.open().tidyAllRepositories()
-  process.stdout.write(
-    removed === 0 ? 'nichts aufzuräumen\n' : `${removed === 1 ? 'ein leerer Rest' : `${removed} leere Reste`} gelöschter Branches entfernt\n`,
-  )
+  const line =
+    removed === 0
+      ? t('nothing to tidy')
+      : removed === 1
+        ? t('removed one empty remainder of deleted branches')
+        : t('removed {0} empty remainders of deleted branches', removed)
+  process.stdout.write(`${line}\n`)
   return 0
 }
 
@@ -747,7 +766,7 @@ async function moveRejected(session: Session, entry: TimeEntry): Promise<number>
   const project = await pick(
     [...projects.filter((p) => known.has(p.projectID)), ...projects.filter((p) => !known.has(p.projectID))],
     (candidate) => `${candidate.projectNo}  ${candidate.projectName}`,
-    'Projektnummer: ',
+    t('Project number: '),
   )
   if (!project) return 1
 
@@ -757,7 +776,9 @@ async function moveRejected(session: Session, entry: TimeEntry): Promise<number>
 
   const moving = entriesToMove(session.state(), entry.id).length
   const result = await session.moveRejected(entry.id, { id: project.projectID, name: project.projectName, no: project.projectNo }, categoryId)
-  process.stdout.write(`${moving === 1 ? 'ein Eintrag' : `${moving} Einträge`} nach ${project.projectNo} ${project.projectName}\n`)
+  process.stdout.write(
+    `${moving === 1 ? t('one entry to {0} {1}', project.projectNo, project.projectName) : t('{0} entries to {1} {2}', moving, project.projectNo, project.projectName)}\n`,
+  )
   return report(result)
 }
 
@@ -766,7 +787,7 @@ function listRejected(entries: TimeEntry[], indent: string): void {
   for (const entry of entries) {
     const project = readRepoConfig(entry.scope.repoPath).projects.find((candidate) => candidate.id === entry.projectId)
     process.stdout.write(
-      `${indent}${entry.id.slice(0, 8)}  ${basename(entry.scope.repoPath)}/${entry.scope.branch}  ${entry.text || '(ohne Text)'}  ${format(entry.foreignSeconds + entry.seconds)}\n`,
+      `${indent}${entry.id.slice(0, 8)}  ${basename(entry.scope.repoPath)}/${entry.scope.branch}  ${entry.text || t('(no text)')}  ${format(entry.foreignSeconds + entry.seconds)}\n`,
     )
     process.stdout.write(`${indent}          ${describeRejection(entry, project)}\n`)
   }
@@ -790,15 +811,16 @@ async function postCommit(cwd: string): Promise<number> {
 
     if (outcome.branchSwitched) {
       process.stderr.write(
-        'prosonata: der Branch hatte gewechselt — die bisherige Zeit ging an den Branch, auf dem sie gestartet wurde, und der Timer ist pausiert\n',
+        `prosonata: ${t('the branch had changed — the time so far went to the branch it was started on, and the timer is paused')}\n`,
       )
     }
     if (!outcome.hadTimer) {
-      process.stderr.write('prosonata: es lief kein Timer — dieser Commit hat nichts gebucht\n')
+      process.stderr.write(`prosonata: ${t('no timer was running — this commit booked nothing')}\n`)
       return 0
     }
     if (outcome.booked > 0) {
-      process.stderr.write(`prosonata: ${format(outcome.booked)} gebucht${outcome.closed ? ', Eintrag abgeschlossen' : ''}\n`)
+      const booked = format(outcome.booked)
+      process.stderr.write(`prosonata: ${outcome.closed ? t('{0} booked, entry closed', booked) : t('{0} booked', booked)}\n`)
     }
     await session.flush()
     return 0
@@ -819,11 +841,11 @@ function adjust(cwd: string, argument: string): number {
 
   const offers = readAdjustment(argument, session.clock.now())
   if (offers.length === 0) {
-    process.stderr.write(`keine Korrektur: ${argument || '(nichts)'} — nimm "+25", "-1:30", "ab 9:40" oder "bis 9:40"\n`)
+    process.stderr.write(`${t('no adjustment: {0} — use "+25", "-1:30", "from 9:40" or "until 9:40"', argument || t('(nothing)'))}\n`)
     return 2
   }
   if (offers.length > 1) {
-    process.stderr.write(`${argument} ist zweideutig — nimm "ab ${argument}" oder "bis ${argument}"\n`)
+    process.stderr.write(`${t('{0} is ambiguous — use "from {0}" or "until {0}"', argument)}\n`)
     return 2
   }
 
@@ -833,21 +855,22 @@ function adjust(cwd: string, argument: string): number {
   // The note explains why less happened — never more needed than when nothing did.
   const note = noteFor(plan, wanted)
   if (plan.action === 'impossible') {
-    process.stderr.write(`ohne laufenden Timer nicht möglich — ${note}\n`)
+    process.stderr.write(`${t('not possible without a running timer — {0}', note ?? '')}\n`)
     return 2
   }
   if (plan.delta === 0 && plan.action !== 'stop') {
-    process.stderr.write(`nichts geändert${note === null ? '' : ` — ${note}`}\n`)
+    process.stderr.write(`${note === null ? t('nothing changed') : t('nothing changed — {0}', note)}\n`)
     return 1
   }
   if (plan.action === 'stop') {
-    const at = plan.at === undefined ? '' : ` um ${new Date(plan.at).toTimeString().slice(0, 5)}`
-    process.stdout.write(`Timer angehalten${at}\n`)
+    const line =
+      plan.at === undefined ? t('Timer stopped') : t('Timer stopped at {0}', new Date(plan.at).toTimeString().slice(0, 5))
+    process.stdout.write(`${line}\n`)
   }
   if (note !== null) process.stdout.write(`${note}\n`)
 
   process.stdout.write(
-    `${wanted.label}: ${format(before)} → ${format(session.seconds(context))} auf ${context.scope.branch}\n`,
+    `${t('{0}: {1} → {2} on {3}', wanted.label, format(before), format(session.seconds(context)), context.scope.branch)}\n`,
   )
   return 0
 }
@@ -863,7 +886,7 @@ function log(cwd: string, argument: string): number {
 
   const segments = session.segments.read().filter((segment) => segment.repoPath === context.repo.root)
   if (segments.length === 0) {
-    process.stdout.write('für dieses Repository ist noch kein Segment aufgezeichnet\n')
+    process.stdout.write(`${t('no segment recorded for this repository yet')}\n`)
     return 0
   }
 
@@ -874,7 +897,8 @@ function log(cwd: string, argument: string): number {
     return 0
   }
 
-  const branch = argument === 'alle' ? null : argument !== '' ? argument : context.scope.branch
+  // `alle` is the German word, kept as an alias.
+  const branch = argument === 'all' || argument === 'alle' ? null : argument !== '' ? argument : context.scope.branch
   process.stdout.write(renderReport(segments, { branch, grid: context.config.grid ?? session.config.grid }))
   return 0
 }
@@ -890,6 +914,16 @@ async function ask(question: string): Promise<string> {
   }
 }
 
+/** The closing question of `close` and `resting close`, with the current text as default. */
+async function askFinalText(current: string): Promise<string> {
+  return await ask(current ? t('Final text [{0}]: ', current) : t('Final text: '))
+}
+
+/** A yes to a `[y/N]` question, in English or German. */
+function yes(answer: string): boolean {
+  return /^(j|ja|y|yes)$/i.test(answer.trim())
+}
+
 /**
  * A numbered list, the way `init` has always shown projects and categories.
  * `group` puts a heading over each block, the terminal's answer to `optgroup`;
@@ -902,7 +936,7 @@ async function pick<T>(
   group?: (item: T) => string | null,
 ): Promise<T | null> {
   if (items.length === 0) {
-    process.stderr.write('nichts zur Auswahl\n')
+    process.stderr.write(`${t('nothing to choose from')}\n`)
     return null
   }
 
@@ -912,14 +946,14 @@ async function pick<T>(
       const name = group(item)
       if (name !== heading) {
         heading = name
-        process.stdout.write(`\n  ${name ?? 'Ohne Gruppe'}\n`)
+        process.stdout.write(`\n  ${name ?? t('No group')}\n`)
       }
     }
     process.stdout.write(`  ${String(index + 1).padStart(2)}  ${label(item)}\n`)
   })
 
   const chosen = items[Number(await ask(question)) - 1]
-  if (!chosen) process.stderr.write('nichts gewählt\n')
+  if (!chosen) process.stderr.write(`${t('nothing chosen')}\n`)
   return chosen ?? null
 }
 
@@ -932,21 +966,21 @@ function parseGrid(value: string): TimeGrid | null {
 /** "24-017 Buchungsmodul" — the number is what a customer call refers to. */
 function nameOfProject(context: RepoContext): string {
   const project = context.config.projects.find((candidate) => candidate.id === context.projectId)
-  if (!project) return `Projekt ${context.projectId}`
+  if (!project) return t('Project {0}', context.projectId)
   return project.no ? `${project.no} ${project.name}` : project.name
 }
 
 function notARepo(): number {
-  process.stderr.write('kein Git-Repository\n')
+  process.stderr.write(`${t('not a git repository')}\n`)
   return 1
 }
 
-/** The core reports what it did in English; the terminal speaks German. */
-const HOOK_ACTION: Record<string, string> = {
-  created: 'angelegt',
-  appended: 'ergänzt',
-  updated: 'aktualisiert',
-  unchanged: 'unverändert',
+/** What `installHook` did, as a whole sentence per action. */
+const HOOK_LINE: Record<'created' | 'appended' | 'updated' | 'unchanged', (path: string) => string> = {
+  created: (path) => t('Hook created: {0}', path),
+  appended: (path) => t('Hook appended: {0}', path),
+  updated: (path) => t('Hook updated: {0}', path),
+  unchanged: (path) => t('Hook unchanged: {0}', path),
 }
 
 /** `1:23:45`, the same shape the status bar shows. */
@@ -972,7 +1006,7 @@ function publishCliOrOwnPath(): string {
     publishCli(cliPath())
     return paths.cli()
   } catch (error) {
-    process.stderr.write(`die CLI liess sich nicht nach ${paths.cli()} legen: ${(error as Error).message}\n`)
+    process.stderr.write(`${t('could not put the CLI at {0}: {1}', paths.cli(), (error as Error).message)}\n`)
     return cliPath()
   }
 }

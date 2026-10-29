@@ -1,7 +1,7 @@
 {
   "name": "prosonata-vscode-tools",
   "displayName": "ProSonata Tools",
-  "description": "Verbindet VS Code mit ProSonata. Zeiterfassung, gebunden an Commits und Branches.",
+  "description": "%description%",
   "version": "0.25.0",
   "publisher": "Profitlich",
   "repository": {
@@ -48,7 +48,7 @@
       "profitlich": [
         {
           "id": "prosonata.panel",
-          "name": "ProSonata Zeiterfassung",
+          "name": "%view.panel.name%",
           "icon": "media/icon-view.svg"
         }
       ]
@@ -56,112 +56,112 @@
     "commands": [
       {
         "command": "prosonata.setup",
-        "title": "Konto einrichten",
+        "title": "%command.setup.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.start",
-        "title": "Timer starten",
+        "title": "%command.start.title%",
         "icon": "$(play)",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.pause",
-        "title": "Timer pausieren",
+        "title": "%command.pause.title%",
         "icon": "$(debug-pause)",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.toggle",
-        "title": "Timer starten oder pausieren",
+        "title": "%command.toggle.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.send",
-        "title": "Ausstehende Einträge jetzt senden",
+        "title": "%command.send.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.closeEntry",
-        "title": "Zeiteintrag abschliessen",
+        "title": "%command.closeEntry.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.changeText",
-        "title": "Text des offenen Zeiteintrags ändern",
+        "title": "%command.changeText.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.resolveClosedElsewhere",
-        "title": "Anderswo abgeschlossenen Eintrag entscheiden",
+        "title": "%command.resolveClosedElsewhere.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.handleRejected",
-        "title": "Abgelehnten Eintrag behandeln",
+        "title": "%command.handleRejected.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.handleResting",
-        "title": "Ruhenden Eintrag behandeln",
+        "title": "%command.handleResting.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.adjust",
-        "title": "Zeit korrigieren",
+        "title": "%command.adjust.title%",
         "icon": "$(edit)",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.discard",
-        "title": "Laufendes Segment verwerfen",
+        "title": "%command.discard.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.attachToLast",
-        "title": "Zeit dem letzten Eintrag zuschlagen",
+        "title": "%command.attachToLast.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.log",
-        "title": "Log der gemessenen Segmente",
+        "title": "%command.log.title%",
         "icon": "$(history)",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.chooseProject",
-        "title": "Projekt für dieses Repository wählen",
+        "title": "%command.chooseProject.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.chooseCategory",
-        "title": "Zeitkategorie für dieses Projekt wählen",
+        "title": "%command.chooseCategory.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.chooseGrid",
-        "title": "Zeitraster wählen",
+        "title": "%command.chooseGrid.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.toggleMode",
-        "title": "Modus für Zeiteinträge wählen",
+        "title": "%command.toggleMode.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.openSettings",
-        "title": "Einstellungen öffnen",
+        "title": "%command.openSettings.title%",
         "icon": "$(gear)",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.resolveSleep",
-        "title": "Schlafzeit des Rechners abziehen oder behalten",
+        "title": "%command.resolveSleep.title%",
         "category": "ProSonata"
       },
       {
         "command": "prosonata.browse",
-        "title": "Zeiteinträge durchsehen",
+        "title": "%command.browse.title%",
         "icon": "$(list-flat)",
         "category": "ProSonata"
       }
@@ -195,17 +195,17 @@
     "viewsWelcome": [
       {
         "view": "prosonata.panel",
-        "contents": "Noch kein Konto eingerichtet.\n\nBasis-URL und persönlicher API-Key gehen nach ~/.prosonata/config.json — auch der Hook muss sie lesen können, VS Codes Secret Storage kommt deshalb nicht in Frage.\n\n[Konto einrichten](command:prosonata.setup)",
+        "contents": "%viewsWelcome.noAccount%",
         "when": "!prosonata.hasAccount"
       },
       {
         "view": "prosonata.panel",
-        "contents": "Dieses Repository hat noch kein Projekt.\n\nMit der Wahl wird auch der post-commit-Hook installiert.\n\n[Projekt wählen](command:prosonata.chooseProject)",
+        "contents": "%viewsWelcome.noProject%",
         "when": "prosonata.hasAccount && !prosonata.hasProject"
       },
       {
         "view": "prosonata.panel",
-        "contents": "Öffne einen Ordner, um dafür Zeit zu erfassen.",
+        "contents": "%viewsWelcome.noFolder%",
         "when": "prosonata.hasAccount && !workspaceFolderCount"
       }
     ]
@@ -230,5 +230,8 @@
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   },
-  "icon": "media/icon.png"
+  "icon": "media/icon.png",
+  "dependencies": {
+    "@vscode/l10n": "0.0.18"
+  }
 }

@@ -3,6 +3,7 @@ import { dirname, join, relative } from 'node:path'
 
 import { paths } from './config.js'
 import { isTracked, tryGit } from './git.js'
+import { t } from './l10n.js'
 import { VERSION } from './version.js'
 
 /**
@@ -59,7 +60,7 @@ export interface InstallResult {
 /** Thrown rather than changing a file the project itself ships. */
 export class HookIsTracked extends Error {
   constructor(public readonly path: string) {
-    super(`${path} gehört zum Repository — dort schreibt dieses Werkzeug nicht hinein`)
+    super(t('{0} belongs to the repository — this tool does not write there', path))
     this.name = 'HookIsTracked'
   }
 }

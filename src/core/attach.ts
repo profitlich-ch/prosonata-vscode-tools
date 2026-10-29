@@ -10,6 +10,8 @@
  * else: the editor and the terminal say the same sentence.
  */
 
+import { t } from './l10n.js'
+
 /** What a confirmation has to show before anything is written. */
 export interface AttachPlan {
   /** Seconds moved over. */
@@ -43,17 +45,17 @@ export function describeAttachment(result: Attachment): string {
     case 'done':
       return `${result.plan.before} h → ${result.plan.after} h · ${result.plan.text}`
     case 'cancelled':
-      return 'nichts geändert'
+      return t('nothing changed')
     case 'nothing':
-      return 'keine ungebuchte Zeit vorhanden'
+      return t('no unbooked time')
     case 'known':
-      return 'dieser Eintrag steht bereits in ProSonata — schliesse ihn ab, statt ihn zu verschieben'
+      return t('this entry is already in ProSonata — close it instead of moving it')
     case 'noTarget':
-      return 'auf diesem Branch ist noch kein Eintrag abgeschlossen, dem etwas zugeschlagen werden könnte'
+      return t('no entry on this branch has been closed yet that time could be attached to')
     case 'gone':
-      return 'der Eintrag ist in ProSonata nicht mehr zu finden'
+      return t('the entry can no longer be found in ProSonata')
     case 'invoiced':
-      return 'der Eintrag ist bereits fakturiert — das geht nur noch in ProSonata'
+      return t('the entry is already invoiced — only ProSonata can change it now')
   }
 }
 
@@ -64,9 +66,14 @@ export function describeAttachment(result: Attachment): string {
  */
 export function describePlan(plan: AttachPlan): string {
   const minutes = Math.round(plan.seconds / 60)
-  const amount = minutes < 60 ? `${minutes} ${minutes === 1 ? 'Minute' : 'Minuten'}` : `${(plan.seconds / 3600).toFixed(2)} Stunden`
+  const amount =
+    minutes === 1
+      ? t('1 minute')
+      : minutes < 60
+        ? t('{0} minutes', minutes)
+        : t('{0} hours', (plan.seconds / 3600).toFixed(2))
 
   return plan.before === plan.after
-    ? `${amount} an «${plan.text}» (${plan.date}) — das Zeitraster lässt es bei ${plan.before} h`
-    : `${amount} an «${plan.text}» (${plan.date}) — ${plan.before} h wird ${plan.after} h`
+    ? t('{0} to «{1}» ({2}) — the rounding grid keeps it at {3} h', amount, plan.text, plan.date, plan.before)
+    : t('{0} to «{1}» ({2}) — {3} h becomes {4} h', amount, plan.text, plan.date, plan.before, plan.after)
 }

@@ -4,6 +4,7 @@ import type { Clock } from './clock.js'
 import type { Config } from './config.js'
 import type { Journal } from './journal.js'
 import { entryIsOpen } from './identity.js'
+import { t, template } from './l10n.js'
 import { stripMarker, withMarker } from './marker.js'
 import type { RepoProject } from './repo-config.js'
 import { findEntry, parkClosedElsewhere, runningInto } from './tracking.js'
@@ -201,7 +202,7 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
       if (closedElsewhere !== null) {
         next = parkClosedElsewhere(next, entryId, closedElsewhere)
         result.awaitingDecision.push(entryId)
-        journal.append({ kind: 'note', entryId, message: 'auf einem anderen Rechner abgeschlossen — wartet auf Entscheidung' })
+        journal.append({ kind: 'note', entryId, ...template('closed on another machine — waiting for a decision') })
         continue
       }
       journal.append(entry.timeId === null ? { kind: 'sent', entryId } : { kind: 'sent', entryId, timeId: entry.timeId })
@@ -226,11 +227,16 @@ export async function send(state: State, deps: SendDeps, force = false): Promise
         }
         next.pending = next.pending.filter((write) => write.entryId !== entryId)
         result.rejected.push(entryId)
+        const call = entry.rejected.call
         journal.append({
           kind: 'note',
           entryId,
           projectId: entry.projectId,
-          message: `${entry.rejected.call} → ${error.status}: ${error.message}${project ? ` (Projekt ${project === 'deleted' ? 'gelöscht' : 'nicht mehr offen'})` : ''}`,
+          ...(project === 'deleted'
+            ? template('{0} → {1}: {2} (project deleted)', call, error.status, error.message)
+            : project === 'closed'
+              ? template('{0} → {1}: {2} (project no longer open)', call, error.status, error.message)
+              : { message: `${call} → ${error.status}: ${error.message}` }),
         })
         continue
       }
@@ -291,21 +297,23 @@ async function projectFate(api: Api, projectId: number): Promise<'deleted' | 'cl
  */
 export function describeTrouble(result: SendResult): string | null {
   if (result.rejected.length > 0) {
-    return `${result.rejected.length === 1 ? 'ein Eintrag' : `${result.rejected.length} Einträge`} von ProSonata abgelehnt`
+    return result.rejected.length === 1
+      ? t('one entry rejected by ProSonata')
+      : t('{0} entries rejected by ProSonata', result.rejected.length)
   }
   const [tooLong] = result.tooLong
-  if (tooLong) return `Text zu lang: ${tooLong.length} von ${tooLong.limit} Zeichen`
-  if (result.missingCategory.length > 0) return 'ohne Zeitkategorie wird nicht gesendet'
-  if (result.deferred.length > 0) return 'ProSonata-Kontingent aufgebraucht — geht später raus'
+  if (tooLong) return t('text too long: {0} of {1} characters', tooLong.length, tooLong.limit)
+  if (result.missingCategory.length > 0) return t('nothing is sent without a time category')
+  if (result.deferred.length > 0) return t('ProSonata quota used up — will be sent later')
 
   const [failure] = result.failed
   if (!failure) return null
 
   const error = failure.error
   if (!(error instanceof ApiError)) return error.message
-  if (error.status === 429) return 'ProSonata-Kontingent aufgebraucht — geht später raus'
-  if (error.status === 403) return 'ProSonata verweigert den Zugriff — API-Key oder Rechte prüfen'
-  if (error.status === 401) return 'ProSonata weist den API-Key ab'
+  if (error.status === 429) return t('ProSonata quota used up — will be sent later')
+  if (error.status === 403) return t('ProSonata denies access — check the API key or permissions')
+  if (error.status === 401) return t('ProSonata rejects the API key')
   return error.message
 }
 
@@ -318,8 +326,8 @@ export function describeRejection(entry: TimeEntry, project?: RepoProject): stri
   const rejection = entry.rejected
   if (!rejection) return ''
   const name = project ? (project.no ? `${project.no} ${project.name}` : project.name) : `#${entry.projectId}`
-  if (rejection.project === 'deleted') return `Projekt ${name} gibt es in ProSonata nicht mehr`
-  if (rejection.project === 'closed') return `Projekt ${name} ist in ProSonata nicht mehr offen`
+  if (rejection.project === 'deleted') return t('project {0} no longer exists in ProSonata', name)
+  if (rejection.project === 'closed') return t('project {0} is no longer open in ProSonata', name)
   return `${rejection.message} (${rejection.status})`
 }
 

@@ -1,3 +1,4 @@
+import { t } from './l10n.js'
 import { byDay, type BranchSummary, type Segment } from './segments.js'
 import { toHours, type TimeGrid } from './working-time.js'
 
@@ -67,7 +68,7 @@ export interface ReportOptions {
 
 export function renderReport(segments: Segment[], options: ReportOptions): string {
   const chosen = options.branch === null ? segments : segments.filter((segment) => segment.branch === options.branch)
-  const title = options.branch === null ? 'Alle Branches' : options.branch
+  const title = options.branch === null ? t('All branches') : options.branch
 
   /*
    * The reach of this document, before its numbers rather than after them: a
@@ -75,13 +76,12 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
    * and on an empty list it is the likeliest explanation of all.
    */
   const scope = [
-    'Aufgezeichnet wird auf diesem Rechner. Zeiten, die auf einem anderen Rechner',
-    'gemessen wurden, stehen in ProSonata, aber nicht hier.',
+    t('Recorded on this machine. Times measured on another machine\nare in ProSonata, but not here.'),
     '',
   ]
 
   if (chosen.length === 0) {
-    return [`# ${title}`, '', ...scope, 'Keine Segmente aufgezeichnet.', ''].join('\n')
+    return [`# ${title}`, '', ...scope, t('No segments recorded.'), ''].join('\n')
   }
 
   const total = chosen.reduce((sum, segment) => sum + segment.seconds, 0)
@@ -95,7 +95,9 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
     ...scope,
     // Only when the grid actually moves the number: `5:01 h, abgerechnet 5:01 h`
     // says the same thing twice and reads like a mistake.
-    `**${measured} h** in ${measuredCount} Segmenten${billed === measured ? '.' : `, abgerechnet ${billed} h.`}`,
+    billed === measured
+      ? t('**{0} h** in {1} segments.', measured, measuredCount)
+      : t('**{0} h** in {1} segments, billed {2} h.', measured, measuredCount, billed),
     '',
   ]
 
@@ -106,7 +108,7 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
   for (const day of byDay(chosen)) {
     lines.push(`## ${day.date} — ${hoursAndMinutes(day.seconds)} h`, '')
     lines.push(
-      withBranch ? '| Von | Bis | Dauer | Branch | Ende |' : '| Von | Bis | Dauer | Ende |',
+      withBranch ? t('| From | Until | Duration | Branch | End |') : t('| From | Until | Duration | End |'),
       withBranch ? '|---|---|---|---|---|' : '|---|---|---|---|',
     )
     for (const segment of day.segments) {
@@ -126,16 +128,16 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
 }
 
 function describeReason(segment: Segment): string {
-  if (segment.reason === 'entry') return '**Zeiteintrag**'
-  if (segment.reason === 'commit') return 'Commit'
-  if (segment.reason === 'pause') return 'Pause'
-  if (segment.reason === 'correction') return 'Korrektur'
+  if (segment.reason === 'entry') return t('**Time entry**')
+  if (segment.reason === 'commit') return t('Commit')
+  if (segment.reason === 'pause') return t('Pause')
+  if (segment.reason === 'correction') return t('Adjustment')
   return segment.ranSeconds === undefined
-    ? 'gekürzt'
-    : `gekürzt von ${hoursAndMinutes(segment.ranSeconds)}`
+    ? t('shortened')
+    : t('shortened from {0}', hoursAndMinutes(segment.ranSeconds))
 }
 
-/** `feature/buchung · 12:30 h · zuletzt 2026-08-01` for a pick list. */
+/** `feature/buchung · 12:30 h · last 2026-08-01` for a pick list. */
 export function describeBranch(summary: BranchSummary): string {
-  return `${hoursAndMinutes(summary.seconds)} h · zuletzt ${summary.last.slice(0, 10)}`
+  return t('{0} h · last {1}', hoursAndMinutes(summary.seconds), summary.last.slice(0, 10))
 }

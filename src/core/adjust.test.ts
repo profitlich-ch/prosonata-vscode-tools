@@ -40,26 +40,31 @@ describe('what somebody typed', () => {
     const offers = readAdjustment('25', NOW)
 
     expect(offers.map((offer) => (offer.kind === 'amount' ? offer.seconds : null))).toEqual([minutes(25), -minutes(25)])
-    expect(offers[0]?.label).toBe('+25 Minuten')
+    expect(offers[0]?.label).toBe('+25 minutes')
   })
 
   it('takes a sign as the answer', () => {
     const [offer] = readAdjustment('-1:30', NOW)
-    expect(offer).toEqual({ kind: 'amount', seconds: -minutes(90), label: '-1:30 Stunden' })
+    expect(offer).toEqual({ kind: 'amount', seconds: -minutes(90), label: '-1:30 hours' })
   })
 
   // The two mistakes this exists for, in the words the user used. An anchor is
   // absolute — it says when, not how much.
-  it('reads "ab 9:40" as the moment the work began', () => {
-    const [offer] = readAdjustment('ab 9:40', NOW)
+  it('reads "from 9:40" as the moment the work began', () => {
+    const [offer] = readAdjustment('from 9:40', NOW)
 
-    expect(offer).toEqual({ kind: 'startAt', at: timeOfDay('9:40', NOW), label: 'ab 9:40 zählen' })
+    expect(offer).toEqual({ kind: 'startAt', at: timeOfDay('9:40', NOW), label: 'count from 9:40' })
   })
 
-  it('reads "bis 9:40" as the moment it ended', () => {
-    const [offer] = readAdjustment('bis 9:40', NOW)
+  it('reads "until 9:40" as the moment it ended', () => {
+    const [offer] = readAdjustment('until 9:40', NOW)
 
-    expect(offer).toEqual({ kind: 'stopAt', at: timeOfDay('9:40', NOW), label: 'nur bis 9:40 zählen' })
+    expect(offer).toEqual({ kind: 'stopAt', at: timeOfDay('9:40', NOW), label: 'count only until 9:40' })
+  })
+
+  it('still reads the German "ab" and "bis"', () => {
+    expect(readAdjustment('ab 9:40', NOW)).toEqual(readAdjustment('from 9:40', NOW))
+    expect(readAdjustment('Bis 9:40', NOW)).toEqual(readAdjustment('until 9:40', NOW))
   })
 
   it('offers both when a bare time leaves the direction open', () => {
@@ -169,7 +174,7 @@ describe('what could not be granted', () => {
     )
 
     expect(plan.delta).toBe(minutes(30))
-    expect(noteFor(plan, anchor)).toBe('erst ab 10:10 → so weit reicht das letzte Segment')
+    expect(noteFor(plan, anchor)).toBe('only from 10:10 → that is as far as the last segment reaches')
   })
 
   it('says nothing when the wish was granted whole', () => {
@@ -183,7 +188,7 @@ describe('what could not be granted', () => {
     const anchor = { kind: 'startAt' as const, at: NINE_FORTY, label: '' }
     const plan = planAdjustment(anchor, base())
 
-    expect(noteFor(plan, anchor)).toBe('Uhrzeiten ändern das laufende Segment. Nimm eine Dauer, etwa −0:06.')
+    expect(noteFor(plan, anchor)).toBe('Clock times change the running segment. Use a duration, such as −0:06.')
   })
 
   // An amount is answered in its own currency: what it may be, then why. The
@@ -196,7 +201,7 @@ describe('what could not be granted', () => {
     )
 
     expect(plan.delta).toBe(minutes(1))
-    expect(noteFor(plan, wish)).toBe('nur +1 Minute → letztes Segment reicht bis 10:05')
+    expect(noteFor(plan, wish)).toBe('only +1 minute → last segment reaches until 10:05')
   })
 
   // Forward is bounded by the segment itself, not by the one before it — and
@@ -206,14 +211,14 @@ describe('what could not be granted', () => {
     const plan = planAdjustment(wish, base({ runningSince: NOW - minutes(4) * 1000 }))
 
     expect(plan.delta).toBe(-minutes(4))
-    expect(noteFor(plan, wish)).toBe('nur −4 Minuten → so lange läuft das Segment erst')
+    expect(noteFor(plan, wish)).toBe('only −4 minutes → the segment has not been running longer')
   })
 
   it('names what the segments do not have', () => {
     const wish = { kind: 'amount' as const, seconds: -2 * 3600, label: '' }
     const plan = planAdjustment(wish, base({ booked: 600 }))
 
-    expect(noteFor(plan, wish)).toBe('nur −10 Minuten → mehr haben die Segmente nicht')
+    expect(noteFor(plan, wish)).toBe('only −10 minutes → the segments hold no more')
   })
 
   it('stays quiet about a rounding second', () => {
@@ -241,7 +246,7 @@ describe('the hour a stop settles on', () => {
     const plan = planAdjustment(wish, situation(started))
 
     expect(plan.at).toBe(started)
-    expect(noteFor(plan, wish)).toBe('gebucht wird bis 10:00 → erst ab dann lief der Timer')
+    expect(noteFor(plan, wish)).toBe('booked until 10:00 → the timer only ran from then on')
   })
 
   it('is the hour asked for when the timer was already running', () => {
