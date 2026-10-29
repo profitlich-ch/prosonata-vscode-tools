@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [0.26.0] — 2026-10-29
+
 ### Added
 
 - **English interface with German translation.** Commands, panel, dialogs,
