@@ -11,7 +11,7 @@ import type { EntryMode, TimeEntry } from '../core/types.js'
 import { noteFor, readAdjustment } from '../core/adjust.js'
 import { describeAttachment, describePlan } from '../core/attach.js'
 import { describeRunningElsewhere } from '../core/sync.js'
-import { billedTime, describeBranch, renderReport } from '../core/report.js'
+import { billedTime, describeBranch, hoursAndMinutes, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
 import { NotConfigured, Session, type RepoContext } from '../core/session.js'
 import {
@@ -43,7 +43,7 @@ import { t } from '../core/l10n.js'
 
 /** A function, not a constant: `t()` must run after index.ts has chosen the language. */
 function usage(): string {
-  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hook\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [no] [text]       close the open time entry and send it; with no the one of another branch\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [no retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [no close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
+  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hook\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [no] [text]       close the open time entry and send it; with no the one of another branch\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [no retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [no close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
 }
 
 export async function main(argv: string[], cwd = process.cwd()): Promise<number> {
@@ -78,6 +78,8 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return discard(cwd)
       case 'attach':
         return await attach(cwd)
+      case 'take':
+        return await take(cwd, argument)
       case 'resume':
         return await resume(cwd, argument)
       case 'rejected':
@@ -408,6 +410,35 @@ async function attach(cwd: string): Promise<number> {
   }
   process.stderr.write(`${describeAttachment(result)}\n`)
   return result.kind === 'cancelled' ? 0 : 2
+}
+
+/**
+ * Takes the open entry of another branch onto this one, time and all
+ * (KONZEPT.md §3, *übernehmen*). Called on the branch the work moved to; without
+ * an argument it asks, suggesting the main branch — where interrupted work
+ * comes from.
+ */
+async function take(cwd: string, argument: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const from =
+    argument !== '' ? argument : (await ask(t('Take the open entry of which branch? [{0}] ', context.mainBranch))) || context.mainBranch
+  const result = session.take(context, from)
+
+  if (result.kind === 'done') {
+    const total = hoursAndMinutes(result.entry.seconds + result.entry.foreignSeconds)
+    process.stdout.write(`${t('taken from {0}: {1} h — {2}', from, total, result.entry.text || t('(no text yet)'))}\n`)
+    return 0
+  }
+  if (result.kind === 'same') process.stderr.write(`${t('already on {0} — call take on the branch the entry should move to', from)}\n`)
+  if (result.kind === 'nothing') process.stderr.write(`${t('nothing open on {0}', from)}\n`)
+  if (result.kind === 'occupied') {
+    process.stderr.write(`${t('{0} already has an open entry, nothing taken — merge the two when browsing the time entries', context.scope.branch)}\n`)
+  }
+  if (result.kind === 'awaiting') process.stderr.write(`${t('the entry on {0} waits for a decision first — "prosonata resume" there', from)}\n`)
+  return 2
 }
 
 /**

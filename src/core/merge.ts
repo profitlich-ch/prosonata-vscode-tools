@@ -1,5 +1,5 @@
 import type { RemoteEntry } from './api.js'
-import type { Segment } from './segments.js'
+import { isMarker, type Segment } from './segments.js'
 import { gridStep, hoursToSeconds, toHours, type TimeGrid } from './working-time.js'
 
 /**
@@ -59,7 +59,7 @@ function withoutMarker(detail: string): string {
 export function measuredPerEntry(segments: Segment[], timeIdOf: Map<string, number>): Map<number, number> {
   const seconds = new Map<number, number>()
   for (const segment of segments) {
-    if (segment.reason === 'entry') continue
+    if (isMarker(segment)) continue
 
     const timeId = timeIdOf.get(segment.entryId)
     if (timeId === undefined) continue

@@ -1,5 +1,5 @@
 import { t } from './l10n.js'
-import { byDay, type BranchSummary, type Segment } from './segments.js'
+import { byDay, isMarker, type BranchSummary, type Segment } from './segments.js'
 import { toHours, type TimeGrid } from './working-time.js'
 
 /**
@@ -86,7 +86,7 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
 
   const total = chosen.reduce((sum, segment) => sum + segment.seconds, 0)
   // Closing notes are not segments; counting them would inflate the number.
-  const measuredCount = chosen.filter((segment) => segment.reason !== 'entry').length
+  const measuredCount = chosen.filter((segment) => !isMarker(segment)).length
   const billed = hoursAndMinutes(billedSeconds(chosen, options.grid))
   const measured = hoursAndMinutes(total)
   const lines = [
@@ -114,8 +114,8 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
     for (const segment of day.segments) {
       const cells = [
         segment.from === undefined ? '—' : timeOf(segment.from),
-        segment.reason === 'entry' ? '—' : timeOf(segment.until),
-        hoursAndMinutes(segment.reason === 'entry' ? (segment.bookedSeconds ?? 0) : segment.seconds),
+        isMarker(segment) ? '—' : timeOf(segment.until),
+        hoursAndMinutes(isMarker(segment) ? (segment.bookedSeconds ?? 0) : segment.seconds),
         ...(withBranch ? [segment.branch] : []),
         describeReason(segment),
       ]
@@ -129,6 +129,7 @@ export function renderReport(segments: Segment[], options: ReportOptions): strin
 
 function describeReason(segment: Segment): string {
   if (segment.reason === 'entry') return t('**Time entry**')
+  if (segment.reason === 'taken') return t('**Taken from {0}**', segment.takenFrom ?? '?')
   if (segment.reason === 'commit') return t('Commit')
   if (segment.reason === 'pause') return t('Pause')
   if (segment.reason === 'correction') return t('Adjustment')

@@ -8,7 +8,7 @@ import { t } from '../core/l10n.js'
 import { readRepoConfig, setMode, type RepoProject } from '../core/repo-config.js'
 import { describeRejection } from '../core/sender.js'
 import type { RepoContext, Session } from '../core/session.js'
-import { awaitingDecision, openEntry, rejectedEntries, setText, unwrittenSeconds } from '../core/tracking.js'
+import { awaitingDecision, openEntriesIn, openEntry, rejectedEntries, setText, unwrittenSeconds } from '../core/tracking.js'
 import type { TimeEntry } from '../core/types.js'
 import { clock } from './panel.js'
 import { chooseCategory } from './setup.js'
@@ -371,6 +371,46 @@ export async function closeEntry(session: Session, context: RepoContext, entryId
  * declared finished, and the grid may swallow the whole amount — both belong in
  * front of the click, not in a message afterwards.
  */
+/**
+ * Takes the open entry of another branch onto this one, time and all
+ * (KONZEPT.md §3, *übernehmen*) — offered from every branch of this repository
+ * that has one, the main branch usually among them.
+ */
+export async function takeEntry(session: Session, context: RepoContext): Promise<void> {
+  // A timer still running over there counts too: taking books it first.
+  const running = new Set(session.state().timers.filter((timer) => timer.startedAt !== null).map((timer) => timer.entryId))
+  const candidates = openEntriesIn(session.state(), context.scope.repoPath).filter(
+    (entry) =>
+      entry.scope.branch !== context.scope.branch &&
+      (entry.seconds + entry.foreignSeconds > 0 || entry.timeId !== null || running.has(entry.id)),
+  )
+  if (candidates.length === 0) {
+    void vscode.window.showInformationMessage(t('ProSonata: no other branch of this repository has an open entry with time.'))
+    return
+  }
+
+  const picked = await vscode.window.showQuickPick(
+    candidates.map((entry) => ({
+      label: entry.scope.branch,
+      description: clock(entry.seconds + entry.foreignSeconds),
+      detail: entry.text || t('(no text)'),
+      entry,
+    })),
+    { title: t('Take an open entry onto {0}', context.scope.branch), placeHolder: t('The time moves along; not a second changes') },
+  )
+  if (!picked) return
+
+  const result = session.take(context, picked.entry.scope.branch)
+  if (result.kind === 'done') {
+    void vscode.window.showInformationMessage(t('ProSonata: the entry of {0} is now on {1}.', picked.entry.scope.branch, context.scope.branch))
+  } else if (result.kind === 'occupied') {
+    void vscode.window.showWarningMessage(t('ProSonata: {0} already has an open entry, nothing taken. Merge the two when browsing the time entries.', context.scope.branch))
+  } else if (result.kind === 'awaiting') {
+    void vscode.window.showWarningMessage(t('ProSonata: the entry of {0} waits for a decision first.', picked.entry.scope.branch))
+  }
+  reload()
+}
+
 export async function attachToLast(session: Session, context: RepoContext): Promise<void> {
   const result = await session.attachToLastClosed(context, async (plan) => {
     const attach = t('Attach')

@@ -24,5 +24,6 @@
   "command.browse.title": "Browse Time Entries",
   "viewsWelcome.noAccount": "No account set up yet.\n\nBase URL and personal API key go to ~/.prosonata/config.json — the hook has to read them too, which rules out VS Code's Secret Storage.\n\n[Set Up Account](command:prosonata.setup)",
   "viewsWelcome.noProject": "This repository has no project yet.\n\nChoosing one also installs the post-commit hook.\n\n[Choose Project](command:prosonata.chooseProject)",
-  "viewsWelcome.noFolder": "Open a folder to track time for it."
+  "viewsWelcome.noFolder": "Open a folder to track time for it.",
+  "command.takeEntry.title": "Take Open Entry from Another Branch"
 }

@@ -822,6 +822,40 @@ Mensch, einmal, für einen Eintrag. Drei Grenzen bleiben:
 Gezeigt wird vorher, was tatsächlich geschrieben wird – **nach** dem Raster, das aufrundet: Fünf
 Minuten machen bei Viertelstunden-Raster aus 2:00 h nicht 2:05 h, sondern 2:15 h.
 
+### Einen offenen Eintrag auf einen anderen Branch übernehmen
+
+Das Gegenstück zum Zuschlagen: Dort gehört Zeit zu einem Eintrag, der schon geschlossen ist,
+hier zu einem Branch, den es noch nicht gab. Der Fall ist die unterbrochene Arbeit auf `main`.
+Wer dort angefangen hat und für etwas anderes unterbricht, zieht die Änderungen auf einen
+eigenen Branch (`git switch -c thema`, die Dateien wandern mit) und setzt die Arbeit später dort
+fort. Die Zeit wandert nicht mit: Sie steht im offenen `main`-Eintrag, und der nächste Commit auf
+`main` schliesst ihn – auch der Squash-Merge eines ganz anderen Pakets, mit dessen Trailer. Zwei
+Rechnungszeilen tragen dann denselben Text, und die eine enthält Arbeit, die gar nicht dazugehört.
+
+`prosonata take <branch>`, aufgerufen auf dem neuen Branch, holt den offenen Eintrag von dort
+hierher:
+
+- Der Timer des alten Scopes wird angehalten, sein Segment gebucht – wie bei jedem
+  Branch-Wechsel (Abschnitt 5). Danach hat der alte Scope keinen Timer und keinen offenen
+  Eintrag mehr; der nächste Start dort beginnt einen neuen.
+- Am Eintrag ändern sich `scope` und `key`. `sha` und `day` fallen weg oder werden neu gesetzt,
+  denn sie gehören zum Modus, und der Modus ist der des neuen Scopes – er hängt am Branch, nicht
+  am Eintrag. Die `entryId` bleibt, die `timeID` auch.
+- Kennt ProSonata den Eintrag schon, geht ein Schreibvorgang hinaus, damit `apiComments` die neue
+  Kennung trägt. Sonst fände ein anderer Rechner den Eintrag unter dem alten Branch.
+- **Die Segmente bleiben, wie sie sind.** Gemessen wurde auf `main`, und das Protokoll ist ein
+  Archiv. Sie zeigen über ihre `entryId` ohnehin auf den Eintrag, wohin er auch geht; die Spanne
+  des Arbeitstages findet sie dort weiter. Eine Zeile `taken` im neuen Branch, ohne Sekunden und
+  mit der übernommenen Summe, erklärt im Log, warum Zeit von `main` hier abgerechnet wird – wie
+  die Abschlusszeile trennt sie, ohne mitzuzählen.
+
+Abgelehnt wird, wenn der neue Branch schon einen offenen Eintrag hat: Zwei Einträge
+zusammenzulegen ist eine andere Frage, und es gibt sie schon (*Zeiteinträge durchsehen*).
+Ebenso ein Eintrag, der auf eine Entscheidung wartet – er gehört dem, der die Frage beantwortet.
+
+**Keine Sekunde ändert sich**, nur die Zuordnung. Deshalb darf auch ein Agent den Befehl aufrufen,
+ohne die Regel zu berühren, dass Zahlen allein von der Uhr kommen (Abschnitt 12, Punkt 5).
+
 ### Zeiteinträge durchsehen und berichtigen
 
 Die Zeiteinträge des aktuellen Repositories lassen sich aus dem Editor **durchsehen**: eine
@@ -970,6 +1004,12 @@ Wechselt der Branch, während ein Timer läuft, wird die bis dahin aufgelaufene 
 **alten** Scope zugeschlagen; danach fragt das Werkzeug, ob im neuen Scope weitergelaufen
 wird. Dafür HEAD beobachten, solange ein Timer läuft. Das ist kein Aktivitäts-Watcher, sondern
 ein einzelner Dateizeiger.
+
+Gehört die Zeit eigentlich zum neuen Branch – angefangene Arbeit, die mit `git switch -c` dorthin
+zieht –, nimmt `prosonata take` den offenen Eintrag samt Zeit mit (Abschnitt 3, *Einen offenen
+Eintrag auf einen anderen Branch übernehmen*). Von selbst geschieht das nie: Ob die Zeit zur
+Arbeit gehört, die mitwandert, oder zu einer, die auf dem alten Branch fertig war, weiss nur, wer
+sie gemessen hat.
 
 Geschieht der Wechsel im Terminal **ohne offenes VS-Code-Fenster**, bemerkt es niemand – ein
 `post-checkout`-Hook ist bewusst verworfen (Abschnitt 11). Der Wechsel fällt dann erst beim

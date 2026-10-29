@@ -40,12 +40,23 @@ export interface Segment {
    * carries what it became, so the log shows where one invoice line ends and the
    * next begins. Its `seconds` are zero on purpose — the time is already in the
    * segments above it, and counting it again would double every day it closes.
+   *
+   * `taken` is no measurement either: an open entry moved here from another
+   * branch (KONZEPT.md §3, *übernehmen*). Its segments stay where they were
+   * measured, and this line says why their time is billed on this branch.
    */
-  reason: 'pause' | 'commit' | 'trimmed' | 'correction' | 'entry' | 'asleep'
+  reason: 'pause' | 'commit' | 'trimmed' | 'correction' | 'entry' | 'asleep' | 'taken'
   /** For `trimmed`: how long it really ran before the answer cut it. */
   ranSeconds?: number
-  /** For `entry`: the total the entry was closed with, foreign share included. */
+  /** For `entry`: the total the entry was closed with; for `taken`, the total it brought. Foreign share included. */
   bookedSeconds?: number
+  /** For `taken`: the branch the entry came from. */
+  takenFrom?: string
+}
+
+/** A line that marks an entry rather than measuring time — counted by nothing. */
+export function isMarker(segment: Segment): boolean {
+  return segment.reason === 'entry' || segment.reason === 'taken'
 }
 
 export class SegmentLog {
@@ -53,8 +64,8 @@ export class SegmentLog {
 
   append(segment: Segment): void {
     // A correction may be negative; a trimmed segment may be cut to zero, and a
-    // closing note carries no time of its own at all.
-    if (segment.seconds === 0 && segment.reason !== 'trimmed' && segment.reason !== 'entry') return
+    // closing or taking note carries no time of its own at all.
+    if (segment.seconds === 0 && segment.reason !== 'trimmed' && !isMarker(segment)) return
     if (segment.seconds < 0 && segment.reason !== 'correction') return
 
     mkdirSync(dirname(this.file), { recursive: true })

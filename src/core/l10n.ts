@@ -26,13 +26,13 @@ export function baseLanguage(language: string | undefined): string {
 /**
  * The language for the CLI and the hook: the environment first, then what the
  * extension last wrote. A GUI client often starts the hook without any locale
- * variables, which is why the second source exists at all. `C` and `POSIX` say
- * no language was chosen, not that English was.
+ * variables, which is why the second source exists at all. `C`, `C.UTF-8` and
+ * `POSIX` say no language was chosen, not that English was.
  */
 export function languageFor(env: NodeJS.ProcessEnv, remembered: string | undefined): string | undefined {
   for (const name of ['LC_ALL', 'LC_MESSAGES', 'LANG']) {
     const value = env[name]
-    if (value && value !== 'C' && value !== 'POSIX') return value
+    if (value && !['c', 'posix'].includes(baseLanguage(value))) return value
   }
   return remembered
 }

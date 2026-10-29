@@ -123,6 +123,11 @@
         "category": "ProSonata"
       },
       {
+        "command": "prosonata.takeEntry",
+        "title": "%command.takeEntry.title%",
+        "category": "ProSonata"
+      },
+      {
         "command": "prosonata.log",
         "title": "%command.log.title%",
         "icon": "$(history)",

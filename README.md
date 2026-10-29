@@ -283,6 +283,24 @@ If the open entry is already in ProSonata, it disappears when attached: its
 time has moved. Only if another computer measured into it does it stay, and
 attaching is refused.
 
+## Taking interrupted work to a branch of its own
+
+You started something on `main` and have to interrupt it for something else.
+The files move to a branch of their own with `git switch -c topic` — the time
+doesn't: it sits in the open entry of `main`, and the next commit there, even
+the squash merge of a different branch, would close it under that commit's
+text.
+
+Run `prosonata take main` on the new branch (or “ProSonata: Take Open Entry
+from Another Branch”), and the open entry moves along with all its time. `main`
+is left without an open entry; the next timer there starts a fresh one. Not a
+second changes, only where the time is billed. The segments stay in the log
+where they were measured, and a line **Taken from main** on the new branch
+says why their time is billed there.
+
+If the new branch already has an open entry, nothing is taken — merge the two
+when browsing the time entries instead.
+
 ## Browsing time entries
 
 The list icon in the title bar of the ProSonata panel fetches the time entries
@@ -342,6 +360,7 @@ prosonata close [no] [text]       close the open time entry and send it; with a 
 prosonata text <text>             change the text of the open time entry
 prosonata discard                 discard the running segment without booking it
 prosonata attach                  attach time to the entry of the last commit
+prosonata take [branch]           take the open entry of another branch onto this one, time and all
 prosonata resume [add|new]        resolve an entry closed elsewhere
 prosonata rejected [no retry|move|drop]
                                   rejected entries: send again, move to another project, discard

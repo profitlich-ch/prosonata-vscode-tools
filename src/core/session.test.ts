@@ -1234,3 +1234,90 @@ describe('the journal and a failure that repeats', () => {
     expect(notes()).toHaveLength(2)
   })
 })
+
+/**
+ * Work begun on `main` that moved to a branch of its own (KONZEPT.md §3,
+ * *übernehmen*). Its time sits in the open main entry, and the next commit on
+ * main — the squash merge of some other package — would close it under that
+ * package's text.
+ */
+describe('taking the open entry of another branch', () => {
+  const main = { ...context, scope: { repoPath: '/work/shop', branch: 'main' }, key: 'm41n00', mode: 'commit' } as RepoContext
+  const topic = { ...context, scope: { repoPath: '/work/shop', branch: 'formular' }, key: 'f0rm01' } as RepoContext
+
+  async function workedOnMain(options: { known?: boolean } = {}) {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-take-'))
+    const clock = fixedClock(NINE)
+    const segments = new SegmentLog(join(dir, 'segments.jsonl'))
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      { api: new FakeApi(), clock, store: new StateStore(join(dir, 'state.json')), journal: new Journal(join(dir, 'log.jsonl')), segments },
+    )
+    await session.start(main)
+    clock.advance(40 * 60)
+    if (options.known) {
+      session.store.update((state) => {
+        state.entries[0]!.timeId = 2950
+        state.pending = []
+        return state
+      })
+    }
+    return { session, segments, clock }
+  }
+
+  it('moves the entry with its time to this branch and leaves main without one', async () => {
+    const { session } = await workedOnMain({ known: true })
+
+    const result = session.take(topic, 'main')
+
+    expect(result.kind).toBe('done')
+    const moved = openEntry(session.state(), topic.scope)
+    expect(moved?.seconds).toBe(40 * 60)
+    expect(moved?.key).toBe('f0rm01')
+    expect(moved?.timeId).toBe(2950)
+    expect(openEntry(session.state(), main.scope)).toBeUndefined()
+    // ProSonata knows it, so apiComments must learn the new key.
+    expect(session.state().pending.map((write) => write.entryId)).toEqual([moved?.id])
+  })
+
+  it('notes the move in the log of this branch without counting it twice', async () => {
+    const { session, segments } = await workedOnMain()
+
+    session.take(topic, 'main')
+
+    const lines = segments.read()
+    expect(lines.map((line) => [line.branch, line.reason, line.seconds])).toEqual([
+      ['main', 'pause', 40 * 60],
+      ['formular', 'taken', 0],
+    ])
+    expect(lines[1]).toMatchObject({ bookedSeconds: 40 * 60, takenFrom: 'main' })
+  })
+
+  it('lets the timer of this branch and the next trailer go into the taken entry', async () => {
+    const { session, clock } = await workedOnMain()
+    session.take(topic, 'main')
+
+    await session.start(topic)
+    clock.advance(20 * 60)
+    session.commit(topic, { text: 'Formulare im Overlay', fromTrailer: true, sha: 'cafe123' })
+
+    const entry = openEntry(session.state(), topic.scope)
+    expect(entry?.seconds).toBe(60 * 60)
+    expect(entry?.text).toBe('Formulare im Overlay')
+  })
+
+  it('refuses when this branch already has an open entry', async () => {
+    const { session } = await workedOnMain()
+    await session.start(topic)
+    session.pause(topic)
+
+    expect(session.take(topic, 'main').kind).toBe('occupied')
+    expect(openEntry(session.state(), main.scope)?.seconds).toBe(40 * 60)
+  })
+
+  it('has nothing to take from a branch without time', async () => {
+    const { session } = await workedOnMain()
+
+    expect(session.take(topic, 'develop').kind).toBe('nothing')
+  })
+})

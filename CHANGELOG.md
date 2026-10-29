@@ -7,6 +7,24 @@ are in German.
 
 ## [Unreleased]
 
+### Added
+
+- **`prosonata take [branch]`** and “ProSonata: Take Open Entry from Another
+  Branch” move the open entry of another branch onto the current one, time and
+  all. Meant for work begun on `main` that moved to a branch of its own: until
+  now its time stayed in the open `main` entry, and the next commit on `main` —
+  even the squash merge of another branch — closed it under its own text. The
+  segments stay where they were measured; a line *Taken from …* in the log
+  explains the move.
+
+### Fixed
+
+- **A branch switch noticed after the fact now leaves its segment in the log.**
+  The time was booked into the entry, but `segments.jsonl` had no line for it,
+  so entries could hold hours no segment accounted for.
+- **`LANG=C.UTF-8` no longer means English.** Like `C` and `POSIX` it names no
+  language, so the CLI and the hook fall back to the one VS Code last used.
+
 ## [0.26.0] — 2026-10-29
 
 ### Added

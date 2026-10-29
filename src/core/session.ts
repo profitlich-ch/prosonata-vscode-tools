@@ -52,6 +52,7 @@ import {
   shiftStart,
   skipGap,
   start,
+  takeEntry,
   takeFromOpen,
   unwrittenSeconds,
 } from './tracking.js'
@@ -80,6 +81,14 @@ export interface RepoContext {
   projectId: number
   categoryId: number
 }
+
+/** What became of taking an entry from another branch (KONZEPT.md §3, *übernehmen*). */
+export type Taking =
+  | { kind: 'done'; entry: TimeEntry }
+  | { kind: 'same' }
+  | { kind: 'nothing' }
+  | { kind: 'occupied'; entry: TimeEntry }
+  | { kind: 'awaiting' }
 
 /** An open entry whose branch is done, and how it came to be (KONZEPT.md §3). */
 export interface FinishedEntry {
@@ -170,21 +179,29 @@ export class Session {
    * the timer is paused. Asking is left to the next window.
    */
   reconcileBranchSwitch(context: RepoContext): string | null {
-    let switched: string | null = null
+    let stray: { scope: Scope; startedAt: number } | null = null
+    const now = this.clock.now()
     this.store.update((state) => {
-      switched = null
-      const stray = state.timers.find(
-        (timer) =>
-          timer.startedAt !== null &&
-          timer.scope.repoPath === context.scope.repoPath &&
-          timer.scope.branch !== context.scope.branch,
+      stray = null
+      const timer = state.timers.find(
+        (candidate) =>
+          candidate.startedAt !== null &&
+          candidate.scope.repoPath === context.scope.repoPath &&
+          candidate.scope.branch !== context.scope.branch,
       )
-      if (!stray) return state
+      if (!timer || timer.startedAt === null) return state
 
-      switched = stray.scope.branch
-      return pause(state, this.clock, stray.scope)
+      stray = { scope: timer.scope, startedAt: timer.startedAt }
+      // One moment for the booking and the log line, so the two cannot differ by a second.
+      return pause(state, { now: () => now, today: () => this.clock.today() }, timer.scope)
     })
-    return switched
+    if (stray === null) return null
+
+    // Booked into the entry above; without this line the archive would hold
+    // hours no segment accounts for.
+    const { scope, startedAt } = stray as { scope: Scope; startedAt: number }
+    this.recordSegmentAt({ ...context, scope }, startedAt, now, 'pause')
+    return scope.branch
   }
 
   /**
@@ -340,6 +357,51 @@ export class Session {
       entryId: entry.id,
       reason: 'entry',
     })
+  }
+
+  /**
+   * Takes the open entry of another branch of this repository onto this one,
+   * time and all (KONZEPT.md §3, *übernehmen*) — work begun on `main` that moved
+   * to a branch of its own with `git switch -c`.
+   *
+   * The switch is usually not noticed yet when this is called, so it is settled
+   * first: the old timer is paused and its segment booked up to now, as with
+   * every switch (KONZEPT.md §5). An empty entry is nothing to take — it holds
+   * no time and ProSonata does not know it.
+   */
+  take(context: RepoContext, fromBranch: string): Taking {
+    if (fromBranch === context.scope.branch) return { kind: 'same' }
+    const from: Scope = { repoPath: context.scope.repoPath, branch: fromBranch }
+
+    this.reconcileBranchSwitch(context)
+    this.store.update((state) => pause(state, this.clock, from, randomUUID))
+
+    const before = this.state()
+    const entry = openEntry(before, from)
+    if (!entry || (entry.timeId === null && entry.seconds + entry.foreignSeconds === 0)) return { kind: 'nothing' }
+    const occupied = openEntry(before, context.scope)
+    if (occupied) return { kind: 'occupied', entry: occupied }
+    if (entry.awaitingDecision) return { kind: 'awaiting' }
+
+    const after = this.store.update((state) =>
+      takeEntry(state, { from, to: context.scope, key: context.key, mode: context.mode, at: this.clock.now() }),
+    )
+    const moved = findEntry(after, entry.id)
+    // Another process got there in between; what it left is not ours to explain.
+    if (!moved || !sameScope(moved.scope, context.scope)) return { kind: 'nothing' }
+
+    this.segments.append({
+      until: atLocal(this.clock.now()),
+      seconds: 0,
+      bookedSeconds: moved.seconds + moved.foreignSeconds,
+      repoPath: context.scope.repoPath,
+      branch: context.scope.branch,
+      projectId: moved.projectId,
+      entryId: moved.id,
+      reason: 'taken',
+      takenFrom: fromBranch,
+    })
+    return { kind: 'done', entry: moved }
   }
 
   /** A correction carries only its amount and the moment it was entered. */

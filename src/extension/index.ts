@@ -9,6 +9,7 @@ import { browseEntries } from './browse.js'
 import {
   askAboutClosedElsewhere,
   attachToLast,
+  takeEntry,
   changeText,
   closeEntry,
   handleRejected,
@@ -83,6 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.handleRejected', (entryId?: string) => handleRejected(entryId))
   register(context, 'prosonata.handleResting', (entryId?: string) => handleResting(entryId))
   register(context, 'prosonata.attachToLast', withContext(attachToLast))
+  register(context, 'prosonata.takeEntry', withContext(takeEntry))
   register(context, 'prosonata.log', withRepo(showLog))
   register(context, 'prosonata.browse', withContext(browseEntries))
   register(context, 'prosonata.adjust', withContext(adjustTime))

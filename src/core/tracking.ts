@@ -320,6 +320,50 @@ export function takeFromOpen(state: State, entryId: string, seconds: number): St
   return next
 }
 
+export interface TakeOptions {
+  from: Scope
+  to: Scope
+  /** Identity of the branch the entry moves to; it travels in `apiComments`. */
+  key: string
+  /** The mode of the scope it moves to — the mode belongs to the branch. */
+  mode: EntryMode
+  at: number
+}
+
+/**
+ * Moves the open entry of one scope to another (KONZEPT.md §3, *übernehmen*):
+ * work begun on `main` that moved to a branch of its own, time and all.
+ *
+ * Not a second of it changes, only where it belongs. The timer of the old scope
+ * must be paused first — its running segment is time measured there — and goes
+ * with the move, so the old scope starts afresh next time. A timer already
+ * waiting in the new scope now flows into this entry. Refuses, by returning the
+ * state unchanged, when there is nothing to take, when the new scope already
+ * has an open entry, or when the entry waits for a decision.
+ */
+export function takeEntry(state: State, options: TakeOptions): State {
+  const entry = openEntry(state, options.from)
+  if (!entry || entry.awaitingDecision || openEntry(state, options.to)) return state
+  if (isRunning(findTimer(state, options.from))) return state
+
+  const next = structuredClone(state)
+  const moved = findEntry(next, entry.id)!
+  moved.scope = { ...options.to }
+  moved.key = options.key
+  // `sha` and `day` belong to a mode, and the mode is the new scope's.
+  delete moved.sha
+  if (options.mode === 'branch-day') moved.day = dayOf(options.at)
+  else delete moved.day
+
+  next.timers = next.timers.filter((timer) => !sameScope(timer.scope, options.from))
+  const waiting = findTimerIn(next, options.to)
+  if (waiting) waiting.entryId = moved.id
+
+  // Otherwise another machine would find the entry under the old branch.
+  if (moved.timeId !== null) queueWrite(next, moved.id, options.at, false)
+  return next
+}
+
 /**
  * Lets go of the ProSonata entry this one had — it was deleted over there. What
  * accrues from now on belongs to a new one, so every trace of the old must go:

@@ -70,6 +70,7 @@ describe('language', () => {
   it('falls back to the remembered language when the locale names none', () => {
     expect(languageFor({}, 'de')).toBe('de')
     expect(languageFor({ LANG: 'C' }, 'de')).toBe('de')
+    expect(languageFor({ LANG: 'C.UTF-8' }, 'de')).toBe('de')
   })
 
   it('translates once German is chosen and stays English otherwise', () => {
