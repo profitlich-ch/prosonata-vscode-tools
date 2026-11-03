@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [0.28.0] — 2026-11-03
+
 ### Added
 
 - **`--help` and `-h` after any command show that command's help**, and so does
