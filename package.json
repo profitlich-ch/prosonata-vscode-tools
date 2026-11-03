@@ -107,6 +107,11 @@
         "category": "ProSonata"
       },
       {
+        "command": "prosonata.handleHeld",
+        "title": "%command.handleHeld.title%",
+        "category": "ProSonata"
+      },
+      {
         "command": "prosonata.adjust",
         "title": "%command.adjust.title%",
         "icon": "$(edit)",

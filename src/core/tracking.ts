@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import type { Clock } from './clock.js'
-import type { EntryMode, PendingWrite, Scope, State, TimeEntry, Timer } from './types.js'
+import type { EntryMode, HeldAtMerge, PendingWrite, Scope, State, TimeEntry, Timer } from './types.js'
 
 /**
  * Segments and entries (KONZEPT.md §2 and §3).
@@ -35,9 +35,17 @@ export function findEntry(state: State, id: string): TimeEntry | undefined {
   return state.entries.find((entry) => entry.id === id)
 }
 
-/** The open entry of a scope, if there is one. */
+/**
+ * The open entry of a scope, if there is one. A held one is not: it waits for
+ * an answer, and whatever comes next on its branch goes into its successor.
+ */
 export function openEntry(state: State, scope: Scope): TimeEntry | undefined {
-  return state.entries.find((entry) => entry.state === 'open' && sameScope(entry.scope, scope))
+  return state.entries.find((entry) => entry.state === 'open' && !entry.heldAtMerge && sameScope(entry.scope, scope))
+}
+
+/** Main-branch entries held at a squash merge, in every repository. */
+export function heldEntries(state: State): TimeEntry[] {
+  return state.entries.filter((entry) => entry.state === 'open' && entry.heldAtMerge !== undefined)
 }
 
 /**
@@ -114,6 +122,11 @@ export interface CommitOptions {
   projectId: number
   categoryId: number
   key: string
+  /**
+   * Set when this commit is the squash merge of a branch: its trailer is that
+   * branch's text. The entry is then held rather than closed under it.
+   */
+  holdFor?: { branch: string; entryId: string }
 }
 
 /**
@@ -127,7 +140,7 @@ export interface CommitOptions {
 export function commit(
   state: State,
   options: CommitOptions,
-): { state: State; booked: number; closed: TimeEntry | null; hadTimer: boolean } {
+): { state: State; booked: number; closed: TimeEntry | null; held?: TimeEntry; hadTimer: boolean } {
   const next = structuredClone(state)
   const timer = findTimerIn(next, options.scope)
   const hadTimer = isRunning(timer)
@@ -173,6 +186,10 @@ export function commit(
    */
   if (options.mode === 'commit' && booked === 0 && entry.seconds === 0 && entry.foreignSeconds === 0) {
     return { state, booked: 0, closed: null, hadTimer }
+  }
+
+  if (options.mode === 'commit' && options.holdFor) {
+    return { state: hold(next, entry, { ...options.holdFor, at: options.at }, options.newId), booked, closed: null, held: entry, hadTimer }
   }
 
   if (options.mode === 'commit') {
@@ -230,7 +247,7 @@ export function parkClosedElsewhere(state: State, entryId: string, remoteSeconds
  * repository are two workplaces.
  */
 export function openEntriesIn(state: State, repoPath: string): TimeEntry[] {
-  return state.entries.filter((entry) => entry.state === 'open' && entry.scope.repoPath === repoPath)
+  return state.entries.filter((entry) => entry.state === 'open' && !entry.heldAtMerge && entry.scope.repoPath === repoPath)
 }
 
 /** Every entry waiting for that answer, so a front end can ask. */
@@ -414,7 +431,95 @@ export function close(state: State, entryId: string, text: string, at: number, n
   if (text.trim() === '') return state
 
   entry.text = text
+  // A held entry closed with a text of its own: that is the answer.
+  delete entry.heldAtMerge
   return closeEntry(next, entry, newId, at)
+}
+
+/*
+ * Held at a squash merge (KONZEPT.md §3, *Offene main-Zeit beim Squash-Merge*).
+ *
+ * The merge commit carries the branch's trailer. Closing the main entry under
+ * it gave two invoice lines with one text, and whether the time on main
+ * belonged to that branch nobody could say five days later. So the entry is
+ * held: it keeps its time and is closed by no later commit, which would put a
+ * foreign text on it again. The timer runs on into a fresh entry, as after any
+ * commit on the main branch. Nothing is queued — the answer decides what goes
+ * out.
+ */
+function hold(state: State, entry: TimeEntry, heldAtMerge: HeldAtMerge, newId: () => string): State {
+  entry.heldAtMerge = heldAtMerge
+  const timer = state.timers.find((candidate) => candidate.entryId === entry.id)
+  if (timer) {
+    const successor = createEntry(state, {
+      scope: entry.scope,
+      key: entry.key,
+      projectId: entry.projectId,
+      categoryId: entry.categoryId,
+      newId,
+    })
+    timer.entryId = successor.id
+  }
+  return state
+}
+
+/**
+ * The answer «attach» to a held entry, while its branch entry has not gone out
+ * finished yet: the seconds move over, and the branch entry's next write — or
+ * its closing write, already due — carries the sum. The held entry keeps no
+ * time; its husk in ProSonata is the caller's to delete.
+ */
+/*
+ * Rolled back before it went out (KONZEPT.md §3, *Zurückgerollte Commits*).
+ *
+ * On the main branch an entry belongs to its commit. An amend or a reset takes
+ * the commit away, and the entry would go out under a text nobody committed —
+ * after an amend beside a second entry with the seconds up to the amend. The
+ * time is real, so it moves to the replacement: the next entry of the same
+ * scope, the one the amend closed, or after a reset the open one, which the
+ * next commit takes along. Entries are kept in the order they were made, so
+ * an amend amended once more passes the time on down the line.
+ *
+ * Does the rolled-back entry already stand in ProSonata — open, as a
+ * placeholder — the replacement takes over that line. Do both, nothing
+ * happens: one of the two lines would have to be deleted, and deleting is not
+ * part of this case. It is rare, too, since the older closing write is due
+ * first.
+ */
+export function foldRolledBack(state: State, rolledBack: string[], at: number): State {
+  const next = structuredClone(state)
+  for (const id of rolledBack) {
+    const index = next.entries.findIndex((entry) => entry.id === id)
+    const entry = next.entries[index]
+    if (!entry || entry.state !== 'closed' || entry.foreignSeconds > 0) continue
+    if (!next.pending.some((write) => write.entryId === id && write.closing)) continue
+
+    const target = next.entries.slice(index + 1).find((later) => sameScope(later.scope, entry.scope) && !later.heldAtMerge)
+    if (!target) continue
+    if (entry.timeId !== null) {
+      if (target.timeId !== null || target.creating !== undefined) continue
+      target.timeId = entry.timeId
+      target.lastWritten = entry.lastWritten
+    }
+
+    target.seconds += entry.seconds
+    next.entries.splice(index, 1)
+    next.pending = next.pending.filter((write) => write.entryId !== id)
+    queueWrite(next, target.id, at, target.state === 'closed')
+  }
+  return next
+}
+
+export function moveHeldTime(state: State, heldId: string, targetId: string, at: number): State {
+  const next = structuredClone(state)
+  const held = findEntry(next, heldId)
+  const target = findEntry(next, targetId)
+  if (!held?.heldAtMerge || !target || held.seconds <= 0) return state
+
+  target.seconds += held.seconds
+  held.seconds = 0
+  queueWrite(next, target.id, at, false)
+  return next
 }
 
 /**
@@ -920,6 +1025,7 @@ export function restingEntries(state: State, now: number, days: number): TimeEnt
       entry.lastActivity !== undefined &&
       !entry.rejected &&
       !entry.awaitingDecision &&
+      !entry.heldAtMerge &&
       (entry.seconds + entry.foreignSeconds > 0 || entry.timeId !== null) &&
       !state.timers.some((timer) => timer.entryId === entry.id && timer.startedAt !== null) &&
       now - Math.max(entry.lastActivity, entry.restingKeptAt ?? 0) >= limit,

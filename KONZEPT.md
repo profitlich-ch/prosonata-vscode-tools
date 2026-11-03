@@ -514,6 +514,16 @@ und eine Zeile in `prosonata status`; abgeschlossen wird mit einem Klick darauf 
 `prosonata close <Nr> [Text]`. Eine Meldung gibt es dafür nicht: Sie verschwände, während niemand
 hinsieht.
 
+**Abgeschlossen wird mit dem Branchnamen.** Wer eben gemergt hat, kennt die Namen seiner
+Branches, nicht die Kurz-IDs. `prosonata close <branch>` nimmt deshalb neben der Nr den Namen
+eines gemergten oder gelöschten Branches an, und die Zeile in `status` nennt den Befehl mit dem
+Namen. Nur fertige Branches: Ein Branch in Arbeit wird von sich aus abgeschlossen, und je weniger
+Namen gelten, desto seltener wird das erste Wort eines Textes für einen gehalten. Ohne Text gilt
+der Text, der am Eintrag steht, ohne Rückfrage – bei `close` wie bei `resting … close`; gefragt
+wird nur, wenn keiner da ist, und ohne Terminal (ein Agent) bricht der Befehl dann mit einer
+Meldung ab, statt auf eine Antwort zu warten. **Alle auf einmal abzuschliessen gibt es
+nicht:** Ein Befehl soll nicht mehrere Rechnungszeilen senden, ohne dass jemand sie gesehen hat.
+
 **«Hat sich bewegt»** liest das Reflog des Branches: Seine erste Zeile ist die Anlage, jeder Commit
 und jeder Reset fügt eine hinzu. Ohne diese Bedingung gälte ein eben angelegter Branch als
 gemergt, bevor auf ihm etwas geschehen ist – sein Tip ist ein Vorfahr des Hauptbranches.
@@ -596,29 +606,41 @@ SHAs. `reset`, `amend`, `rebase` und Squash lassen ihn unberührt – die Zuordn
 robuster als eine SHA-Verknüpfung. Nur ein Text, der aus dem Trailer des zurückgerollten
 Commits kam, bleibt stehen, bis ein neuer ihn ersetzt.
 
-**Auf dem Hauptbranch** hängt jeder Zeiteintrag an seiner SHA. Steckt diese nicht mehr im
-Hauptbranch, war der Commit zurückgerollt. *(Noch nicht gebaut, keiner der beiden Fälle – #3.)*
-Heute prüft nichts, ob der Commit eines Eintrags noch existiert. Ein `--amend` kurz nach dem
-Commit ergibt deshalb zwei Zeilen in ProSonata: den ersten Eintrag mit der Zeit bis zum Commit
-und einen zweiten mit den Sekunden bis zum Amend, oft mit demselben Text. Nach einem
-`git reset` geht der Eintrag mit dem Text eines Commits hinaus, den es nicht mehr gibt. Die Summe
-stimmt in beiden Fällen, die Aufteilung auf Rechnungszeilen nicht.
+**Auf dem Hauptbranch** hängt jeder Zeiteintrag an seiner SHA. Steckt diese nicht mehr in ihrem
+Branch, war der Commit zurückgerollt. Ohne Prüfung ergäbe ein `--amend` kurz nach dem Commit
+zwei Zeilen in ProSonata: den ersten Eintrag mit der Zeit bis zum Commit und einen zweiten mit
+den Sekunden bis zum Amend, oft mit demselben Text. Nach einem `git reset` ginge der Eintrag mit
+dem Text eines Commits hinaus, den es nicht mehr gibt. Die Summe stimmte in beiden Fällen, die
+Aufteilung auf Rechnungszeilen nicht.
 
-Vorgesehen ist:
+Zwei Fälle, von denen nur der erste vorgesehen ist:
 
 - **Noch nicht gesendet** – durch den aufgeschobenen Versand der Normalfall, auch bei einem
-  `--amend` unmittelbar nach dem Commit: die Sekunden fliessen in den nächsten Zeiteintrag,
-  dessen Commit die Arbeit ersetzt. Keine Rückfrage. In ProSonata erschiene nie etwas Falsches.
-- **Schon gesendet** – der Zeiteintrag steht in ProSonata und trägt echte Zeit. Rückfrage im
-  nächsten VS-Code-Fenster, nicht im Hook: **zusammenführen** oder **stehen lassen**.
-  Zusammenführen heisst summieren – ein Zeiteintrag behält die Gesamtzeit und den neuen Text,
-  die übrigen werden per `DELETE /projecttimes/{id}` entfernt. Stehen lassen heisst: der alte
-  bleibt mit seiner Zeit und seinem Text, der neue Commit legt einen eigenen an. Beide Wege
-  erhalten die Summe.
+  `--amend` unmittelbar nach dem Commit. Die Zeit des zurückgerollten Eintrags geht in den
+  **Ersatzeintrag**, den nächsten Eintrag desselben Branches: den des Commits, der ihn ersetzt
+  hat, oder, gibt es noch keinen (Reset ohne neuen Commit), den offenen, und sie reist mit dem
+  nächsten Commit. Wird ein Amend nochmals berichtigt, wandert die Zeit weiter. Der
+  zurückgerollte Eintrag verschwindet, bevor er gesendet wird. Keine Rückfrage; in ProSonata
+  erscheint nie etwas Falsches. Geprüft wird direkt vor dem Versand, auch im Hook – ein
+  `git`-Aufruf je wartendem Abschluss.
+
+  Steht der zurückgerollte Eintrag schon als offener Platzhalter in ProSonata, übernimmt der
+  Ersatz diese Zeile. Stehen **beide** schon dort, geschieht nichts: Eine der Zeilen wäre zu
+  löschen, und das gehört zum zweiten Fall. Selten ist es ohnehin, denn der ältere Abschluss
+  ist zuerst fällig. Ebenso bleibt alles, wie es ist, wenn Git nicht antworten kann – der
+  Branch ist gelöscht, oder der Commit ist unbekannt.
+
+  Umgekehrt – den zurückgerollten Eintrag mit dem Text des Ersatzes behalten und den Ersatz
+  streichen – ergäbe dieselbe Summe, zeigte nach einem Reset mit neuem Commit aber auf den
+  falschen Commit.
+- **Schon gesendet** – der Zeiteintrag steht in ProSonata und trägt echte Zeit. **Nicht
+  vorgesehen**, solange der Fall nicht vorkommt: Vom 1. bis 27. Oktober 2026 gab es vier Amends
+  auf `main`, alle innerhalb von Minuten nach dem Commit, also vor dem Versand. Ihn zu bauen
+  hiesse, dass das Werkzeug ohne direkten Klick auf eine Löschaktion in ProSonata löscht. Der
+  Weg, falls es dazu kommt, steht in #3.
 
 Geprüft wird gegen den Hauptbranch, nicht gegen HEAD: Sonst gälte jeder Commit auf `main` als
-zurückgerollt, sobald man auf einem Feature-Branch steht. Der Plan im Einzelnen und die offenen
-Weichen stehen in #3.
+zurückgerollt, sobald man auf einem Feature-Branch steht.
 
 ### Mehrere Rechner
 
@@ -856,6 +878,50 @@ Ebenso ein Eintrag, der auf eine Entscheidung wartet – er gehört dem, der die
 **Keine Sekunde ändert sich**, nur die Zuordnung. Deshalb darf auch ein Agent den Befehl aufrufen,
 ohne die Regel zu berühren, dass Zahlen allein von der Uhr kommen (Abschnitt 12, Punkt 5).
 
+### Offene `main`-Zeit beim Squash-Merge
+
+`take` hilft nur, wer rechtzeitig daran denkt. Zweimal hat es niemand getan: Der Squash-Merge schloss die offene `main`-Zeit mit dem Trailer des Branches, und zwei
+Rechnungszeilen trugen denselben Text (ksasz.ch, 27. Oktober und 3. November 2026). Beim zweiten
+Mal lagen fünf Tage zwischen der Zeit auf `main` und dem Merge.
+
+**Erkannt** wird der Fall am Text: Ein Commit auf dem Hauptbranch, dessen Trailer dem Text eines
+offenen Branch-Eintrags desselben Repositories gleicht, ist ein Squash-Merge dieses Branches.
+Spuren wie `SQUASH_MSG` braucht es dafür nicht, und es trifft genau den Fall, der schadet.
+
+Trägt der `main`-Eintrag dann Zeit, wird er **nicht** mit diesem Text abgeschlossen, sondern
+**angehalten** (`heldAtMerge`): Kein späterer Commit auf `main` schliesst ihn, auch keiner bei
+pausiertem Timer, sonst ginge er beim nächsten mit dessen Text hinaus, und die Frage wäre umgangen.
+Der Timer läuft in einen frischen Eintrag weiter, wie nach jedem Commit auf dem Hauptbranch. Der
+Hook meldet das, das Panel zeigt «Vor dem Merge von …», `prosonata status` eine Zeile, und
+`prosonata held` nimmt die drei Antworten entgegen. Ohne Zeit ändert sich nichts.
+
+- **Zuschlagen** gibt die Zeit dem Eintrag des gemergten Branches. Ist der schon abgeschlossen
+  hinaus – der Regelfall, denn `close` sendet sofort –, wird dort die Summe geschrieben wie beim
+  Zuschlagen von Nacharbeit; ein fakturierter wird abgelehnt. Sonst wandert die Zeit lokal, und
+  sein nächster Schreibvorgang trägt sie.
+- **Eigener Text** schliesst den angehaltenen Eintrag wie jeden anderen ab.
+- **Verwerfen** braucht einen Menschen: im Editor mit Bestätigung, im Terminal nur mit Terminal.
+  Ein Agent bekommt eine Meldung statt einer Frage, auf die niemand antwortet.
+
+Beim Zuschlagen und Verwerfen wird die **Hülle** des angehaltenen Eintrags in ProSonata gelöscht,
+sein offener Platzhalter samt Zeit – beim Zuschlagen erst, wenn die Zeit sicher auf dem anderen
+Eintrag steht. Trägt er einen fremden Anteil, bleiben beide Wege verschlossen: Die Stunden des
+anderen Rechners kennt hier niemand.
+
+**Der Platzhalter bleibt so lange offen in ProSonata stehen, unter der Kennung von `main`.** Damit
+der frische Eintrag ihn beim Abgleich (*Mehrere Rechner*) nicht für seinen eigenen hält, übernimmt
+der Abgleich nie eine Zeile, die schon ein lokaler Eintrag hält. Dieselbe Lücke bestand vorher
+schon, enger: für einen abgeschlossenen `main`-Eintrag, wenn in den zehn Minuten bis zu seinem
+Versand ein Fenster geöffnet wurde.
+
+**Gefragt wird, nicht zugeschlagen.** Meist ist die Zeit auf `main` der Anfang des Pakets und
+gehört zum Branch. Nach fünf Tagen Abstand weiss das aber niemand mehr sicher, und eine falsche
+Zuordnung auf einer Rechnung ist teurer als eine Frage.
+
+**Nur der Squash.** Ein `--no-ff`-Merge löst heute keinen Hook aus und schliesst darum auch nichts
+mit fremdem Text. Akut wird er erst mit dem `post-merge`-Hook; dort ist dieselbe Prüfung Pflicht
+([docs/post-merge.md](docs/post-merge.md)).
+
 ### Zeiteinträge durchsehen und berichtigen
 
 Die Zeiteinträge des aktuellen Repositories lassen sich aus dem Editor **durchsehen**: eine
@@ -879,6 +945,25 @@ immer „was habe ich hier gebucht", nie „was steht in allen Projekten".
 Die Liste selbst ist eine native QuickPick, kein Webview – aus demselben Grund wie alle
 Auswahlen in Abschnitt 8. Gebraucht wird Mehrfachauswahl und ein Knopf je Zeile, und beides hat
 die QuickPick.
+
+**Im Terminal gibt es einen Teil davon.** `close` sendet sofort; wer dabei einen Fehler macht,
+Mensch oder Agent, braucht einen Weg zurück, ohne den Editor zu öffnen. `prosonata sent [Anzahl]`
+zeigt die zuletzt gesendeten Einträge des Arbeitsverzeichnisses mit ProSonata-Nummer, Nr, Datum,
+Stunden, Text und ob sie fakturiert sind. Welche es sind, weiss der lokale Zustand – geschlossene
+Einträge bleiben dort mit ihrer `timeID` stehen –, wie sie jetzt aussehen, weiss ProSonata: Text
+und Stunden können dort berichtigt sein. Ein Abruf je Projekt, nicht je Eintrag. Angesprochen
+wird ein Eintrag mit der ProSonata-Nummer, die auf der Rechnung steht, oder mit der Nr wie
+überall sonst. Dazu zwei Handlungen:
+
+- `prosonata sent <Nr> text "…"` ändert den Text, über denselben Weg wie das Durchsehen; die
+  lokale Kopie zieht nach.
+- `prosonata sent <Nr> drop` löscht in ProSonata, **nur einen Eintrag ohne Zeit**. Er erfindet
+  keine Zahl und entfernt keine Arbeit. Alles andere bleibt beim Klick im Editor, und der Befehl
+  verweist dorthin. Ein Bestätigungsflag reichte nicht: Es schützt nur durch eine Abmachung, und
+  ein Agent kann es setzen, ohne gefragt zu haben.
+
+Stunden ändern kann die CLI nicht. An einem gesendeten Eintrag wäre das ein `adjust`, also genau
+die Handlung, die eine Zahl erfindet (Abschnitt 12, Punkt 5).
 
 ---
 
@@ -1320,6 +1405,7 @@ Ein Zeiteintrag trägt:
 | `state` | `"open"` oder `"closed"` – die einzigen beiden Zustände im Code |
 | `awaitingDecision` | gesetzt, wenn ein anderer Rechner den Eintrag abgeschlossen hat: nichts wird geschrieben, bis jemand antwortet |
 | `remoteFinalSeconds` | was ProSonata in jenem Moment hielt – daraus ergibt sich, was von der hiesigen Zeit noch nicht drüben steht |
+| `heldAtMerge` | nur auf dem Hauptbranch: beim Squash-Merge angehalten, mit Branch, dessen Eintrag und Zeitpunkt – kein Commit schliesst ihn, bis jemand antwortet (Abschnitt 3) |
 | `lastActivity` | Ende des letzten Segments, das auf diesem Rechner in den Eintrag ging – daran erkennt das Werkzeug einen ruhenden Eintrag (Abschnitt 3, *Abschluss*) |
 | `restingKeptAt` | Zeitpunkt der Antwort «Behalten» auf einen ruhenden Eintrag |
 | `rejected` | gesetzt, wenn ProSonata den letzten Schreibzugriff abgelehnt hat: Aufruf, Status, Meldung und – falls das die Ursache ist – `project: "deleted"` oder `"closed"`. Nichts wird geschrieben, bis jemand entscheidet (Abschnitt 4) |
@@ -1440,8 +1526,18 @@ der npm-bin-Pfad liegt in `$PATH` meist vor `/bin`; ein global installiertes `ps
 Fremdnutzern `ps aux` brechen. Ein kurzer Alias ist optional.
 
 Befehle: `init`, `start`, `pause`, `status`, `send`, `project`, `category`, `grid`, `mode`,
-`close`, `text`, `discard`, `attach`, `resume`, `rejected`, `resting`, `tidy`, `log`, `adjust` – die verbindliche Liste steht
+`close`, `text`, `discard`, `attach`, `take`, `resume`, `rejected`, `resting`, `held`, `sent`, `tidy`, `log`, `adjust` – die verbindliche Liste steht
 in `prosonata help`. Kein `end` – ein Timer kennt kein Beenden.
+
+**Ein Hilfeaufruf tut nichts anderes.** `--help` und `-h` zeigen bei jedem Befehl dessen Hilfe,
+`prosonata help <befehl>` ebenso; geschnitten wird sie aus der Gesamthilfe, damit beide nicht
+auseinanderlaufen. Ein Text, der mit `-` beginnt, wird von `close`, `text` und `resting … close`
+abgewiesen: Ein Rechnungstext beginnt nie mit einem Bindestrich, ein unbekanntes Flag ist fast
+immer ein Versehen. Und `close` schliesst keinen Eintrag ohne Zeit – eine Rechnungszeile mit
+0:00 h ist nie gewollt. Zu verwerfen gibt es dabei nichts: Auf `main` ist ein leerer offener
+Eintrag, was jeder Commit hinterlässt. Anlass: `prosonata close --help` schloss in
+ksasz.ch am 3. November 2026 einen leeren Eintrag mit dem Text «--help» und sendete ihn
+(ProSonata 3024).
 
 Damit ist die CLI zugleich die Schnittstelle für einen **Coding-Agenten**: Wer Shell-Zugriff hat,
 kann all das bereits, ohne dass etwas anzubinden wäre. Was ein Agent davon tun sollte und was
@@ -2046,7 +2142,6 @@ das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnit
 | Was | Abschnitt |
 |---|---|
 | Angebot, nach einem Commit ohne Timer die Zeit nachzutragen | 3, *Wirkung eines Commits* |
-| Zurückgerollte Commits auf dem Hauptbranch, gesendet oder nicht (#3) | 3, *Zurückgerollte Commits* |
 | Zwischenspeicher für Projekte und Kategorien (`cache.json`) | 6 |
 | Rechnerfächer in `apiComments`, samt Rechnerkennung | 7 und 12 |
 | Einmalige Migration alter Hooks über alle bekannten Repositories | 8 |

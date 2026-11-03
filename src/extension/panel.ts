@@ -8,6 +8,7 @@ import { describeRejection } from '../core/sender.js'
 import {
   awaitingDecision,
   currentSeconds,
+  heldEntries,
   lastClosedEntry,
   openEntriesIn,
   openEntry,
@@ -285,6 +286,25 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
           `${refused.text ? `${refused.text} — ` : ''}${describeRejection(refused, project)}`,
           'error',
           { command: 'prosonata.handleRejected', title: t('Handle rejected entry'), arguments: [refused.id] },
+        ),
+      )
+    }
+
+    /*
+     * Main time a squash merge would have closed under the branch's text, from
+     * every repository like the refused ones: it waits for an answer, and no
+     * commit will give one (KONZEPT.md §3, *Offene main-Zeit beim Squash-Merge*).
+     */
+    for (const held of heldEntries(state)) {
+      const here = held.scope.repoPath === context.scope.repoPath
+      rows.push(
+        new PanelRow(
+          here
+            ? t('Before the merge of {0}', held.heldAtMerge?.branch ?? '')
+            : t('Before the merge of {0} · {1}', held.heldAtMerge?.branch ?? '', basename(held.scope.repoPath)),
+          t('{0} h on {1} — whose?', hoursAndMinutes(held.seconds + held.foreignSeconds), held.scope.branch),
+          'question',
+          { command: 'prosonata.handleHeld', title: t('Handle held time'), arguments: [held.id] },
         ),
       )
     }

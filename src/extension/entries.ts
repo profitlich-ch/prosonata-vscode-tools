@@ -7,8 +7,8 @@ import { describeRepo } from '../core/git.js'
 import { t } from '../core/l10n.js'
 import { readRepoConfig, setMode, type RepoProject } from '../core/repo-config.js'
 import { describeRejection } from '../core/sender.js'
-import type { RepoContext, Session } from '../core/session.js'
-import { awaitingDecision, openEntriesIn, openEntry, rejectedEntries, setText, unwrittenSeconds } from '../core/tracking.js'
+import { describeHeldAnswer, type RepoContext, type Session } from '../core/session.js'
+import { awaitingDecision, heldEntries, openEntriesIn, openEntry, rejectedEntries, setText, unwrittenSeconds } from '../core/tracking.js'
 import type { TimeEntry } from '../core/types.js'
 import { clock } from './panel.js'
 import { chooseCategory } from './setup.js'
@@ -127,6 +127,68 @@ export async function handleResting(entryId?: string): Promise<void> {
       discard,
     )
     if (confirmed === discard) session.discardLocally(entry.id)
+  }
+  reload()
+}
+
+/**
+ * Main time held at a squash merge (KONZEPT.md §3, *Offene main-Zeit beim
+ * Squash-Merge*): to the merged branch's entry, a text of its own, or
+ * discarded. Asked, not decided — after days nobody knows for sure whether the
+ * time belonged to that branch. Reached from its row in the panel; from the
+ * command palette it asks which one first.
+ */
+export async function handleHeld(entryId?: string): Promise<void> {
+  const session = currentSession()
+  if (!session) return
+
+  const waiting = heldEntries(session.state())
+  const entry =
+    waiting.find((candidate) => candidate.id === entryId) ??
+    (await vscode.window.showQuickPick(
+      waiting.map((candidate) => ({
+        label: t('Before the merge of {0}', candidate.heldAtMerge?.branch ?? ''),
+        description: `${basename(candidate.scope.repoPath)}/${candidate.scope.branch} · ${clock(candidate.seconds)}`,
+        entry: candidate,
+      })),
+      { title: t('ProSonata: time held at a squash merge') },
+    ))?.entry
+  if (!entry?.heldAtMerge) return
+
+  const branch = entry.heldAtMerge.branch
+  const action = await vscode.window.showQuickPick(
+    [
+      { label: t('Attach to {0}', branch), detail: t('the time belongs to the merged branch'), action: 'attach' as const },
+      { label: t('Own text'), detail: t('a line of its own on the invoice'), action: 'close' as const },
+      { label: t('Discard'), detail: t('the time is not billed'), action: 'drop' as const },
+    ],
+    { title: t('ProSonata: {0} on {1} before the merge of {2}', clock(entry.seconds), entry.scope.branch, branch) },
+  )
+  if (!action) return
+
+  try {
+    if (action.action === 'attach') {
+      const answer = await session.attachHeld(entry.id)
+      if (answer !== 'done') void vscode.window.showWarningMessage(`ProSonata: ${describeHeldAnswer(answer)}`)
+    }
+    if (action.action === 'close') {
+      await vscode.commands.executeCommand('prosonata.closeEntry', entry.id)
+      return
+    }
+    if (action.action === 'drop') {
+      const discard = t('Discard')
+      const confirmed = await vscode.window.showWarningMessage(
+        t('Discard {0} held before the merge of {1}? It is not billed.', clock(entry.seconds), branch),
+        { modal: true },
+        discard,
+      )
+      if (confirmed === discard) {
+        const answer = await session.discardHeld(entry.id)
+        if (answer !== 'done') void vscode.window.showWarningMessage(`ProSonata: ${describeHeldAnswer(answer)}`)
+      }
+    }
+  } catch (error) {
+    void vscode.window.showWarningMessage(`ProSonata: ${(error as Error).message}`)
   }
   reload()
 }

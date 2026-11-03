@@ -66,6 +66,13 @@ export interface TimeEntry {
    */
   rejected?: Rejection
   /**
+   * Time on the main branch that a squash merge would have closed under the
+   * merged branch's trailer — a second invoice line with the same text
+   * (KONZEPT.md §3, *Offene main-Zeit beim Squash-Merge*). Held instead: no
+   * commit closes it, no timer runs into it, and it waits for an answer.
+   */
+  heldAtMerge?: HeldAtMerge
+  /**
    * Epoch milliseconds when time was last booked into this entry on this
    * machine — the end of its last segment. What tells a resting entry from one
    * in use (KONZEPT.md §3, *Abschluss*). Entries older than the field get it at
@@ -90,6 +97,16 @@ export interface TimeEntry {
    * leaves nothing to clean up, and it holds up this one entry rather than all.
    */
   creating?: number
+}
+
+/** The merge a main entry was held at. */
+export interface HeldAtMerge {
+  /** The branch merged by squash. */
+  branch: string
+  /** That branch's entry — where «attach» puts the time. */
+  entryId: string
+  /** Epoch milliseconds of the merge commit. */
+  at: number
 }
 
 /** Why ProSonata refused an entry, as it said so. */

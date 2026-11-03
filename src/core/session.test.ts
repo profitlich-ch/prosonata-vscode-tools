@@ -1241,6 +1241,279 @@ describe('the journal and a failure that repeats', () => {
  * main — the squash merge of some other package — would close it under that
  * package's text.
  */
+/*
+ * A squash merge carries the branch's trailer to main. Closing the open main
+ * time under it gave two invoice lines with one text (ksasz.ch, 27 October and
+ * 3 November 2026). It is held instead, and asked about (KONZEPT.md §3).
+ */
+describe('main time at a squash merge', () => {
+  const main = { ...context, scope: { repoPath: '/work/shop', branch: 'main' }, key: 'm41n00', mode: 'commit' } as RepoContext
+  const topic = { ...context, scope: { repoPath: '/work/shop', branch: 'formular' }, key: 'f0rm01' } as RepoContext
+
+  /** 30 minutes on the branch under «Formular», then 40 on main, then the squash merge. */
+  async function merged() {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-held-'))
+    const clock = fixedClock(NINE)
+    const api = new FakeApi()
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      { api, clock, store: new StateStore(join(dir, 'state.json')), journal: new Journal(join(dir, 'log.jsonl')), segments: new SegmentLog(join(dir, 'segments.jsonl')) },
+    )
+    await session.start(topic)
+    clock.advance(30 * 60)
+    session.commit(topic, { text: 'Formular', fromTrailer: true, sha: 'b1' })
+    const branchEntry = openEntry(session.state(), topic.scope)!
+    await session.start(main)
+    clock.advance(40 * 60)
+    session.commit(main, { text: 'Formular', fromTrailer: true, sha: 'm1' })
+    const held = session.state().entries.find((entry) => entry.heldAtMerge)
+    return { session, api, clock, branchEntry, held }
+  }
+
+  it('holds the main time instead of closing it under the branch text', async () => {
+    const { session, held } = await merged()
+
+    expect(held).toMatchObject({ state: 'open', seconds: 40 * 60, heldAtMerge: { branch: 'formular' } })
+    expect(session.state().entries.filter((entry) => entry.state === 'closed')).toEqual([])
+    // The timer runs on into a fresh entry.
+    expect(openEntry(session.state(), main.scope)).toMatchObject({ seconds: 0 })
+    expect(openEntry(session.state(), main.scope)?.id).not.toBe(held?.id)
+  })
+
+  it('is closed by no later commit on main', async () => {
+    const { session, clock, held } = await merged()
+
+    clock.advance(10 * 60)
+    session.commit(main, { text: 'Kirby Update', fromTrailer: false, sha: 'm2' })
+
+    const closed = session.state().entries.filter((entry) => entry.state === 'closed')
+    expect(closed.map((entry) => [entry.text, entry.seconds])).toEqual([['Kirby Update', 10 * 60]])
+    expect(session.state().entries.find((entry) => entry.id === held?.id)).toMatchObject({ seconds: 40 * 60, state: 'open' })
+  })
+
+  it('is closed by no later commit made while the timer is paused either', async () => {
+    const { session, held } = await merged()
+    session.pause(main)
+
+    session.commit(main, { text: 'Kirby Update', fromTrailer: false, sha: 'm2' })
+
+    expect(findEntry(session.state(), held!.id)).toMatchObject({ state: 'open', seconds: 40 * 60, heldAtMerge: { branch: 'formular' } })
+  })
+
+  it('holds nothing when main had no time', async () => {
+    const { session, clock } = await merged()
+    session.pause(main)
+    await session.attachHeld(session.state().entries.find((entry) => entry.heldAtMerge)!.id)
+
+    clock.advance(5 * 60)
+    session.commit(main, { text: 'Formular', fromTrailer: true, sha: 'm3' })
+
+    expect(session.state().entries.some((entry) => entry.heldAtMerge)).toBe(false)
+  })
+
+  it('attaches to the branch entry while that is still open', async () => {
+    const { session, api, branchEntry, held } = await merged()
+
+    expect(await session.attachHeld(held!.id)).toBe('done')
+
+    expect(openEntry(session.state(), topic.scope)?.seconds).toBe(70 * 60)
+    expect(session.state().entries.some((entry) => entry.id === held!.id)).toBe(false)
+    expect(session.state().pending.map((write) => write.entryId)).toContain(branchEntry.id)
+    expect(api.calls.filter((call) => call.startsWith('deleteEntry'))).toEqual([])
+  })
+
+  it('attaches to the branch entry already sent, and deletes the husk last', async () => {
+    const { session, api, branchEntry, held } = await merged()
+    session.closeEntry(branchEntry.id, 'Formular')
+    await session.flush(true)
+    const sent = findEntry(session.state(), branchEntry.id)!
+    const husk = findEntry(session.state(), held!.id)!.timeId!
+
+    expect(await session.attachHeld(held!.id)).toBe('done')
+
+    expect(api.entries.get(sent.timeId!)?.hours).toBe(1.17)
+    expect(api.entries.has(husk)).toBe(false)
+    expect(api.calls.slice(-2)).toEqual([`updateEntry ${sent.timeId} 1.17`, `deleteEntry ${husk}`])
+  })
+
+  it('refuses an invoiced branch entry and keeps the time held', async () => {
+    const { session, api, branchEntry, held } = await merged()
+    session.closeEntry(branchEntry.id, 'Formular')
+    await session.flush(true)
+    api.entries.get(findEntry(session.state(), branchEntry.id)!.timeId!)!.isInvoiced = true
+
+    expect(await session.attachHeld(held!.id)).toBe('invoiced')
+
+    expect(findEntry(session.state(), held!.id)).toMatchObject({ seconds: 40 * 60, heldAtMerge: { branch: 'formular' } })
+  })
+
+  it('closes with a text of its own', async () => {
+    const { session, held } = await merged()
+
+    session.closeEntry(held!.id, 'Wartung')
+
+    const closed = findEntry(session.state(), held!.id)
+    expect(closed).toMatchObject({ state: 'closed', text: 'Wartung', seconds: 40 * 60 })
+    expect(closed?.heldAtMerge).toBeUndefined()
+  })
+
+  it('discards the time and its husk', async () => {
+    const { session, api, held } = await merged()
+    await session.flush(true)
+    const husk = findEntry(session.state(), held!.id)!.timeId!
+
+    expect(await session.discardHeld(held!.id)).toBe('done')
+
+    expect(findEntry(session.state(), held!.id)).toBeUndefined()
+    expect(api.entries.has(husk)).toBe(false)
+  })
+})
+
+/*
+ * `close` sends at once. A mistake there — on 3 November 2026 an empty entry
+ * with the text "--help" — needs a way back without the editor (#7).
+ */
+describe('entries already sent, from the terminal', () => {
+  const here = { ...context, scope: { repoPath: '/work/shop', branch: 'main' } } as RepoContext
+
+  function sentSession() {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-sent-'))
+    const api = new FakeApi()
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      { api, clock: fixedClock(NINE), store: new StateStore(join(dir, 'state.json')), journal: new Journal(join(dir, 'log.jsonl')), segments: new SegmentLog(join(dir, 'segments.jsonl')) },
+    )
+    return { session, api }
+  }
+
+  /** A closed local entry and the line ProSonata holds for it. */
+  function sentEntry(session: Session, api: FakeApi, timeId: number, options: { hours: number; text: string; repoPath?: string; invoiced?: boolean }) {
+    api.entries.set(timeId, {
+      timeID: timeId,
+      projectID: 166,
+      category: 70,
+      date: '2026-11-03',
+      detail: options.text,
+      hours: options.hours,
+      isInvoiced: options.invoiced ?? false,
+      notInvoiceable: false,
+      workingTimeStart: null,
+      workingTimeEnd: null,
+      apiComments: null,
+    })
+    session.store.update((state) => {
+      state.entries.push({
+        id: `e${timeId}`,
+        key: 'm41n00',
+        scope: { repoPath: options.repoPath ?? '/work/shop', branch: 'main' },
+        projectId: 166,
+        categoryId: 70,
+        text: options.text,
+        seconds: Math.round(options.hours * 3600),
+        foreignSeconds: 0,
+        lastWritten: null,
+        timeId,
+        state: 'closed',
+      })
+      return state
+    })
+  }
+
+  it('lists those of this working directory, newest first, as ProSonata holds them', async () => {
+    const { session, api } = sentSession()
+    sentEntry(session, api, 3023, { hours: 0.25, text: 'Formular' })
+    sentEntry(session, api, 3024, { hours: 0, text: '--help' })
+    sentEntry(session, api, 3030, { hours: 1, text: 'Anderswo', repoPath: '/work/other' })
+    api.entries.get(3023)!.isInvoiced = true
+
+    const list = await session.sentEntries(here)
+
+    expect(list.map(({ remote }) => [remote.timeID, remote.isInvoiced])).toEqual([
+      [3024, false],
+      [3023, true],
+    ])
+    expect(api.calls).toEqual(['listEntries 166'])
+  })
+
+  it('leaves out one whose closing write has not gone out', async () => {
+    const { session, api } = sentSession()
+    sentEntry(session, api, 3024, { hours: 0, text: '--help' })
+    session.store.update((state) => ({ ...state, pending: [{ entryId: 'e3024', since: NINE, closing: true }] }))
+
+    expect(await session.sentEntries(here)).toEqual([])
+  })
+
+  it('changes the text there and here', async () => {
+    const { session, api } = sentSession()
+    sentEntry(session, api, 3023, { hours: 0.25, text: 'Formular' })
+
+    await session.retext(3023, 'Anmeldeformular')
+
+    expect(api.entries.get(3023)?.detail).toBe('Anmeldeformular')
+    expect(findEntry(session.state(), 'e3023')?.text).toBe('Anmeldeformular')
+  })
+
+  it('deletes an entry without time', async () => {
+    const { session, api } = sentSession()
+    sentEntry(session, api, 3024, { hours: 0, text: '--help' })
+    const [sent] = await session.sentEntries(here)
+
+    expect(await session.dropSent(sent!)).toBe('done')
+
+    expect(api.entries.has(3024)).toBe(false)
+    expect(findEntry(session.state(), 'e3024')).toBeUndefined()
+  })
+
+  it('does not delete an entry with time, nor an invoiced one', async () => {
+    const { session, api } = sentSession()
+    sentEntry(session, api, 3023, { hours: 0.25, text: 'Formular' })
+    sentEntry(session, api, 3024, { hours: 0, text: '--help', invoiced: true })
+    const [empty, timed] = await session.sentEntries(here)
+
+    expect(await session.dropSent(timed!)).toBe('time')
+    expect(await session.dropSent(empty!)).toBe('invoiced')
+
+    expect(api.entries.has(3023)).toBe(true)
+    expect(api.entries.has(3024)).toBe(true)
+    expect(api.calls.some((call) => call.startsWith('deleteEntry'))).toBe(false)
+  })
+})
+
+/*
+ * The case from #3, end to end with a real repository: a commit, an amend four
+ * seconds later, and one line in ProSonata instead of two.
+ */
+describe('an amend before the entry went out', () => {
+  it('reaches ProSonata as one line with all the time and the amended text', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'prosonata-amend-'))
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: dir, encoding: 'utf8' }).trim()
+    git('init', '--quiet', '--initial-branch=main')
+    git('config', 'user.email', 't@example.invalid')
+    git('config', 'user.name', 'T')
+    const repo = describeRepo(dir)!
+    const here = { ...context, repo, scope: { repoPath: repo.root, branch: 'main' }, mainBranch: 'main', mode: 'commit' } as RepoContext
+
+    const clock = fixedClock(NINE)
+    const api = new FakeApi()
+    const state = mkdtempSync(join(tmpdir(), 'prosonata-amend-state-'))
+    const session = new Session(
+      { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+      { api, clock, store: new StateStore(join(state, 'state.json')), journal: new Journal(join(state, 'log.jsonl')), segments: new SegmentLog(join(state, 'segments.jsonl')) },
+    )
+
+    await session.start(here)
+    clock.advance(40 * 60)
+    git('commit', '--quiet', '--allow-empty', '-m', 'Kirby Update')
+    session.commit(here, { text: 'Kirby Update', fromTrailer: false, sha: git('rev-parse', 'HEAD') })
+    clock.advance(4)
+    git('commit', '--quiet', '--amend', '--allow-empty', '-m', 'Kirby Update, Linkfarbe')
+    session.commit(here, { text: 'Kirby Update, Linkfarbe', fromTrailer: false, sha: git('rev-parse', 'HEAD') })
+    await session.flush(true)
+
+    expect([...api.entries.values()].map((line) => [line.detail, line.hours])).toEqual([['Kirby Update, Linkfarbe', 0.67]])
+  })
+})
+
 describe('taking the open entry of another branch', () => {
   const main = { ...context, scope: { repoPath: '/work/shop', branch: 'main' }, key: 'm41n00', mode: 'commit' } as RepoContext
   const topic = { ...context, scope: { repoPath: '/work/shop', branch: 'formular' }, key: 'f0rm01' } as RepoContext

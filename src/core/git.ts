@@ -158,9 +158,22 @@ export function fetchPrune(cwd: string): boolean {
   return tryGit(cwd, 'fetch', '--prune', '--quiet') !== null
 }
 
-/** Whether a commit is still reachable from HEAD, i.e. not rolled back. */
-export function stillReachable(cwd: string, sha: string): boolean {
-  return tryGit(cwd, 'merge-base', '--is-ancestor', sha, 'HEAD') !== null
+/**
+ * Whether a commit is still on its branch — false once an amend or a reset has
+ * rolled it back (KONZEPT.md §3, *Zurückgerollte Commits*). Asked of the branch,
+ * not of HEAD: on a feature branch every commit of `main` would look gone.
+ * Null when that cannot be told — the branch is deleted, or git does not know
+ * the commit — and the caller then leaves things as they are.
+ */
+export function stillOnBranch(cwd: string, sha: string, branch: string): boolean | null {
+  if (!branchExists(cwd, branch)) return null
+  try {
+    execFileSync('git', ['merge-base', '--is-ancestor', sha, `refs/heads/${branch}`], { cwd, stdio: 'ignore' })
+    return true
+  } catch (error) {
+    // 1 is the answer "no"; anything else is git failing to answer.
+    return (error as { status?: number }).status === 1 ? false : null
+  }
 }
 
 function tryGitStdin(cwd: string, input: string, ...args: string[]): string | null {

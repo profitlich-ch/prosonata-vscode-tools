@@ -12,6 +12,7 @@ import {
   takeEntry,
   changeText,
   closeEntry,
+  handleHeld,
   handleRejected,
   handleResting,
   openSettings,
@@ -83,6 +84,7 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.resolveClosedElsewhere', withContext(askAboutClosedElsewhere))
   register(context, 'prosonata.handleRejected', (entryId?: string) => handleRejected(entryId))
   register(context, 'prosonata.handleResting', (entryId?: string) => handleResting(entryId))
+  register(context, 'prosonata.handleHeld', (entryId?: string) => handleHeld(entryId))
   register(context, 'prosonata.attachToLast', withContext(attachToLast))
   register(context, 'prosonata.takeEntry', withContext(takeEntry))
   register(context, 'prosonata.log', withRepo(showLog))

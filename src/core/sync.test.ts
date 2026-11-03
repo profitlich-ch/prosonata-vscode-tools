@@ -124,6 +124,25 @@ describe('a machine that has never seen this branch', () => {
  * stay findable, but the old search costs a second call — so it only runs when
  * the field has nothing (KONZEPT.md §3).
  */
+/*
+ * On the main branch every entry shares one key. Main time held at a squash
+ * merge keeps its open line in ProSonata, and its successor has none yet — it
+ * must not take the held one's line for its own (KONZEPT.md §3).
+ */
+describe('a line another local entry already holds', () => {
+  it('is not adopted, though key and open marker match', async () => {
+    const api = new FakeApi()
+    const { state } = await send(pendingFor(entryOf({ seconds: 40 * 60, text: '' })), deps(api), true)
+    const held = { ...state.entries[0]!, heldAtMerge: { branch: 'formular', entryId: 'b', at: NINE } }
+    const successor = entryOf({ id: 'local-2', text: '' })
+
+    const outcome = await sync({ ...emptyState(), entries: [held, successor] }, api, config, options)
+
+    expect(outcome.adopted).toBe(false)
+    expect(outcome.state.entries.find((entry) => entry.id === 'local-2')?.timeId).toBeNull()
+  })
+})
+
 describe('an entry from before apiComments', () => {
   async function oldEntry(api: FakeApi, detail: string) {
     return api.createEntry({ projectID: 166, category: 70, date: '2026-07-30', detail, workingTime: '2.00' })

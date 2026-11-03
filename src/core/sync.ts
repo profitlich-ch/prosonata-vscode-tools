@@ -75,8 +75,16 @@ export async function sync(state: State, api: Api, config: Config, options: Sync
     }
   }
 
-  const found = await findOfBranch(api, options.projectId, options.key, config.markerWord, (remote) =>
-    entryIsOpen(remote, config.markerWord),
+  // A line another local entry already holds is never adopted: on the main
+  // branch every entry shares one key, and both a held entry and a closed one
+  // whose closing write is still due stand there open under it.
+  const known = new Set(next.entries.map((entry) => entry.timeId).filter((id) => id !== null))
+  const found = await findOfBranch(
+    api,
+    options.projectId,
+    options.key,
+    config.markerWord,
+    (remote) => entryIsOpen(remote, config.markerWord) && !known.has(remote.timeID),
   )
   const match = found[0]
   if (!match) return { state: next, adopted: false, closedElsewhere: false, runningElsewhereSince: null }

@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs'
 import { HttpApi, type Api, type RemoteEntry } from './api.js'
 import { localDate, systemClock, type Clock } from './clock.js'
 import { paths, readConfig, type Config } from './config.js'
-import { branchExists, describeRepo, mainBranch, workMerged, type GitRepo } from './git.js'
+import { branchExists, describeRepo, mainBranch, stillOnBranch, workMerged, type GitRepo } from './git.js'
 import { entryIsOpen, findOfBranch } from './identity.js'
 import { Journal } from './journal.js'
 import { t, template } from './l10n.js'
@@ -28,6 +28,7 @@ import {
   dropPausedTimer,
   entriesToMove,
   findEntry,
+  foldRolledBack,
   isEmptyRemainder,
   keepFromRunning,
   keepResting,
@@ -36,6 +37,7 @@ import {
   moveEntries,
   retryEntry,
   lastClosedEntry,
+  moveHeldTime,
   moveToClosed,
   openBranchEntries,
   openEntry,
@@ -534,6 +536,8 @@ export class Session {
     hadTimer: boolean
     closed: boolean
     branchSwitched: boolean
+    /** The branch whose squash merge this was, when main time was held for it. */
+    heldFor: string | null
   } {
     let booked = 0
     let hadTimer = false
@@ -543,8 +547,10 @@ export class Session {
 
     const switched = this.reconcileBranchSwitch(context)
     const startedAt = this.runningSince(context)
+    let held: TimeEntry | undefined
 
     const state = this.store.update((current) => {
+      const holdFor = squashOf(current, context, options)
       const outcome = commit(current, {
         scope: context.scope,
         mode: context.mode,
@@ -556,11 +562,13 @@ export class Session {
         projectId: context.projectId,
         categoryId: context.categoryId,
         key: context.key,
+        ...(holdFor ? { holdFor } : {}),
       })
       booked = outcome.booked
       hadTimer = outcome.hadTimer
       closed = outcome.closed !== null
-      bookedInto = outcome.closed?.id ?? openEntry(outcome.state, context.scope)?.id
+      held = outcome.held
+      bookedInto = outcome.closed?.id ?? outcome.held?.id ?? openEntry(outcome.state, context.scope)?.id
 
       if (outcome.closed) {
         this.journal.append({
@@ -596,11 +604,14 @@ export class Session {
     if (startedAt !== null && booked > 0) {
       this.recordSegmentAt(context, startedAt, this.clock.now(), 'commit', undefined, bookedInto)
     }
+    if (held?.heldAtMerge) {
+      this.journal.append({ kind: 'note', entryId: held.id, ...template('held at the squash merge of {0}', held.heldAtMerge.branch) })
+    }
     // On the main branch every commit closes an entry, so the log gets its
     // closing line here rather than only where somebody closes one by hand.
     const finished = state.entries.find((entry) => entry.id === bookedInto && entry.state === 'closed')
     if (finished) this.recordEntryClosed(finished)
-    return { state, booked, hadTimer, closed, branchSwitched: switched !== null }
+    return { state, booked, hadTimer, closed, branchSwitched: switched !== null, heldFor: held?.heldAtMerge?.branch ?? null }
   }
 
   /**
@@ -690,6 +701,60 @@ export class Session {
       return open.timeId === null ? moved : forgetRemote(moved, open.id)
     })
     return { kind: 'done', plan }
+  }
+
+  /**
+   * The answer «attach» to main time held at a squash merge (KONZEPT.md §3,
+   * *Offene main-Zeit beim Squash-Merge*): it goes to the merged branch's entry.
+   *
+   * Has that entry gone out finished already — the usual case, since `close`
+   * sends at once — the sum is written there the way `attach` writes it, and
+   * an invoiced one is refused. Otherwise the seconds move over locally and
+   * its pending write carries them. Either way the held entry's husk in
+   * ProSonata goes last, once the time is safely elsewhere.
+   */
+  async attachHeld(entryId: string): Promise<HeldAnswer> {
+    const state = this.state()
+    const held = findEntry(state, entryId)
+    if (!held?.heldAtMerge) return 'gone'
+    // Hours another machine measured on main: deleting the husk would destroy
+    // them, and nobody here knows what they were.
+    if (held.foreignSeconds > 0) return 'foreign'
+    const target = findEntry(state, held.heldAtMerge.entryId)
+    if (!target) return 'gone'
+
+    const sent = target.state === 'closed' && !state.pending.some((write) => write.entryId === target.id)
+    if (sent) {
+      if (target.timeId === null) return 'gone'
+      const remote = await this.api.getEntry(target.timeId)
+      if (!remote) return 'gone'
+      if (remote.isInvoiced) return 'invoiced'
+      const total = Math.round(remote.hours * 3600) + held.seconds
+      await this.api.updateEntry(target.timeId, { workingTime: workingTime(total, this.gridFor(target.scope.repoPath)) })
+      this.journal.append({ kind: 'sent', entryId: target.id, timeId: target.timeId })
+      this.store.update((current) => moveToClosed(current, held.id, target.id, held.seconds))
+    } else {
+      this.store.update((current) => moveHeldTime(current, held.id, target.id, this.clock.now()))
+    }
+    await this.dropHeld(held)
+    return 'done'
+  }
+
+  /**
+   * The answer «discard»: the held time is not billed. Its husk in ProSonata,
+   * placeholder and time, goes with it — it is the tool's own open line.
+   */
+  async discardHeld(entryId: string): Promise<HeldAnswer> {
+    const held = findEntry(this.state(), entryId)
+    if (!held?.heldAtMerge) return 'gone'
+    if (held.foreignSeconds > 0) return 'foreign'
+    await this.dropHeld(held)
+    return 'done'
+  }
+
+  private async dropHeld(held: TimeEntry): Promise<void> {
+    if (held.timeId !== null) await this.api.deleteEntry(held.timeId)
+    this.discardLocally(held.id)
   }
 
   /**
@@ -929,6 +994,65 @@ export class Session {
   }
 
   /**
+   * The entries of this working directory that went out finished, newest
+   * first, as ProSonata holds them now — text and hours may have been corrected
+   * there, and only ProSonata knows whether one is invoiced (KONZEPT.md §3,
+   * *Zeiteinträge durchsehen*). One call per project, not per entry; one that
+   * was deleted over there is left out.
+   */
+  async sentEntries(context: RepoContext, count = Number.POSITIVE_INFINITY): Promise<SentEntry[]> {
+    const state = this.state()
+    const local = state.entries
+      .filter(
+        (entry) =>
+          entry.state === 'closed' &&
+          entry.timeId !== null &&
+          entry.scope.repoPath === context.scope.repoPath &&
+          !state.pending.some((write) => write.entryId === entry.id),
+      )
+      // ProSonata hands out its ids in order, so the highest went out last.
+      .sort((a, b) => (b.timeId ?? 0) - (a.timeId ?? 0))
+      .slice(0, count)
+
+    const remote = new Map<number, RemoteEntry>()
+    for (const projectId of new Set(local.map((entry) => entry.projectId))) {
+      for (const found of await this.api.listEntries(projectId)) remote.set(found.timeID, found)
+    }
+    return local.flatMap((entry) => {
+      const found = remote.get(entry.timeId ?? 0)
+      return found ? [{ entry, remote: found }] : []
+    })
+  }
+
+  /**
+   * A new text for an entry ProSonata already holds — from browsing in the
+   * editor, or for a sent one from the terminal. The local copy follows, so
+   * `sent` and the log show what the invoice says. Whether the entry is
+   * invoiced the caller has just read; asking again would cost a call.
+   */
+  async retext(timeId: number, text: string): Promise<void> {
+    await this.api.updateEntry(timeId, { detail: text })
+    this.store.update((state) => {
+      const next = structuredClone(state)
+      for (const entry of next.entries) if (entry.timeId === timeId) entry.text = text
+      return next
+    })
+  }
+
+  /**
+   * Deletes a sent entry that holds no time (KONZEPT.md §3, *Zeiteinträge
+   * durchsehen*): it invents no number and removes no work, so the terminal may
+   * do it — an agent included. One with time stays with the click in the editor.
+   */
+  async dropSent(sent: SentEntry): Promise<'done' | 'invoiced' | 'time'> {
+    if (sent.remote.isInvoiced) return 'invoiced'
+    if (sent.remote.hours > 0) return 'time'
+    await this.api.deleteEntry(sent.remote.timeID)
+    this.discardLocally(sent.entry.id)
+    return 'done'
+  }
+
+  /**
    * Writes a merge: the sum and the text onto the entry that stays, then the
    * others away.
    *
@@ -1142,6 +1266,7 @@ export class Session {
      * booking on every beat moved `startedAt` every thirty seconds and blinded
      * everything that reads it as "since when", the segment log included.
      */
+    this.foldRolledBack()
     const before = this.state()
     const { state: after, result } = await send(before, this, force)
 
@@ -1161,9 +1286,74 @@ export class Session {
     return result
   }
 
+  /**
+   * Hands the time of an entry whose commit was rolled back to the entry that
+   * replaced it, before either goes out (KONZEPT.md §3, *Zurückgerollte
+   * Commits*). Right before the send, in the hook as well — a closing write
+   * waits ten minutes, so an amend shortly after the commit is caught here.
+   * One `git` call per closing write still waiting.
+   */
+  private foldRolledBack(): void {
+    const state = this.state()
+    const rolledBack = state.entries.filter(
+      (entry) =>
+        entry.state === 'closed' &&
+        entry.sha !== undefined &&
+        entry.sha !== '' &&
+        state.pending.some((write) => write.entryId === entry.id && write.closing) &&
+        stillOnBranch(entry.scope.repoPath, entry.sha, entry.scope.branch) === false,
+    )
+    if (rolledBack.length === 0) return
+
+    const after = this.store.update((current) => foldRolledBack(current, rolledBack.map((entry) => entry.id), this.clock.now()))
+    for (const entry of rolledBack) {
+      if (findEntry(after, entry.id)) continue
+      this.journal.append({ kind: 'note', entryId: entry.id, ...template('rolled back: {0} went to the entry that replaced it', entry.sha ?? '') })
+    }
+  }
+
   seconds(context: RepoContext): number {
     return currentSeconds(this.state(), this.clock, context.scope)
   }
+}
+
+/** A sent entry of this working directory, beside what ProSonata holds for it now. */
+export interface SentEntry {
+  entry: TimeEntry
+  remote: RemoteEntry
+}
+
+/** What became of an answer to held main time. */
+export type HeldAnswer = 'done' | 'gone' | 'invoiced' | 'foreign'
+
+export function describeHeldAnswer(answer: HeldAnswer): string {
+  switch (answer) {
+    case 'done':
+      return t('done')
+    case 'gone':
+      return t('the entry can no longer be found in ProSonata')
+    case 'invoiced':
+      return t('the entry is already invoiced — only ProSonata can change it now')
+    case 'foreign':
+      return t('part of this time was measured on another machine — sort it out in ProSonata')
+  }
+}
+
+/**
+ * The branch a commit on the main branch is the squash merge of: its trailer
+ * is the text of that branch's open entry (KONZEPT.md §3, *Offene main-Zeit
+ * beim Squash-Merge*). Read from the text, not from `SQUASH_MSG`, whose life
+ * around the hook is not reliable — and the same text twice is exactly the harm.
+ */
+function squashOf(
+  state: State,
+  context: RepoContext,
+  options: { text: string; fromTrailer: boolean },
+): { branch: string; entryId: string } | undefined {
+  if (context.scope.branch !== context.mainBranch || !options.fromTrailer) return undefined
+  const text = options.text.trim()
+  const merged = openBranchEntries(state, context.repo.root, context.mainBranch).find((entry) => entry.text.trim() === text)
+  return merged ? { branch: merged.scope.branch, entryId: merged.id } : undefined
 }
 
 function hourAndMinute(at: number): string {

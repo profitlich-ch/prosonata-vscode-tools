@@ -287,9 +287,10 @@ attaching is refused.
 
 You started something on `main` and have to interrupt it for something else.
 The files move to a branch of their own with `git switch -c topic` — the time
-doesn't: it sits in the open entry of `main`, and the next commit there, even
-the squash merge of a different branch, would close it under that commit's
-text.
+doesn't: it sits in the open entry of `main`, and the next commit there would
+close it under that commit's text. (The squash merge of a branch holds it and
+asks instead, see [Merging a branch](#merging-a-branch) — but by then nobody
+may remember whose time it was.)
 
 Run `prosonata take main` on the new branch (or “ProSonata: Take Open Entry
 from Another Branch”), and the open entry moves along with all its time. `main`
@@ -300,6 +301,31 @@ says why their time is billed there.
 
 If the new branch already has an open entry, nothing is taken — merge the two
 when browsing the time entries instead.
+
+## Merging a branch
+
+The order at the end of a package, after a squash merge:
+
+1. **The merge commit.** It carries the branch's trailer. If `main` has open
+   time at that moment, it is **held** instead of closed under the branch's
+   text — that would put two invoice lines with one text on the invoice. The
+   hook says so, and the sidebar shows **Before the merge of …**. Clicking it
+   offers three answers: attach the time to the merged branch's entry, close it
+   with a text of its own, or discard it. In the terminal: `prosonata held`.
+2. **Deleting the branch.** Its entry shows as **Branch deleted** in the
+   sidebar and in `prosonata status`. `prosonata close <branch>` closes it with
+   the text it has — the last trailer — or with the text you give after the
+   name.
+3. **Checking what went out.** `prosonata sent` lists the entries sent from
+   this repository with their ProSonata numbers. A wrong text is corrected with
+   `prosonata sent <no> text "…"`, an entry without time removed with
+   `prosonata sent <no> drop`. Anything with time is corrected when browsing the
+   time entries.
+
+A merge with `--no-ff` creates a merge commit, for which git calls no hook this
+tool installs; the open time on `main` simply stays open. An amend or a reset of
+a commit on `main` shortly after committing needs nothing: before its entry
+goes out, its time moves to the entry of the commit that replaced it.
 
 ## Browsing time entries
 
@@ -356,7 +382,7 @@ prosonata project                 choose this repository's project
 prosonata category                choose this project's time category
 prosonata grid [exact|5|15|30]    round to this many minutes
 prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit
-prosonata close [no] [text]       close the open time entry and send it; with a number, another branch's
+prosonata close [no|branch] [text] close the open time entry and send it; with a number or branch, another branch's
 prosonata text <text>             change the text of the open time entry
 prosonata discard                 discard the running segment without booking it
 prosonata attach                  attach time to the entry of the last commit
@@ -366,15 +392,22 @@ prosonata rejected [no retry|move|drop]
                                   rejected entries: send again, move to another project, discard
 prosonata resting [no close|keep|drop]
                                   entries dormant for weeks: close, keep, discard
+prosonata held [no attach|close|drop]
+                                  main time held at a squash merge: to the merged branch, own text, discard
+prosonata sent [count|no text|drop]
+                                  entries sent from here: list, change the text, delete one without time
 prosonata tidy                    remove empty leftovers of deleted branches in all repositories
 prosonata log [branch|all|?]      measured segments, this branch's if none is given
 prosonata adjust <value>          adjust time: ±25, ±1:30, "from 9:40", "until 9:40"
 ```
 
 A command that takes an argument asks for it when it is left out — with the
-argument it runs without asking, which also makes it fit for scripts. The
-earlier German argument values (`exakt`, `tag`, `neu`, `alle`, `ab`, `bis`)
-still work.
+argument it runs without asking, which also makes it fit for scripts. `close`
+without a text uses the one the entry has and asks only when there is none.
+Without a terminal nothing waits for an answer: the command stops and says
+what is missing. `--help` after any command, or `prosonata help <command>`,
+shows its help and does nothing else. The earlier German argument values
+(`exakt`, `tag`, `neu`, `alle`, `ab`, `bis`) still work.
 
 ## What the extension doesn't do
 

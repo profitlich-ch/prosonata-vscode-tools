@@ -11,6 +11,7 @@
   "command.resolveClosedElsewhere.title": "Anderswo abgeschlossenen Eintrag entscheiden",
   "command.handleRejected.title": "Abgelehnten Eintrag behandeln",
   "command.handleResting.title": "Ruhenden Eintrag behandeln",
+  "command.handleHeld.title": "Beim Squash-Merge angehaltene Zeit behandeln",
   "command.adjust.title": "Zeit korrigieren",
   "command.discard.title": "Laufendes Segment verwerfen",
   "command.attachToLast.title": "Zeit dem letzten Eintrag zuschlagen",

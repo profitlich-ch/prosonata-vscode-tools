@@ -13,22 +13,24 @@ import { describeAttachment, describePlan } from '../core/attach.js'
 import { describeRunningElsewhere } from '../core/sync.js'
 import { billedTime, describeBranch, hoursAndMinutes, renderReport } from '../core/report.js'
 import { branchesIn } from '../core/segments.js'
-import { NotConfigured, Session, type RepoContext } from '../core/session.js'
+import { describeHeldAnswer, NotConfigured, Session, type RepoContext } from '../core/session.js'
 import {
   applyCategory,
   applyProject,
   awaitingDecision,
   entriesToMove,
   findTimer,
+  heldEntries,
   openBranchEntries,
   openEntry,
   rejectedEntries,
+  runningInto,
   runningSeconds,
   setText,
   unfinishedOnOtherProject,
   unwrittenSeconds,
 } from '../core/tracking.js'
-import { workingTime, type TimeGrid } from '../core/working-time.js'
+import { hoursToSeconds, workingTime, type TimeGrid } from '../core/working-time.js'
 import { describeRejection, type SendResult } from '../core/sender.js'
 import { t } from '../core/l10n.js'
 
@@ -43,12 +45,17 @@ import { t } from '../core/l10n.js'
 
 /** A function, not a constant: `t()` must run after index.ts has chosen the language. */
 function usage(): string {
-  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hook\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [no] [text]       close the open time entry and send it; with no the one of another branch\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [no retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [no close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
+  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hook\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [no|branch] [text] close the open time entry and send it; with no or branch the one of another branch, without text with the one it has\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [no retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [no close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata held [no attach|close|drop]\n                                    main time held at a squash merge: to the merged branch, own text, discard\n  prosonata sent [count|no text|drop]\n                                    entries sent from here: list, change the text, delete one without time\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
 }
 
 export async function main(argv: string[], cwd = process.cwd()): Promise<number> {
   const command = argv[0] ?? 'status'
   const argument = argv.slice(1).join(' ').trim()
+
+  // Before any command runs: `close --help` once took "--help" for the invoice
+  // text and sent it (KONZEPT.md §8, *CLI*). Asking for help does nothing else.
+  if (command === 'help') return help(argument)
+  if (argv.slice(1).some(isHelpFlag)) return help(command)
 
   try {
     switch (command) {
@@ -86,6 +93,10 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return await rejected(argument)
       case 'resting':
         return await resting(argument)
+      case 'held':
+        return await held(argument)
+      case 'sent':
+        return await sent(cwd, argument)
       case 'tidy':
         return tidy()
       case 'log':
@@ -94,11 +105,9 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return adjust(cwd, argument)
       case 'post-commit':
         return await postCommit(cwd)
-      case 'help':
       case '--help':
       case '-h':
-        process.stdout.write(usage())
-        return 0
+        return help('')
       default:
         process.stderr.write(`${t('unknown command: {0}', command)}\n\n${usage()}`)
         return 2
@@ -111,6 +120,48 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
     process.stderr.write(`${(error as Error).message}\n`)
     return 1
   }
+}
+
+function isHelpFlag(argument: string): boolean {
+  return argument === '--help' || argument === '-h'
+}
+
+/**
+ * The whole usage, or the lines of one command. Cut from the usage itself, so a
+ * command's help cannot drift from the list, in either language.
+ */
+function help(command: string): number {
+  if (command === '' || isHelpFlag(command)) {
+    process.stdout.write(usage())
+    return 0
+  }
+
+  const lines: string[] = []
+  let current = ''
+  for (const line of usage().split('\n')) {
+    const named = /^ {2}prosonata (\S+)/.exec(line)
+    // A line indented deeper continues the command above it.
+    if (named) current = named[1] ?? ''
+    else if (!/^ {3,}\S/.test(line)) current = ''
+    if (current === command) lines.push(line)
+  }
+
+  if (lines.length === 0) {
+    process.stderr.write(`${t('unknown command: {0}', command)}\n\n${usage()}`)
+    return 2
+  }
+  process.stdout.write(`${lines.join('\n')}\n`)
+  return 0
+}
+
+/**
+ * An invoice text never begins with a dash; one that does is a mistyped option
+ * (KONZEPT.md §8, *CLI*). Says so, and the caller stops.
+ */
+function looksLikeOption(text: string, command: string): boolean {
+  if (!text.startsWith('-')) return false
+  process.stderr.write(`${t('"{0}" is an option, not a text — nothing done. Help: "prosonata help {1}"', text, command)}\n`)
+  return true
 }
 
 /**
@@ -334,9 +385,9 @@ async function chooseMode(cwd: string, argument: string): Promise<number> {
 
 /**
  * Closes an open entry and sends it right away: the one of this branch, or —
- * when the first word is the eight-character number `status` shows — the entry
- * of another branch of this repository, typically one already merged and
- * deleted (KONZEPT.md §3, *Abschluss*).
+ * when the first word is the eight-character number `status` shows, or the
+ * name of a merged or deleted branch — the entry of another branch of this
+ * repository (KONZEPT.md §3, *Abschluss*).
  */
 async function closeEntry(cwd: string, argument: string): Promise<number> {
   const session = Session.open()
@@ -344,17 +395,36 @@ async function closeEntry(cwd: string, argument: string): Promise<number> {
   if (!context) return notARepo()
 
   const [first = '', ...rest] = argument.split(' ')
-  const named = /^[0-9a-f]{8}$/.test(first)
-    ? openBranchEntries(session.state(), context.repo.root, context.mainBranch).find((candidate) => candidate.id.startsWith(first))
-    : undefined
-  const entry = named ?? openEntry(session.state(), context.scope)
+  let named: TimeEntry | undefined
+  if (/^[0-9a-f]{8}$/.test(first)) {
+    named = openBranchEntries(session.state(), context.repo.root, context.mainBranch).find((candidate) => candidate.id.startsWith(first))
+  } else if (first !== '') {
+    // Only finished branches: a branch still in use is closed from itself, and
+    // its name is less likely to be mistaken for the first word of a text.
+    const matches = session.finishedEntries(context).filter(({ entry }) => entry.scope.branch === first)
+    if (matches.length > 1) {
+      process.stderr.write(`${t('{0} has more than one open entry — close it by number, "prosonata status" lists them', first)}\n`)
+      return 2
+    }
+    named = matches[0]?.entry
+  }
+  const state = session.state()
+  const entry = named ?? openEntry(state, context.scope)
   if (!entry) {
     process.stderr.write(`${t('nothing open on {0}', context.scope.branch)}\n`)
     return 1
   }
 
-  const given = named ? rest.join(' ').trim() : argument
-  const text = given !== '' ? given : (await askFinalText(entry.text)) || entry.text
+  // An invoice line of 0:00 h is never wanted. On the main branch an empty open
+  // entry is what every commit leaves behind, so there is nothing to close here
+  // rather than something to discard (KONZEPT.md §8, *CLI*).
+  if (entry.seconds + entry.foreignSeconds + runningInto(state, entry, session.clock.now()) === 0) {
+    process.stderr.write(`${t('the open entry on {0} holds no time yet — nothing closed, nothing sent', entry.scope.branch)}\n`)
+    return 1
+  }
+
+  const text = await finalText(named ? rest.join(' ').trim() : argument, entry.text)
+  if (looksLikeOption(text, 'close')) return 2
   if (text === '') {
     process.stderr.write(`${t('an entry without text is never sent — nothing done')}\n`)
     return 1
@@ -486,6 +556,7 @@ async function changeText(cwd: string, argument: string): Promise<number> {
   }
 
   const text = argument !== '' ? argument : await ask(entry.text ? t('Text [{0}]: ', entry.text) : t('Text: '))
+  if (looksLikeOption(text, 'text')) return 2
   if (text === '') {
     process.stderr.write(`${t('no text given — nothing changed')}\n`)
     return 1
@@ -573,7 +644,7 @@ async function status(cwd: string): Promise<number> {
   for (const { entry: done, why } of session.finishedEntries(context)) {
     const args = [done.id.slice(0, 8), done.scope.branch, done.text || t('(no text)'), format(done.foreignSeconds + done.seconds)] as const
     process.stdout.write(
-      `  ${why === 'deleted' ? t('branch deleted  {0}  {1}  {2}  {3} — "prosonata close {0} [text]"', ...args) : t('branch merged  {0}  {1}  {2}  {3} — "prosonata close {0} [text]"', ...args)}\n`,
+      `  ${why === 'deleted' ? t('branch deleted  {0}  {1}  {2}  {3} — "prosonata close {1} [text]"', ...args) : t('branch merged  {0}  {1}  {2}  {3} — "prosonata close {1} [text]"', ...args)}\n`,
     )
   }
   if (context.categoryId <= 0) {
@@ -599,6 +670,11 @@ async function status(cwd: string): Promise<number> {
   if (refused.length > 0) {
     process.stdout.write(`  ${t('rejected by ProSonata: {0} — "prosonata rejected <no> retry|move|drop"', refused.length)}\n`)
     listRejected(refused, '    ')
+  }
+  const waiting = heldEntries(state)
+  if (waiting.length > 0) {
+    process.stdout.write(`  ${t('held at a squash merge: {0} — "prosonata held <no> attach|close|drop"', waiting.length)}\n`)
+    listHeld(waiting, '    ')
   }
 
   /*
@@ -742,8 +818,8 @@ async function resting(argument: string): Promise<number> {
 
   switch (action) {
     case 'close': {
-      const given = rest.join(' ').trim()
-      const text = given !== '' ? given : (await askFinalText(entry.text)) || entry.text
+      const text = await finalText(rest.join(' ').trim(), entry.text)
+      if (looksLikeOption(text, 'resting')) return 2
       if (text === '') {
         process.stderr.write(`${t('an entry without text is never sent — nothing done')}\n`)
         return 1
@@ -814,6 +890,177 @@ async function moveRejected(session: Session, entry: TimeEntry): Promise<number>
 }
 
 /** One line per refused entry: number, where it comes from, what it is, why. */
+/**
+ * Main time held at a squash merge (KONZEPT.md §3, *Offene main-Zeit beim
+ * Squash-Merge*): to the merged branch's entry, closed with a text of its own,
+ * or discarded. Works from any directory, like `rejected`.
+ */
+async function held(argument: string): Promise<number> {
+  const session = Session.open()
+  const waiting = heldEntries(session.state())
+  const [ref, action, ...rest] = argument.split(/\s+/).filter((part) => part !== '')
+
+  if (!ref) {
+    if (waiting.length === 0) {
+      process.stdout.write(`${t('no time is held')}\n`)
+      return 0
+    }
+    listHeld(waiting, '  ')
+    process.stdout.write(`\n  ${t('"prosonata held <no> attach"        to the entry of the merged branch')}\n`)
+    process.stdout.write(`  ${t('"prosonata held <no> close <text>"  close with a text of its own and send')}\n`)
+    process.stdout.write(`  ${t('"prosonata held <no> drop"          discard — the time is not billed')}\n`)
+    return 0
+  }
+
+  const matches = waiting.filter((entry) => entry.id.startsWith(ref))
+  const entry = matches[0]
+  if (!entry?.heldAtMerge || matches.length > 1) {
+    process.stderr.write(
+      `${matches.length > 1 ? t('ambiguous: {0} — "prosonata held" lists them', ref) : t('no held time: {0} — "prosonata held" lists them', ref)}\n`,
+    )
+    return 2
+  }
+
+  switch (action) {
+    case 'attach': {
+      const answer = await session.attachHeld(entry.id)
+      if (answer !== 'done') {
+        process.stderr.write(`${describeHeldAnswer(answer)}\n`)
+        return 1
+      }
+      process.stdout.write(`${t('attached to the entry of {0}', entry.heldAtMerge.branch)}\n`)
+      return 0
+    }
+    case 'close': {
+      const text = await finalText(rest.join(' ').trim(), entry.text)
+      if (looksLikeOption(text, 'held')) return 2
+      if (text === '') {
+        process.stderr.write(`${t('an entry without text is never sent — nothing done')}\n`)
+        return 1
+      }
+      session.closeEntry(entry.id, text)
+      process.stdout.write(`${t('closed: {0}', text)}\n`)
+      return report(await session.flush(true))
+    }
+    case 'drop': {
+      // Measured time thrown away is asked for, and without a terminal nobody
+      // can answer — an agent is told so instead of left waiting.
+      if (!process.stdin.isTTY) {
+        process.stderr.write(`${t('discarding held time needs a person — on a terminal or in the editor')}\n`)
+        return 2
+      }
+      const answer = await ask(t('Discard {0} held before the merge of {1}? It is not billed [y/N] ', format(entry.seconds), entry.heldAtMerge.branch))
+      if (!yes(answer)) {
+        process.stdout.write(`${t('nothing discarded')}\n`)
+        return 1
+      }
+      const outcome = await session.discardHeld(entry.id)
+      if (outcome !== 'done') {
+        process.stderr.write(`${describeHeldAnswer(outcome)}\n`)
+        return 1
+      }
+      process.stdout.write(`${t('discarded')}\n`)
+      return 0
+    }
+    default:
+      process.stderr.write(`${t('what should happen to {0}? attach, close or drop', ref)}\n`)
+      return 2
+  }
+}
+
+/**
+ * What this working directory sent, and a way back from the terminal
+ * (KONZEPT.md §3, *Zeiteinträge durchsehen*): `close` sends at once, and a
+ * mistake there used to wait for somebody in the editor. A new text, or
+ * deleting an entry without time — hours stay with the editor, where changing
+ * them is a person's decision.
+ */
+async function sent(cwd: string, argument: string): Promise<number> {
+  const session = Session.open()
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+
+  const [ref, action, ...rest] = argument.split(/\s+/).filter((part) => part !== '')
+  const grid = session.gridFor(context.scope.repoPath)
+
+  if (!action) {
+    const count = ref === undefined ? 10 : Number(ref)
+    if (!Number.isInteger(count) || count <= 0) {
+      process.stderr.write(`${t('not a number: {0} — "prosonata sent [count]"', ref ?? '')}\n`)
+      return 2
+    }
+    const list = await session.sentEntries(context, count)
+    if (list.length === 0) {
+      process.stdout.write(`${t('nothing sent from here yet')}\n`)
+      return 0
+    }
+    for (const { entry, remote } of list) {
+      const day = `${remote.date.slice(8, 10)}.${remote.date.slice(5, 7)}.`
+      const hours = billedTime(hoursToSeconds(remote.hours), grid)
+      const invoiced = remote.isInvoiced ? `  ${t('invoiced')}` : ''
+      process.stdout.write(
+        `  #${remote.timeID}  ${entry.id.slice(0, 8)}  ${day}  ${hours} h  ${remote.detail || t('(no text)')}${invoiced}\n`,
+      )
+    }
+    process.stdout.write(`\n  ${t('"prosonata sent <no> text <text>"  change the text')}\n`)
+    process.stdout.write(`  ${t('"prosonata sent <no> drop"         delete — only an entry without time')}\n`)
+    return 0
+  }
+
+  // The ProSonata number first: it is the one on the invoice and in the web
+  // interface. The local number as well, the way every other command takes it.
+  const all = await session.sentEntries(context)
+  const bare = ref?.replace(/^#/, '') ?? ''
+  const byTimeId = all.filter(({ remote }) => String(remote.timeID) === bare)
+  const matches = byTimeId.length > 0 ? byTimeId : all.filter(({ entry }) => entry.id.startsWith(bare))
+  const chosen = matches[0]
+  if (!chosen || matches.length > 1 || bare === '') {
+    process.stderr.write(
+      `${matches.length > 1 ? t('ambiguous: {0} — "prosonata sent" lists them', ref ?? '') : t('no sent entry: {0} — "prosonata sent" lists them', ref ?? '')}\n`,
+    )
+    return 2
+  }
+
+  switch (action) {
+    case 'text': {
+      const text = rest.join(' ').trim()
+      if (looksLikeOption(text, 'sent')) return 2
+      if (text === '') {
+        process.stderr.write(`${t('no text given — nothing changed')}\n`)
+        return 1
+      }
+      if (chosen.remote.isInvoiced) {
+        process.stderr.write(`${t('the entry is already invoiced — only ProSonata can change it now')}\n`)
+        return 1
+      }
+      await session.retext(chosen.remote.timeID, text)
+      process.stdout.write(`${t('#{0}: {1}', chosen.remote.timeID, text)}\n`)
+      return 0
+    }
+    case 'drop': {
+      const outcome = await session.dropSent(chosen)
+      if (outcome === 'invoiced') process.stderr.write(`${t('the entry is already invoiced — only ProSonata can change it now')}\n`)
+      if (outcome === 'time') {
+        process.stderr.write(`${t('#{0} holds {1} h — an entry with time is deleted only in the editor, "Browse Time Entries"', chosen.remote.timeID, billedTime(hoursToSeconds(chosen.remote.hours), grid))}\n`)
+      }
+      if (outcome !== 'done') return 1
+      process.stdout.write(`${t('#{0} deleted', chosen.remote.timeID)}\n`)
+      return 0
+    }
+    default:
+      process.stderr.write(`${t('what should happen to {0}? text or drop', ref ?? '')}\n`)
+      return 2
+  }
+}
+
+function listHeld(entries: TimeEntry[], indent: string): void {
+  for (const entry of entries) {
+    process.stdout.write(
+      `${indent}${entry.id.slice(0, 8)}  ${basename(entry.scope.repoPath)}/${entry.scope.branch}  ${t('before the merge of {0}', entry.heldAtMerge?.branch ?? '')}  ${format(entry.foreignSeconds + entry.seconds)}\n`,
+    )
+  }
+}
+
 function listRejected(entries: TimeEntry[], indent: string): void {
   for (const entry of entries) {
     const project = readRepoConfig(entry.scope.repoPath).projects.find((candidate) => candidate.id === entry.projectId)
@@ -852,6 +1099,11 @@ async function postCommit(cwd: string): Promise<number> {
     if (outcome.booked > 0) {
       const booked = format(outcome.booked)
       process.stderr.write(`prosonata: ${outcome.closed ? t('{0} booked, entry closed', booked) : t('{0} booked', booked)}\n`)
+    }
+    if (outcome.heldFor !== null) {
+      process.stderr.write(
+        `prosonata: ${t('squash merge of {0} — the open time on {1} is held, not closed under its text: "prosonata held"', outcome.heldFor, context.scope.branch)}\n`,
+      )
     }
     await session.flush()
     return 0
@@ -945,9 +1197,16 @@ async function ask(question: string): Promise<string> {
   }
 }
 
-/** The closing question of `close` and `resting close`, with the current text as default. */
-async function askFinalText(current: string): Promise<string> {
-  return await ask(current ? t('Final text [{0}]: ', current) : t('Final text: '))
+/**
+ * The text `close` and `resting close` close with: the one given, else the one
+ * the entry has (#6). Asked only when there is none, and only on a terminal —
+ * an agent has nobody to answer, and the question would leave it hanging.
+ * Empty means none; the caller refuses.
+ */
+async function finalText(given: string, current: string): Promise<string> {
+  if (given !== '') return given
+  if (current !== '') return current
+  return process.stdin.isTTY ? await ask(t('Final text: ')) : ''
 }
 
 /** A yes to a `[y/N]` question, in English or German. */

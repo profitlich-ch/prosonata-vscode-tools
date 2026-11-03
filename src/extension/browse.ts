@@ -131,7 +131,7 @@ async function editEntry(
   })
   if (given === undefined) return
 
-  if (text !== entry.detail) await session.api.updateEntry(entry.timeID, { detail: text })
+  if (text !== entry.detail) await session.retext(entry.timeID, text)
   const seconds = parseHours(given)!
   if (given.trim() !== shown) await session.correctHours(entry, seconds, grid, context)
 

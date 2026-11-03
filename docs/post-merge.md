@@ -75,6 +75,13 @@ flowchart TD
     T -- ja --> D["wie ein Commit: Segment schneiden,<br/>Eintrag mit dem Trailer abschliessen"]
 ```
 
+**Pflicht im letzten Schritt: dieselbe Prüfung wie beim Squash.** Schliesst ein Merge-Commit wie
+ein Commit ab, kann er die offene `main`-Zeit mit dem Trailer des Branches schliessen, genau den
+Fehler, den der Squash hatte. Stimmt sein Trailer mit dem Text eines offenen Branch-Eintrags
+überein, wird die `main`-Zeit angehalten und erfragt statt abgeschlossen (KONZEPT §3, *Offene
+`main`-Zeit beim Squash-Merge*). Sitzt die Prüfung in `Session.commit`, bekommt der Hook sie
+mit dem Weg, den er ohnehin nimmt (unten).
+
 ## Wo die Logik hingehört
 
 Die Hook-Zeile bleibt ein Einzeiler und ruft `prosonata post-merge "$1"`. Die drei Bedingungen

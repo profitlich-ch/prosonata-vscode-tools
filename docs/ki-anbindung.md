@@ -1,7 +1,9 @@
 # KI-Anbindung der Zeiterfassung
 
 Überlegungen dazu, wie ein Coding-Agent dieses Werkzeug bedient. Ergänzt [KONZEPT.md](../KONZEPT.md),
-ersetzt nichts darin. Stand: September 2026, nichts davon gebaut.
+ersetzt nichts darin. Die Stufen 1 bis 4 sind Überlegungen vom September 2026, nichts davon ist
+gebaut. Der [Ablauf an der Paketgrenze](#ablauf-an-der-paketgrenze) beschreibt dagegen die CLI, wie
+sie ist.
 
 ## Ausgangslage
 
@@ -13,7 +15,7 @@ Belegt ist das durch einen Fehlerfall: In `lequipe-visuelle.ch` entstanden am 17
 16:45 und 16:51 vier Zeiteinträge mit 0,00 h, aus vier Commits in sechs Minuten. Die Ursache lag
 im Werkzeug und ist behoben; was bleibt, ist die Beobachtung über das Tempo — dazu unten mehr.
 
-Eine technische Anbindung ist nicht nötig. Die CLI kennt achtzehn Befehle, darunter `start`,
+Eine technische Anbindung ist nicht nötig. Die CLI kennt gut zwanzig Befehle, darunter `start`,
 `pause`, `discard`, `adjust`, `text`, `close`, `attach`, `status` und `log`. Jeder Agent mit
 Shell-Zugriff kann das bereits alles. Zu entscheiden ist einzig, **wer was auslöst.**
 
@@ -105,6 +107,40 @@ Sollte das je gewollt sein, ist die **Herkunft** die Vorbedingung, nicht die Kü
 ist bereits als `'local' | 'remote'` angelegt und laut §7 „heute konstant `local`". Dort und im
 Segmentprotokoll gehört festgehalten, dass ein Agent geschrieben hat. Ohne das ist eine
 Reklamation an einer Rechnung nicht beantwortbar.
+
+---
+
+## Ablauf an der Paketgrenze
+
+Für einen Agenten, der ein Paket auf einem Branch beginnt, mergt und abschliesst. Jeder Schritt
+ist ein Befehl, keiner verlangt eine Zahl. Ein Befehl, der ohne Terminal eine Antwort bräuchte,
+bricht mit einer Meldung ab, statt zu warten – die Meldung sagt, was fehlt.
+
+1. **Beim Anlegen des Branches:** `prosonata status` auf `main`. Steht dort offene Zeit, die zum
+   Paket gehört – angefangene Arbeit, die auf den Branch mitwandert –, auf dem neuen Branch
+   `prosonata take main`. Gehört sie nicht dazu, bleibt sie, wo sie ist.
+2. **Beim Squash-Merge:** nichts zusätzlich. Trägt der Merge-Commit den Trailer des Branches und
+   hat `main` offene Zeit, hält der Hook sie an und sagt es; sie geht nicht mehr unter dem Text des
+   Branches hinaus. **Wohin sie gehört, entscheidet ein Mensch**: Der Agent meldet die Zeile aus
+   `prosonata held`. Auf Anweisung führt er sie aus – `prosonata held <Nr> attach` oder
+   `prosonata held <Nr> close "<Text>"`; `drop` braucht einen Menschen am Terminal oder im
+   Editor. Ein Merge mit `--no-ff` löst keinen Hook aus ([post-merge.md](post-merge.md)); die
+   offene `main`-Zeit bleibt dann einfach offen.
+3. **Nach dem Merge und dem Löschen des Branches:** `prosonata status` zeigt den Eintrag als
+   «Branch gelöscht». Beschreibt sein Text – der letzte Trailer – die Leistung des ganzen
+   Branches, schliesst `prosonata close <branch>` ihn damit ab. Sonst
+   `prosonata close <branch> "<Text>"`. Ein Eintrag ohne Zeit wird nicht abgeschlossen.
+4. **Prüfen, was hinausging:** `prosonata sent` zeigt die gesendeten Einträge mit ihrer
+   ProSonata-Nummer. Ein falscher Text: `prosonata sent <Nr> text "<Text>"`. Ein Eintrag ohne
+   Zeit, der nicht hätte gehen dürfen: `prosonata sent <Nr> drop`. Ein falscher Eintrag **mit**
+   Zeit wird gemeldet, nicht behoben – Löschen und Stunden gehören in den Editor.
+5. **Hilfe:** `prosonata help <befehl>` oder `--help` hinter dem Befehl. Beides tut nichts anderes.
+
+Anlass: Am 3. November 2026 hat ein Agent in `ksasz.ch` drei Branches gemergt. Ein Squash-Merge
+schloss fünf Tage alte `main`-Zeit unter dem Text des Branches ab (ProSonata 3023),
+`close --help` sendete einen leeren Eintrag mit dem Text «--help» (3024), und die drei
+Branch-Einträge blieben offen, weil `close` nur ihre Kurz-IDs kannte. Die ersten beiden Fehler
+fängt das Werkzeug inzwischen selbst ab, gegen den dritten hilft Schritt 3.
 
 ---
 

@@ -11,6 +11,7 @@ import {
   discardEntry,
   dropPausedTimer,
   entriesToMove,
+  foldRolledBack,
   keepFromRunning,
   keepResting,
   lastClosedEntry,
@@ -1244,5 +1245,115 @@ describe('a resting entry', () => {
     const stamped = stampActivity(state, NINE + DAY)
 
     expect(stamped.entries.map((entry) => entry.lastActivity)).toEqual([NINE + DAY, NINE, undefined])
+  })
+})
+
+/*
+ * A commit on main rolled back before its entry went out: the time moves to the
+ * entry that replaced it, and only one line reaches ProSonata (KONZEPT.md §3,
+ * *Zurückgerollte Commits*).
+ */
+describe('an entry whose commit was rolled back', () => {
+  const closing = (...ids: string[]) => ids.map((entryId) => ({ entryId, since: NINE, closing: true }))
+
+  it('gives its time to the entry the amend closed', () => {
+    const state: State = {
+      ...stateOf(
+        entryOf('a', { scope: main, state: 'closed', sha: 'aaa', seconds: 2400, text: 'Kirby Update' }),
+        entryOf('b', { scope: main, state: 'closed', sha: 'bbb', seconds: 4, text: 'Kirby Update, Linkfarbe' }),
+        entryOf('c', { scope: main, seconds: 0, text: '' }),
+      ),
+      pending: closing('a', 'b'),
+    }
+
+    const folded = foldRolledBack(state, ['a'], NINE)
+
+    expect(folded.entries.map((entry) => [entry.id, entry.seconds])).toEqual([
+      ['b', 2404],
+      ['c', 0],
+    ])
+    expect(folded.pending.map((write) => [write.entryId, write.closing])).toEqual([['b', true]])
+  })
+
+  it('after a reset gives it to the open entry, which the next commit takes along', () => {
+    const state: State = {
+      ...stateOf(
+        entryOf('a', { scope: main, state: 'closed', sha: 'aaa', seconds: 2400 }),
+        entryOf('c', { scope: main, seconds: 300, text: '' }),
+      ),
+      pending: closing('a'),
+    }
+
+    const folded = foldRolledBack(state, ['a'], NINE)
+
+    expect(folded.entries.map((entry) => [entry.id, entry.seconds, entry.state])).toEqual([['c', 2700, 'open']])
+  })
+
+  it('passes it down the line when the amend is amended again', () => {
+    const state: State = {
+      ...stateOf(
+        entryOf('a', { scope: main, state: 'closed', sha: 'aaa', seconds: 2400 }),
+        entryOf('b', { scope: main, state: 'closed', sha: 'bbb', seconds: 4 }),
+        entryOf('c', { scope: main, state: 'closed', sha: 'ccc', seconds: 6 }),
+      ),
+      pending: closing('a', 'b', 'c'),
+    }
+
+    const folded = foldRolledBack(state, ['a', 'b'], NINE)
+
+    expect(folded.entries.map((entry) => [entry.id, entry.seconds])).toEqual([['c', 2410]])
+  })
+
+  it('hands its line in ProSonata to the replacement', () => {
+    const state: State = {
+      ...stateOf(
+        entryOf('a', { scope: main, state: 'closed', sha: 'aaa', seconds: 2400, timeId: 2866, lastWritten: 2400 }),
+        entryOf('b', { scope: main, state: 'closed', sha: 'bbb', seconds: 4 }),
+      ),
+      pending: closing('a', 'b'),
+    }
+
+    const folded = foldRolledBack(state, ['a'], NINE)
+
+    expect(folded.entries).toEqual([expect.objectContaining({ id: 'b', timeId: 2866, lastWritten: 2400, seconds: 2404 })])
+  })
+
+  it('leaves both alone when each already stands in ProSonata', () => {
+    const state: State = {
+      ...stateOf(
+        entryOf('a', { scope: main, state: 'closed', sha: 'aaa', seconds: 2400, timeId: 2866 }),
+        entryOf('b', { scope: main, state: 'closed', sha: 'bbb', seconds: 4, timeId: 2867 }),
+      ),
+      pending: closing('a', 'b'),
+    }
+
+    expect(foldRolledBack(state, ['a'], NINE)).toEqual(state)
+  })
+
+  it('leaves one alone that has gone out already', () => {
+    const state = stateOf(
+      entryOf('a', { scope: main, state: 'closed', sha: 'aaa', seconds: 2400, timeId: 2866 }),
+      entryOf('b', { scope: main, state: 'closed', sha: 'bbb', seconds: 4 }),
+    )
+
+    expect(foldRolledBack(state, ['a'], NINE).entries.map((entry) => entry.id)).toEqual(['a', 'b'])
+  })
+
+  it('does not give it to time held at a squash merge', () => {
+    const state: State = {
+      ...stateOf(
+        entryOf('a', { scope: main, state: 'closed', sha: 'aaa', seconds: 2400 }),
+        entryOf('h', { scope: main, seconds: 600, heldAtMerge: { branch: 'formular', entryId: 'x', at: NINE } }),
+        entryOf('c', { scope: main, seconds: 0, text: '' }),
+      ),
+      pending: closing('a'),
+    }
+
+    const folded = foldRolledBack(state, ['a'], NINE)
+
+    expect(folded.entries.map((entry) => [entry.id, entry.seconds])).toEqual([
+      ['h', 600],
+      ['c', 2400],
+    ])
   })
 })

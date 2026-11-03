@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { describeRepo, rootCommit, subjectOf, trailerOf, workMerged } from './git.js'
+import { describeRepo, rootCommit, stillOnBranch, subjectOf, trailerOf, workMerged } from './git.js'
 
 /**
  * The root commit identifies the repository across all clones, so a branch key
@@ -164,5 +164,49 @@ describe('whether work on a branch has landed', () => {
     commit(dir, 'b.txt', 'Arbeit auf dem Branch')
 
     expect(workMerged(dir, 'feature', 'main')).toBe(false)
+  })
+})
+
+/*
+ * An amend or a reset takes a commit off its branch, and the entry tied to it
+ * must not go out under its text (KONZEPT.md §3, *Zurückgerollte Commits*).
+ */
+describe('whether a commit is still on its branch', () => {
+  it('says yes for the tip and what lies below it', () => {
+    const dir = repo()
+    commit(dir, 'a.txt', 'erster Commit')
+    const first = run(dir, 'rev-parse', 'HEAD')
+    commit(dir, 'b.txt', 'zweiter Commit')
+
+    expect(stillOnBranch(dir, first, 'main')).toBe(true)
+  })
+
+  it('says no for a commit replaced by an amend', () => {
+    const dir = repo()
+    commit(dir, 'a.txt', 'erster Commit')
+    const amended = run(dir, 'rev-parse', 'HEAD')
+    run(dir, 'commit', '--quiet', '--amend', '-m', 'erster Commit, berichtigt')
+
+    expect(stillOnBranch(dir, amended, 'main')).toBe(false)
+  })
+
+  it('asks the branch, not HEAD', () => {
+    const dir = repo()
+    commit(dir, 'a.txt', 'erster Commit')
+    run(dir, 'checkout', '--quiet', '-b', 'feature')
+    commit(dir, 'b.txt', 'Arbeit auf dem Branch')
+    const onFeature = run(dir, 'rev-parse', 'HEAD')
+    run(dir, 'checkout', '--quiet', 'main')
+
+    expect(stillOnBranch(dir, onFeature, 'feature')).toBe(true)
+  })
+
+  it('cannot tell for a deleted branch or a commit git does not know', () => {
+    const dir = repo()
+    commit(dir, 'a.txt', 'erster Commit')
+    const sha = run(dir, 'rev-parse', 'HEAD')
+
+    expect(stillOnBranch(dir, sha, 'gibt-es-nicht')).toBeNull()
+    expect(stillOnBranch(dir, 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef', 'main')).toBeNull()
   })
 })

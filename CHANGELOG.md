@@ -7,6 +7,53 @@ are in German.
 
 ## [Unreleased]
 
+### Added
+
+- **`--help` and `-h` after any command show that command's help**, and so does
+  `prosonata help <command>`. Nothing else happens.
+- **`prosonata close <branch>`** closes the entry of a merged or deleted branch
+  by its name; `status` suggests it that way. Until now it took the
+  eight-character number, which nobody knows right after a merge.
+- **Open time on `main` is held at a squash merge instead of closed under the
+  branch's text.** The merge commit carries the branch's trailer; until now it
+  closed whatever was open on `main` with it, and two invoice lines read the
+  same. The time now waits for an answer: attach it to the merged branch's
+  entry, close it with a text of its own, or discard it. The hook says so; the
+  panel shows *Before the merge of …*, and in the terminal `prosonata status`
+  lists it and `prosonata held` takes the answer. Discarding needs a person —
+  on a terminal or in the editor.
+- **`prosonata sent [count]`** lists the entries sent from this working
+  directory as ProSonata holds them now — number, date, hours, text, invoiced.
+  `prosonata sent <no> text "…"` changes the text, `prosonata sent <no> drop`
+  deletes an entry without time. One with time is deleted only in the editor,
+  under “Browse Time Entries”; hours are changed only there.
+
+### Changed
+
+- **`close` and `resting … close` without a text keep the text the entry has**
+  instead of asking for it. They ask only when there is none, and without a
+  terminal — an agent — they stop with a message instead of waiting for an
+  answer.
+
+### Fixed
+
+- **`prosonata close --help` no longer closes and sends the open entry.** It
+  took `--help` for the invoice text. A text that begins with a dash is now
+  refused by `close`, `text` and `resting … close`: an invoice line never starts
+  with one, a mistyped option almost always does.
+- **An amend or a reset on `main` no longer leaves two invoice lines.** The
+  entry of a commit that was rolled back before it went out gives its time to
+  the entry that replaced it, so ProSonata gets one line with the amended text.
+  Checked right before every send, the hook's included.
+- **A new entry on `main` no longer takes over the open line of another.**
+  Every entry there shares one key, and the sync when a window opens adopted
+  any open line under it — within ten minutes of a commit on `main` that was
+  the line of the entry just closed, its closing write not yet out. A line a
+  local entry already holds is never adopted.
+- **`prosonata close` no longer sends an entry without time.** An invoice line of
+  0:00 h is never wanted; on `main` an empty open entry is simply what the last
+  commit left behind.
+
 ## [0.27.0] — 2026-10-29
 
 ### Added
