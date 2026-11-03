@@ -1,0 +1,81 @@
+# Veröffentlicht ein Release im VS Code Marketplace und auf Open VSX.
+#
+# Ausgelöst durch ein auf GitHub veröffentlichtes Release, nicht durch den
+# Tag-Push: Der Versions-Commit samt Tag darf ohne Rückfrage gepusht werden,
+# die Veröffentlichung nicht. Ein Release anzulegen ist der bewusste Schritt.
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  # Für Trusted Publishing im Marketplace per OIDC, statt eines gespeicherten PAT.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Die Trusted-Publishing-Richtlinie im Marketplace vertraut genau dieser
+    # Umgebung und diesem Workflow; dort steht auch das Secret für Open VSX.
+    environment: marketplace
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Git-Identität für die Tests
+        run: |
+          git config --global user.email "ci@example.invalid"
+          git config --global user.name "CI"
+          git config --global init.defaultBranch main
+
+      - run: npm run check
+
+      # Ein Release zu einem Tag, der nicht zur Version im Manifest passt, würde
+      # unter falscher Nummer veröffentlicht — und eine veröffentlichte Version
+      # lässt sich im Marketplace nicht ersetzen.
+      - name: Tag gegen package.json prüfen
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "${GITHUB_REF_NAME}" = "v${version}" || {
+            echo "Tag ${GITHUB_REF_NAME} passt nicht zu package.json ${version}" >&2
+            exit 1
+          }
+
+      # Der Marketplace stellt kein Mermaid dar. Die Diagramme werden zu PNGs,
+      # die am Release hängen; das README im Paket verweist dorthin. Ersetzt
+      # wird es nur in diesem Checkout. --readme-path taugt nicht, weil vsce
+      # dann README.md und readme.md zugleich packen will.
+      - run: node scripts/marketplace-readme.mjs
+      - run: cp out/marketplace/README.md README.md
+
+      # Paket und Bilder hängen am Release, bevor ein Store die Seite zeigt —
+      # sonst verweist sie anfangs auf Bilder, die es noch nicht gibt.
+      - name: Paket packen und ans Release hängen
+        run: |
+          name="prosonata-vscode-tools-${GITHUB_REF_NAME#v}.vsix"
+          npx --yes @vscode/vsce package --no-dependencies --out "$name" \
+            --baseImagesUrl "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}"
+          gh release upload "${GITHUB_REF_NAME}" "$name" out/marketplace/*.png
+          echo "VSIX=$name" >> "$GITHUB_ENV"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Der Marketplace nimmt ab dem 1. Dezember 2026 keine globalen PATs mehr
+      # an. Trusted Publishing tauscht das OIDC-Token von GitHub gegen eine
+      # Berechtigung für 15 Minuten; nichts Geheimes liegt im Repo.
+      # Ein Paket für beide Stores, damit dort dasselbe liegt.
+      - run: npx --yes @vscode/vsce publish --oidc --packagePath "$VSIX"
+
+      - run: npx --yes ovsx publish "$VSIX"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}

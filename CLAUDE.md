@@ -15,12 +15,24 @@ in `l10n/bundle.l10n.de.json`; Titel aus `package.json` in `package.nls.json` un
 `package.nls.de.json`. Das erste Argument von `t()` ist ein String-Literal mit `{0}`-Platzhaltern,
 kein Template-String – nur so findet der Test die fehlenden Übersetzungen.
 
+## Veröffentlichen macht Moritz
+
+Die Extension steht im VS Code Marketplace und auf Open VSX. Veröffentlicht wird durch
+`.github/workflows/release.yml`, und der läuft erst, wenn auf GitHub ein **Release** zum Tag
+angelegt wird – nicht beim Tag-Push. Das ist die Regel „`npm publish` macht immer Moritz“,
+übertragen auf die Stores: Claude endet nach dem Gegencheck der Tags und meldet, dass das
+Release angelegt werden kann. Eine veröffentlichte Versionsnummer lässt sich im Marketplace
+nicht ersetzen, nur durch eine höhere überholen.
+
+Die ID `profitlich.prosonata-vscode-tools` darf sich nie ändern: Sie ist der Schlüssel in
+ProSonatas `apiComments` (`EXTENSION_ID` in `src/core/api-comments.ts`).
+
 ## Jede neue Version wird installiert
 
-Ein Release ist erst fertig, wenn die neue Fassung auch läuft. Nach dem Versions-Commit:
+Ein Release ist erst fertig, wenn die neue Fassung auch läuft. Nach der Veröffentlichung
+kommt sie über den Marketplace; bis VS Code sie holt, oder für einen Stand vor dem Release:
 
 ```sh
-npm run package        # baut und schnürt das .vsix
 npm run install-vsix
 ```
 

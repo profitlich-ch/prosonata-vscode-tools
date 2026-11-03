@@ -10,3 +10,6 @@ out/
 *.vsix
 
 .DS_Store
+
+# Herstellerdoku, nicht zum Weiterverteilen – lokal erzeugt mit `npm run api-docs`
+docs/prosonata-api/

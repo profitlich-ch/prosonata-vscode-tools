@@ -7,6 +7,16 @@ are in German.
 
 ## [Unreleased]
 
+### Changed
+
+- **Available in the VS Code Marketplace and on Open VSX.** Updates now arrive
+  by themselves. A copy installed by hand is taken over by the Marketplace,
+  because the id `profitlich.prosonata-vscode-tools` stays the same.
+- **The activity bar shows “ProSonata”** instead of “:Profitlich”.
+- **README:** New sections “Data and privacy” and “Platforms”. In the
+  Marketplace the diagrams appear as images, because it does not render
+  Mermaid.
+
 ## [0.28.0] — 2026-11-03
 
 ### Added

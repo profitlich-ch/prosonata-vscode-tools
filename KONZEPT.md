@@ -46,9 +46,9 @@ ein Mensch. Ein Dialog mit zwei Knöpfen ist deshalb kein Verstoss gegen diesen 
 seine Anwendung – ein Timer, der ohne Antwort zu laufen beginnt, wäre einer.
 
 **Der Code wird geschrieben, als würde er veröffentlicht.**
-Das Repo ist öffentlich. Eine Marketplace-Extension ist **nicht** beschlossen, aber möglich –
-und die Anforderungen aus Abschnitt 10 kosten während der Entwicklung fast nichts, während
-sie nachträglich einzubauen ein Umbau wäre.
+Das Repo ist öffentlich, und die Extension steht im VS Code Marketplace und auf Open VSX. Dass
+das ohne Umbau ging, liegt an den Anforderungen aus Abschnitt 10: Sie galten von Anfang an und
+kosteten während der Entwicklung fast nichts.
 
 ---
 
@@ -1491,7 +1491,8 @@ JSON-Dateien.
 
 Build: esbuild für Extension und CLI, vitest für `core`.
 Entwicklung: `npm link` für die CLI, F5 für den Extension Development Host.
-Installation: lokal als `.vsix`, später Marketplace.
+Installation: aus dem Marketplace oder von Open VSX; ein Stand vor dem Release als `.vsix`
+(`npm run install-vsix`).
 
 ### Laufzeit und Modulformat
 
@@ -1735,7 +1736,8 @@ Repository des Kunden:
 
 ## 9. ProSonata API – relevante Fakten
 
-Belegt durch die Dokumentation in [docs/prosonata-api/](docs/prosonata-api/). Was darüber
+Belegt durch die Dokumentation in `docs/prosonata-api/`, einer lokalen Kopie der Herstellerseiten,
+die `npm run api-docs` erzeugt und die nicht im Repository liegt ([bruno/README.md](bruno/README.md)). Was darüber
 hinaus am eigenen Konto geprüft wurde, ist als **gemessen** gekennzeichnet; die Anfragen dazu
 liegen in [bruno/](bruno/).
 
@@ -1926,18 +1928,17 @@ läuft.
 
 ---
 
-## 10. Veröffentlichbar bleiben
+## 10. Veröffentlichung
 
-Das Repo ist öffentlich. Eine Marketplace-Extension ist **nicht beschlossen** – aber sie soll
-möglich bleiben, ohne dass vorher etwas entwirrt werden muss.
+Das Repo ist öffentlich, die Extension steht im VS Code Marketplace und auf Open VSX. Lange war
+das nicht beschlossen, sollte aber möglich bleiben, ohne dass vorher etwas entwirrt werden muss.
 
-Der Unterschied ist gering und lohnt sich: Diese Anforderungen laufend einzuhalten kostet
-während der Entwicklung fast nichts. Sie nachträglich einzuziehen wäre ein Umbau, und zwar
-genau an den Stellen, die man am wenigsten anfassen will – Konfiguration, Fehlerbehandlung,
-Sprache der Oberfläche.
+Die Anforderungen dafür laufend einzuhalten kostete während der Entwicklung fast nichts. Sie
+nachträglich einzuziehen wäre ein Umbau gewesen, und zwar genau an den Stellen, die man am
+wenigsten anfassen will – Konfiguration, Fehlerbehandlung, Sprache der Oberfläche.
 
-Zwei Dinge gelten deshalb **unabhängig** von einer Veröffentlichung, allein weil das Repo
-öffentlich ist: keine Kontodaten darin, und eine Lizenz. Der Rest ist Vorsorge:
+Zwei Dinge gelten schon, weil das Repo öffentlich ist: keine Kontodaten darin, und eine
+Lizenz. Der Rest kommt von der Veröffentlichung:
 
 - **Keine Kontodaten im Repo.** Subdomain, API-Key, Projekt-IDs und Kategorie-IDs stammen
   ausschliesslich aus Konfiguration. Keine Fixtures mit Kundennamen.
@@ -1983,7 +1984,7 @@ Zwei Dinge gelten deshalb **unabhängig** von einer Veröffentlichung, allein we
   unabhängig von der Extension nutzbar.
 
 ProSonata bietet in der API-Dokumentation an, Anbindungen auf der Website zu listen und in den
-News zu erwähnen. Das setzt eine Veröffentlichung voraus und ist deshalb offen.
+News zu erwähnen; Voraussetzung dafür war die Veröffentlichung.
 
 ### Name, Kennung, Anzeigename
 
@@ -2005,14 +2006,35 @@ zwei Schreiber auf `state.json`.
 Der **Anzeigename des Herausgebers** steht nirgends in der `package.json`. Bei einer
 veröffentlichten Extension liefert ihn der Marketplace – `formulahendry` erscheint deshalb als
 „Jun Han". Wer eine `.vsix` von Hand installiert, hat diese Angabe nicht: Dann zeigt VS Code die
-Kennung selbst, in der Schreibweise aus der `package.json`. **Genau darum wirkt `Profitlich`
-heute** – und darum wird es nach einer Veröffentlichung vom Namen des Marketplace-Kontos
-abgelöst.
+Kennung selbst, in der Schreibweise aus der `package.json`. Bei `Profitlich` fällt der
+Unterschied nicht auf: Publisher im Marketplace, Namespace auf Open VSX und `publisher` in der
+`package.json` lauten gleich, mit grossem P. Die Schreibweise muss übereinstimmen, sonst lehnen
+`vsce` und `ovsx` das Paket ab.
 
-**Was fehlt, falls doch veröffentlicht wird:** ein Publisher bei Azure DevOps, registriert als
-`profitlich`, und dort der Anzeigename. Die Kennung ist ab der ersten Veröffentlichung
-unveränderlich – sie steht als Schlüssel in `apiComments` (Abschnitt 3), wo als
-Teilstring gesucht wird; eine Umbenennung fände die alten Einträge nicht mehr.
+Die Kennung ist seit der ersten Veröffentlichung unveränderlich – sie steht als Schlüssel in
+`apiComments` (Abschnitt 3), wo als Teilstring gesucht wird; eine Umbenennung fände die alten
+Einträge nicht mehr. `EXTENSION_ID` ist deshalb eine feste Zeichenkette und wird nicht aus der
+`package.json` abgeleitet.
+
+### Wie veröffentlicht wird
+
+Den Anstoss gibt ein **Release auf GitHub**, nicht der Tag-Push: Ein Versions-Commit samt Tag
+darf ohne Rückfrage hinausgehen, die Veröffentlichung ist ein eigener, bewusster Schritt.
+`.github/workflows/release.yml` prüft den Tag gegen die Version, packt **ein** Paket, hängt es
+mit den Diagrammen ans Release und reicht dasselbe Paket an beide Stores.
+
+- **Marketplace:** Trusted Publishing. Der Publisher vertraut dem Workflow `release.yml` in
+  `profitlich-ch/prosonata-vscode-tools`, ausgeführt in der GitHub-Umgebung `marketplace`;
+  `vsce publish --oidc` tauscht das OIDC-Token von GitHub gegen eine Berechtigung für 15
+  Minuten. Kein Geheimnis liegt im Repo oder in GitHub.
+- **Open VSX:** Namespace `Profitlich`, angelegt über das Eclipse-Konto mit dem GitHub-Login
+  `mprofitlich` – eine Organisation kann sich nicht anmelden. Open VSX nimmt Trusted Publishing
+  erst für eine Extension an, die schon eine Version hat; bis dahin veröffentlicht ein Token,
+  das als Secret `OVSX_PAT` in der Umgebung `marketplace` liegt.
+
+*Die Diagramme:* Der Marketplace stellt weder Mermaid noch SVG dar. Das README im Repo behält
+die Mermaid-Blöcke; beim Release ersetzt `scripts/marketplace-readme.mjs` sie durch PNGs, die am
+GitHub-Release hängen.
 
 Der Name **trägt das fremde Produkt und soll es**: „ProSonata Tools" sagt, wofür das Werkzeug
 da ist, und der Publisher `Profitlich` sagt, dass es nicht von dort kommt – dasselbe Muster wie
@@ -2073,6 +2095,13 @@ Nicht erneut vorschlagen:
   erfordert Read-Modify-Write.
 - **Polling** des ProSonata-Zustands.
 - **DDEV.**
+- **Veröffentlichen mit einem Personal Access Token** von Azure DevOps. Globale PATs nimmt der
+  Marketplace ab dem 1. Dezember 2026 nicht mehr an, und ein langlebiges Geheimnis in GitHub
+  wäre der einzige Schlüssel zum Publisher.
+- **Veröffentlichen als Azure-Identität** (verwaltete Identität oder App-Registrierung mit
+  föderierten Anmeldedaten, `vsce publish --azure-credential`). Die verwaltete Identität braucht
+  ein Azure-Abonnement mit Zahlungsweg, nur für dieses eine Werkzeug; Trusted Publishing leistet
+  dasselbe ohne Azure (Abschnitt 10).
 
 ---
 

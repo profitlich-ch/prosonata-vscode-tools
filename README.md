@@ -5,7 +5,7 @@ This VS Code extension creates [ProSonata](https://www.prosonata.de) time entrie
 
 The idea: a time entry represents a piece of work the client can be billed for. If you bill by deliverable, it doesn't matter whether the work took one day or several; if you bill by time, the two other modes are for you.
 
-This is not an official ProSonata product. It is not in the Marketplace; you have to install it by hand.
+This is not an official ProSonata product.
 
 ## Language
 
@@ -15,23 +15,25 @@ What goes into ProSonata stays German: an open entry is marked `[LAUFEND]`, and 
 
 ## Installation
 
-After installing or updating, reload the window (Developer: Reload Window), and the extension appears in every VS Code window. Updates have to be installed by hand.
+Search for **ProSonata Tools** under Extensions in VS Code, or in a terminal:
+
+```sh
+code --install-extension profitlich.prosonata-vscode-tools
+```
+
+The extension is in the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=profitlich.prosonata-vscode-tools) and on [Open VSX](https://open-vsx.org/extension/Profitlich/prosonata-vscode-tools) — where Cursor, VSCodium and Windsurf find it too. Updates arrive by themselves.
 
 ### Ready-made package
 
-To install or update, download the `.vsix` of the latest
+Without access to the Marketplace: download the `.vsix` of the latest
 [release](https://github.com/profitlich-ch/prosonata-vscode-tools/releases)
-and install it:
-
-#### Without a terminal
-
-Command Palette → Extensions: Install from VSIX…
-
-#### In a terminal
+and install it through Command Palette → *Extensions: Install from VSIX…*, or:
 
 ```sh
 code --install-extension prosonata-vscode-tools-<version>.vsix
 ```
+
+Installed this way, there are no automatic updates.
 
 ### From source
 
@@ -47,7 +49,7 @@ To update, do the same again after `git pull`.
 
 ## Configuration
 
-Open **:Profitlich** in the Activity Bar and click ‹ProSonata: Set Up Account›. It asks for the ProSonata base URL and a user API key and writes both to `~/.prosonata/config.json` with mode 0600.
+Open **ProSonata** in the Activity Bar and click ‹ProSonata: Set Up Account›. It asks for the ProSonata base URL and a user API key and writes both to `~/.prosonata/config.json` with mode 0600.
 
 **Use a personal user key, not an app integration**, so the time entries are linked to your user.
 
@@ -59,6 +61,7 @@ The order is fixed, and one step in it is a gate:
 
 ```mermaid
 flowchart TD
+    accTitle: Setup order: account, project, time category, then the timer can run
     A["<b>Set Up Account</b><br/>base URL and user key to ~/.prosonata/config.json"] --> B
     B["<b>Choose Project for This Repository</b><br/>links the repository and installs the post-commit hook"] --> C
     C{"Time category<br/>chosen?"}
@@ -106,6 +109,7 @@ What a commit does depends on the mode — the segment is cut at the moment of t
 
 ```mermaid
 flowchart TD
+    accTitle: What a commit does in each mode
     C([Commit]) --> S["running segment is cut<br/>at the moment of the commit"]
     S --> M{Mode}
     M -- "per commit<br/>(main branch)" --> A["entry <b>closed</b><br/>text: trailer, otherwise subject<br/>timer runs on into a successor"]
@@ -168,6 +172,7 @@ and what is in ProSonata.
 
 ```mermaid
 sequenceDiagram
+    accTitle: Two computers add to the same time entry
     participant O as Office
     participant P as ProSonata
     participant H as Home
@@ -212,6 +217,7 @@ of waking up.
 
 ```mermaid
 gantt
+    accTitle: A timer runs overnight, the sleep time is detected
     title A timer runs overnight
     dateFormat YYYY-MM-DD HH:mm
     axisFormat %H:%M
@@ -420,6 +426,26 @@ shows its help and does nothing else. The earlier German argument values
   show them the effort per commit. All segments stay locally on the computer.
 - **Nothing is sent at commit time.** A write goes out once it is older than
   ten minutes, so a commit that is taken back never reaches ProSonata at all.
+
+## Data and privacy
+
+- **The API key is stored in plain text** in `~/.prosonata/config.json`,
+  readable only by your own user (mode 0600). VS Code's Secret Storage is not
+  an option, because the `post-commit` hook runs without VS Code and has to
+  read the key as well.
+- **Measured segments and state** also live under `~/.prosonata/`, never in
+  the repository.
+- **In ProSonata** the extension writes time entries and their `apiComments`
+  field (see [How it works](#how-it-works)), nothing else.
+- **No telemetry.** The extension talks to no service other than your
+  ProSonata account.
+
+## Platforms
+
+The extension is in daily use on **macOS**. The tests also run on **Linux**.
+**Windows is untested**: the hook is a shell script and should work with Git
+for Windows, but that is not confirmed. Please report back as an
+[issue](https://github.com/profitlich-ch/prosonata-vscode-tools/issues).
 
 ## Development
 

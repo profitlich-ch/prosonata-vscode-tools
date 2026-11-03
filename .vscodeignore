@@ -6,6 +6,7 @@ scripts/**
 bruno/**
 docs/**
 .sandbox/**
+out/**
 node_modules/**
 
 .vscode/**

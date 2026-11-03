@@ -34,7 +34,17 @@ Jeder Ordner trägt eine `folder.bru`, die ihre Quelle nennt:
 | `invoices/` | `rechnungen.md` | GET, nur Einzelabruf |
 | `zeiterfassung/` | `../KONZEPT.md` | – |
 
-Alle Quelldateien liegen unter `docs/prosonata-api/`. Vollständig abgebildet ist jede
+Alle Quelldateien liegen unter `docs/prosonata-api/`. **Sie stehen nicht im Repository**: Es
+ist die Dokumentation des Herstellers, und weiterverteilen dürfen wir sie nicht. `npm run
+api-docs` holt sie von
+[prosonata.de/infos-und-hilfen/prosonata-api-beschreibung.html](https://www.prosonata.de/infos-und-hilfen/prosonata-api-beschreibung.html)
+und schreibt sie dorthin. Ein erneuter Lauf mit anschliessendem Diff gegen den vorigen Stand zeigt,
+was ProSonata geändert hat. Eine Seite, die es nicht mehr gibt, meldet das Skript und lässt
+die lokale Kopie stehen. Das betrifft `angebote.md`: Die Seite ist seit September 2026
+offline. In einem frischen Clone holt man den letzten Stand aus der Historie mit
+`git show 78cb49c:docs/prosonata-api/angebote.md`.
+
+Vollständig abgebildet ist jede
 dokumentierte Methode; die gefilterten Listen führen jeden dokumentierten Filter als
 abgeschalteten Parameter.
 
