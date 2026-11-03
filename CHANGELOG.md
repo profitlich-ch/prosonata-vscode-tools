@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-11-03
+
 ### Changed
 
 - **Available in the VS Code Marketplace and on Open VSX.** Updates now arrive
