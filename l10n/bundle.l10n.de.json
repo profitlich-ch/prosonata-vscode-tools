@@ -416,5 +416,6 @@
   "what should happen to {0}? close, keep or drop": "was soll mit {0} geschehen? close, keep oder drop",
   "what should happen to {0}? retry, move or drop": "was soll mit {0} geschehen? retry, move oder drop",
   "Without text": "Ohne Text",
-  "written to {0}, mode 0600": "nach {0} geschrieben, Modus 0600"
+  "written to {0}, mode 0600": "nach {0} geschrieben, Modus 0600",
+  "prosonata needs Node.js {0} or newer, this is {1} at {2}. Install a newer one; if the Git hook runs this one, run \"prosonata init\" again with the newer one.\n": "prosonata braucht Node.js {0} oder neuer, dies ist {1} unter {2}. Ein neueres installieren; läuft der Git-Hook mit diesem hier, danach \"prosonata init\" mit dem neueren erneut ausführen.\n"
 }

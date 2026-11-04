@@ -7,6 +7,13 @@ are in German.
 
 ## [Unreleased]
 
+### Added
+
+- **The CLI checks the Node version** before it does anything. On a Node
+  older than 18, which lacks the global `fetch`, it says so and names the
+  binary, instead of failing at the first request — in the Git hook, where
+  such a failure went unnoticed, possibly after state was already written.
+
 ### Changed
 
 - **Node.js 22 is the minimum** for the `prosonata` CLI and the Git hook,

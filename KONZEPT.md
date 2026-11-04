@@ -1507,7 +1507,12 @@ Grenze: Was dort installiert ist, bestimmt jemand anderes.
   bekommt: Node 20 ist seit April 2026 ohne Wartung, Node 22 hat sie bis April 2027. Fällt
   eine Linie aus der Wartung, rückt die Grenze nach – CI testet sie neben der aktiven LTS.
 - **Die CLI prüft beim Start die Node-Version** und meldet sie verständlich, statt an einem
-  fehlenden `fetch` zu scheitern.
+  fehlenden `fetch` zu scheitern – samt Pfad des Binaries, weil mit nvm oft mehrere Node
+  nebeneinander liegen. Geprüft wird gegen das, was der Code braucht (`OLDEST_NODE`, heute 18),
+  nicht gegen `engines.node`: Die Prüfung soll einen Absturz mitten im Schreiben verhindern,
+  nicht die Support-Grenze durchsetzen. Ein Node 20, auf dem alles läuft, abzuweisen, kostete
+  nur eine Buchung – im Hook still, weil dort jeder Fehler im `|| true` endet. Braucht der Code
+  einmal Neueres, rückt `OLDEST_NODE` mit.
 - **`engines.vscode` niedrig ansetzen, etwa 1.75.** Gebraucht werden nur `TreeDataProvider`,
   `extensionKind` und der `FileSystemWatcher` mit `RelativePattern` auf absolutem Pfad – das
   kam mit 1.64. Ein niedriges Minimum kostet nichts und erreicht mehr Leute.
