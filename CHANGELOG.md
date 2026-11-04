@@ -7,6 +7,12 @@ are in German.
 
 ## [Unreleased]
 
+### Changed
+
+- **Node.js 22 is the minimum** for the `prosonata` CLI and the Git hook,
+  up from 20, which no longer receives security updates. Nothing in the code
+  needs 22 yet; Node 20 is simply no longer tested.
+
 ## [1.0.1] — 2026-11-04
 
 ### Changed

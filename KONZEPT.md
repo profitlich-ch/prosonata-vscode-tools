@@ -1501,10 +1501,11 @@ läuft im Extension Host von VS Code – dort ist die Node-Version vorgegeben, s
 mitgelieferten Electron. Die **CLI läuft auf dem Node des Benutzers**, und das ist die harte
 Grenze: Was dort installiert ist, bestimmt jemand anderes.
 
-- **`engines.node: ">=20"`.** Gebraucht wird wenig – `fs`, `child_process`, `crypto` für die
+- **`engines.node: ">=22"`.** Gebraucht wird wenig – `fs`, `child_process`, `crypto` für die
   Branch-Kennung und `fetch`. Global verfügbares `fetch` gibt es ab Node 18, darunter bräuchte
-  es eine Abhängigkeit. Node 18 und 20 sind aus der Wartung; für etwas, das erst entsteht,
-  ist 20 die sinnvolle Untergrenze. Vor dem Festschreiben den aktuellen LTS-Stand prüfen.
+  es eine Abhängigkeit. Die Untergrenze ist die älteste Linie, die noch Sicherheitsupdates
+  bekommt: Node 20 ist seit April 2026 ohne Wartung, Node 22 hat sie bis April 2027. Fällt
+  eine Linie aus der Wartung, rückt die Grenze nach – CI testet sie neben der aktiven LTS.
 - **Die CLI prüft beim Start die Node-Version** und meldet sie verständlich, statt an einem
   fehlenden `fetch` zu scheitern.
 - **`engines.vscode` niedrig ansetzen, etwa 1.75.** Gebraucht werden nur `TreeDataProvider`,
