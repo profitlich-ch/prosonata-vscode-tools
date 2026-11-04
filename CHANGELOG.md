@@ -7,6 +7,12 @@ are in German.
 
 ## [Unreleased]
 
+### Changed
+
+- **The official ProSonata logo** replaces the previous icon in the
+  Marketplace, the extension list, the activity bar and the view, used with
+  ProSonata's permission.
+
 ## [1.0.0] — 2026-11-03
 
 ### Changed
