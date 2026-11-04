@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [1.0.1] — 2026-11-04
+
 ### Changed
 
 - **The official ProSonata logo** replaces the previous icon in the
