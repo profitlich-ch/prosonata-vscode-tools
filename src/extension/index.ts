@@ -60,7 +60,10 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(statusBar)
 
   const panel = new Panel(currentSession, currentContext, cachedState, budgetOf)
-  context.subscriptions.push(vscode.window.registerTreeDataProvider('prosonata.panel', panel))
+  // A TreeView rather than a bare provider: only the view carries the badge.
+  const view = vscode.window.createTreeView('prosonata.panel', { treeDataProvider: panel })
+  context.subscriptions.push(view)
+  panel.attach(view)
 
   mount(context.extensionUri, statusBar, panel)
 

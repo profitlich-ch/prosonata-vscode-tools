@@ -58,9 +58,24 @@ export interface Budget {
   planned: number
 }
 
+/** The rows that wait for an answer, grouped as the panel draws them. */
+interface Questions {
+  parked: TimeEntry[]
+  gaps: { from: number; until: number }[]
+  refused: TimeEntry[]
+  held: TimeEntry[]
+  resting: TimeEntry[]
+}
+
 export class Panel implements vscode.TreeDataProvider<PanelRow> {
   private readonly changed = new vscode.EventEmitter<void>()
   readonly onDidChangeTreeData = this.changed.event
+
+  /** Set once the view exists; the badge needs it, the rows do not. */
+  #view: vscode.TreeView<PanelRow> | null = null
+
+  /** What the badge shows now, so it is only set again when that changes. */
+  #badge = 0
 
   constructor(
     /** Null while there is no account yet — the panel then says so. */
@@ -72,8 +87,79 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     private readonly budget: (projectId: number) => Budget | undefined,
   ) {}
 
+  /** Hands the panel the view it is drawn in, for the badge on its icon. */
+  attach(view: vscode.TreeView<PanelRow>): void {
+    this.#view = view
+    this.#drawBadge()
+  }
+
   refresh(): void {
     this.changed.fire()
+    this.#drawBadge()
+  }
+
+  /*
+   * The badge counts questions, not running timers. VS Code's own badges count
+   * what waits for someone — unsaved files, changes to commit, updates — and a
+   * number that stands there all day while a timer runs would teach the eye to
+   * skip it. The running timer has the status bar. What does wait is an entry
+   * that nothing writes until someone answers, and that row helps only if the
+   * panel is open; the badge reaches the closed side bar too.
+   *
+   * It counts the rows the panel shows, from the same groups, so a click on the
+   * icon never leads to a panel without the question.
+   */
+  #drawBadge(): void {
+    if (!this.#view) return
+    const count = this.#questionCount()
+    if (count === this.#badge) return
+    this.#badge = count
+    this.#view.badge =
+      count === 0
+        ? undefined
+        : {
+            value: count,
+            tooltip: count === 1 ? t('One question waits for an answer') : t('{0} questions wait for an answer', count),
+          }
+  }
+
+  #questionCount(): number {
+    const session = this.session()
+    const context = this.context()
+    const state = this.snapshot()
+    // Without these the panel shows its welcome content, not a single question.
+    if (!session || !context || !state) return 0
+    const questions = this.#questions(session, context, state, this.#finished(session, context, state))
+    // Sleep is asked about in one row, however many gaps piled up.
+    return (
+      questions.parked.length +
+      (questions.gaps.length > 0 ? 1 : 0) +
+      questions.refused.length +
+      questions.held.length +
+      questions.resting.length
+    )
+  }
+
+  /** Entries of merged or deleted branches that are still open in this repository. */
+  #finished(session: Session, context: RepoContext, state: State): Session['finished'] {
+    return session.finished.filter(({ entry: done }) => {
+      const now = state.entries.find((candidate) => candidate.id === done.id)
+      return now?.state === 'open' && now.scope.repoPath === context.scope.repoPath
+    })
+  }
+
+  #questions(session: Session, context: RepoContext, state: State, finished: Session['finished']): Questions {
+    const finishedIds = new Set(finished.map(({ entry: done }) => done.id))
+    return {
+      parked: awaitingDecision(state, context.scope),
+      gaps: session.openSleepGaps(state),
+      refused: rejectedEntries(state),
+      held: heldEntries(state),
+      // Each entry in one row only: a finished branch says more than a resting one.
+      resting: restingEntries(state, session.clock.now(), session.config.restingDays).filter(
+        (entry) => !finishedIds.has(entry.id),
+      ),
+    }
   }
 
   getTreeItem(row: PanelRow): vscode.TreeItem {
@@ -197,10 +283,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
      * open unnoticed (KONZEPT.md §3, *Abschluss*). A suggestion — the click asks
      * for the final text, nothing closes on its own.
      */
-    const finished = session.finished.filter(({ entry: done }) => {
-      const now = state.entries.find((candidate) => candidate.id === done.id)
-      return now?.state === 'open' && now.scope.repoPath === context.scope.repoPath
-    })
+    const finished = this.#finished(session, context, state)
     for (const { entry: done, why } of finished) {
       rows.push(
         new PanelRow(
@@ -216,7 +299,8 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
     // Each entry in one row only: a finished branch says more than a resting one,
     // and both say more than «open».
     const now = session.clock.now()
-    const resting = restingEntries(state, now, session.config.restingDays).filter((entry) => !finishedIds.has(entry.id))
+    const questions = this.#questions(session, context, state, finished)
+    const resting = questions.resting
     const restingIds = new Set(resting.map((entry) => entry.id))
 
     // Only this working directory: an open entry of another project is none of
@@ -236,7 +320,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
       )
     }
 
-    for (const parked of awaitingDecision(state, context.scope)) {
+    for (const parked of questions.parked) {
       rows.push(
         new PanelRow(
           t('Closed elsewhere'),
@@ -252,7 +336,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
      * notification: whoever comes back to a woken machine finds it here, and a
      * popup fired while nobody was there is gone by then (KONZEPT.md §3).
      */
-    const gaps = session.openSleepGaps()
+    const gaps = questions.gaps
     if (gaps.length > 0) {
       const slept = session.sleptSeconds()
       const since = new Date(gaps[0]!.from)
@@ -271,7 +355,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
      * 26 October 2026 the stuck entries belonged to another repository, and the
      * only trace here was a count that would not go down (KONZEPT.md §4).
      */
-    for (const refused of rejectedEntries(state)) {
+    for (const refused of questions.refused) {
       const here = sameScope(refused.scope, context.scope)
       // From the cached config only: the panel redraws every second, and reading
       // another repository's would cost a handful of `git` processes each time.
@@ -295,7 +379,7 @@ export class Panel implements vscode.TreeDataProvider<PanelRow> {
      * every repository like the refused ones: it waits for an answer, and no
      * commit will give one (KONZEPT.md §3, *Offene main-Zeit beim Squash-Merge*).
      */
-    for (const held of heldEntries(state)) {
+    for (const held of questions.held) {
       const here = held.scope.repoPath === context.scope.repoPath
       rows.push(
         new PanelRow(

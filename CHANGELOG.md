@@ -13,6 +13,12 @@ are in German.
   older than 18, which lacks the global `fetch`, it says so and names the
   binary, instead of failing at the first request — in the Git hook, where
   such a failure went unnoticed, possibly after state was already written.
+- **A badge on the ProSonata icon** in the activity bar counts the questions
+  waiting in the panel: an entry closed elsewhere, rejected by ProSonata, held
+  at a merge or dormant for days, and time the machine slept through. Nothing
+  is written for these until someone answers, and until now they showed only
+  while the panel was open. Running timers are not counted; they stay in the
+  status bar.
 
 ### Changed
 

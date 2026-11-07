@@ -903,9 +903,12 @@ export class Session {
    *
    * Another window may have answered already — for «subtract» the state shows
    * it, for «keep» nothing else would. `sleepDecidedUntil` carries both.
+   *
+   * @param state A state already read — the panel passes its cached one, since
+   *   it draws every second and must not touch the disk for it.
    */
-  openSleepGaps(): { from: number; until: number }[] {
-    const decided = this.state().sleepDecidedUntil ?? 0
+  openSleepGaps(state: State = this.state()): { from: number; until: number }[] {
+    const decided = state.sleepDecidedUntil ?? 0
     return this.sleepGaps.filter((gap) => gap.until > decided)
   }
 

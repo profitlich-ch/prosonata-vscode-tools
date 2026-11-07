@@ -1595,6 +1595,17 @@ das gewesen.
   | Wartet auf Versand | vorgemerkte Schreibvorgänge, mit dem Grund, falls es hakt | jetzt senden |
   | Hook bucht nichts | `~/.prosonata/cli.cjs` fehlt, der Hook liefe ins Leere | Hook neu einrichten |
 
+  **Das Badge am Symbol in der Aktivitätsleiste zählt Fragen, keine laufenden Timer.** Gezählt
+  werden die Zeilen, bei denen nichts geschrieben wird, bis jemand antwortet: *Anderswo
+  abgeschlossen*, *Rechner schlief* (eine Zeile, wie viele Lücken auch anstehen), *Abgelehnt*,
+  *Vor dem Merge von …* und *Ruht seit N Tagen*. VS Codes eigene Badges zählen, was auf jemanden
+  wartet – ungespeicherte Dateien, Änderungen zum Committen, Updates. Eine Zahl, die den ganzen
+  Tag dasteht, solange ein Timer läuft, gewöhnt das Auge daran, sie zu überlesen; der laufende
+  Timer hat die Statusleiste. Die Fragen dagegen stehen nur im Panel, und das ist oft zu. Das
+  Badge zählt dieselben Gruppen, aus denen die Zeilen entstehen – ein Klick aufs Symbol führt
+  nie zu einem Panel ohne die Frage. Nicht gezählt werden Vorschläge wie *Branch gemergt*, die
+  auch ohne Antwort nichts aufhalten.
+
   **Eine Zeile, die einen bestimmten Eintrag benennt, muss ihn auch weitergeben.** Die Zeile
   *Offen · branch* führt die Kennung ihres Eintrags im Befehl mit, und der Wrapper, der Sitzung
   und Kontext einsetzt, hat die Argumente durchzureichen. Fehlt das, fällt der Befehl auf „der
