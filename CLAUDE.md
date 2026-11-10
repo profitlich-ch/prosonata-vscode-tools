@@ -60,13 +60,13 @@ ls -d ~/.vscode/extensions/*prosonata*      # installierte Version
 grep '"version"' package.json               # Stand im Repo
 ```
 
-## Der Hook ist ein eigener Prozess
+## Die Hooks sind eigene Prozesse
 
-`post-commit` läuft ohne VS Code, oft aus einem GUI-Client ohne nvm im `PATH`. Deshalb schreibt
-`prosonata init` absolute Pfade in den Hook, und deshalb liegt der Zustand in `~/.prosonata/`
-statt in VS Codes `globalState` (KONZEPT.md §7 und §8).
+`post-commit` und `post-checkout` laufen ohne VS Code, oft aus einem GUI-Client ohne nvm im
+`PATH`. Deshalb schreibt `prosonata init` absolute Pfade in die Hooks, und deshalb liegt der
+Zustand in `~/.prosonata/` statt in VS Codes `globalState` (KONZEPT.md §7 und §8).
 
-Daraus folgt für jede Änderung am Schreibweg: **Extension, CLI und Hook schreiben gleichzeitig.**
+Daraus folgt für jede Änderung am Schreibweg: **Extension, CLI und Hooks schreiben gleichzeitig.**
 Wer zwischen Lesen und Schreiben einen API-Aufruf legt, muss das Ergebnis auf den *aktuellen*
 Zustand anwenden statt ihn zu ersetzen — der Compare-and-Swap schützt die Datei, nicht den Aufruf
 (KONZEPT.md §7).
