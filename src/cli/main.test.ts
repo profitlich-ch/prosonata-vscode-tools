@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { paths } from '../core/config.js'
 import { describeRepo } from '../core/git.js'
 import { rememberCategory, rememberProject } from '../core/repo-config.js'
+import { Session } from '../core/session.js'
 import { StateStore } from '../core/state-store.js'
 import { emptyState, type TimeEntry } from '../core/types.js'
 import { main } from './main.js'
@@ -356,6 +357,141 @@ describe('open main time on a new branch', () => {
     await main(['post-commit'], repo)
 
     expect(err).not.toContain('take main')
+  })
+})
+
+/*
+ * The hook does at the switch what the editor's HEAD watch does (KONZEPT.md §5):
+ * without it an agent's `git switch -c thema`, twenty minutes of work and a
+ * commit put the twenty minutes on main.
+ */
+describe('the post-checkout hook', () => {
+  const twentyMinutes = 20 * 60
+
+  /** A timer on main that started twenty minutes ago. */
+  function runningOnMain(): void {
+    openOnMain(0)
+    new StateStore(paths.state()).update((state) => ({
+      ...state,
+      timers: state.timers.map((timer) => ({ ...timer, startedAt: Date.now() - twentyMinutes * 1000 })),
+    }))
+  }
+
+  function timers() {
+    return new StateStore(paths.state()).read().state.timers
+  }
+
+  function head(): string {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8' }).trim()
+  }
+
+  /** What git passes: previous HEAD, new HEAD, and 1 for a branch checkout. */
+  async function checkedOut(flag = '1'): Promise<number> {
+    return await main(['post-checkout', head(), head(), flag], repo)
+  }
+
+  it('books the running segment to main at the switch and starts nothing on the new branch', async () => {
+    runningOnMain()
+    git(repo, 'switch', '--quiet', '-c', 'formularseite')
+
+    expect(await checkedOut()).toBe(0)
+
+    expect(stored()?.scope.branch).toBe('main')
+    expect(stored()?.seconds).toBeGreaterThanOrEqual(twentyMinutes)
+    expect(stored()?.seconds).toBeLessThan(twentyMinutes + 60)
+    expect(timers().every((timer) => timer.startedAt === null)).toBe(true)
+    expect(timers().some((timer) => timer.scope.branch === 'formularseite')).toBe(false)
+    expect(err).toContain('switched from main — the time so far went there, and the timer is paused. To count on formularseite: "prosonata start"')
+  })
+
+  it('asks about the main time it just booked, with one note for an agent', async () => {
+    runningOnMain()
+    git(repo, 'switch', '--quiet', '-c', 'formularseite')
+
+    await checkedOut()
+
+    expect(err).toContain('0:20:00 open on main — if it belongs to this branch: "prosonata take main"')
+    expect(err.split(AI_NOTE)).toHaveLength(2)
+  })
+
+  it('asks about open main time even when no timer was running', async () => {
+    openOnMain(40 * 60)
+    git(repo, 'switch', '--quiet', '-c', 'formularseite')
+
+    await checkedOut()
+
+    expect(err).not.toContain('switched from')
+    expect(err).toContain('0:40:00 open on main — if it belongs to this branch: "prosonata take main"')
+    expect(err).toContain(AI_NOTE)
+  })
+
+  it('leaves the timer running at a file checkout', async () => {
+    runningOnMain()
+    git(repo, 'switch', '--quiet', '-c', 'formularseite')
+
+    await checkedOut('0')
+
+    expect(timers()[0]?.startedAt).not.toBeNull()
+    expect(err).toBe('')
+  })
+
+  // Each step of a rebase would otherwise cut a segment of its own.
+  it('leaves the timer running on a detached HEAD', async () => {
+    runningOnMain()
+    git(repo, 'checkout', '--quiet', '--detach')
+
+    await checkedOut()
+
+    expect(timers()[0]?.startedAt).not.toBeNull()
+    expect(err).toBe('')
+  })
+
+  it('leaves the timer running when the branch stays the same', async () => {
+    runningOnMain()
+
+    await checkedOut()
+
+    expect(timers()[0]?.startedAt).not.toBeNull()
+    expect(err).toBe('')
+  })
+
+  /*
+   * With a window open the editor's HEAD watch comes second. It must not cut
+   * again, and it must still ask whether to count on — the question it would
+   * have asked had it been first.
+   */
+  it('leaves the editor nothing to cut, and tells it a switch happened', async () => {
+    runningOnMain()
+    const before = Date.now()
+    git(repo, 'switch', '--quiet', '-c', 'formularseite')
+    await checkedOut()
+
+    const session = Session.open()
+    const context = session.context(repo)!
+    const segments = session.segments.read().length
+    const seconds = stored()?.seconds
+
+    expect(session.reconcileBranchSwitch(context)).toBeNull()
+    expect(session.segments.read()).toHaveLength(segments)
+    expect(stored()?.seconds).toBe(seconds)
+    expect(session.switchedByHook(context, before)).toBe('main')
+    // A switch from before the editor's last look is not this one.
+    expect(session.switchedByHook(context, Date.now() + 1)).toBeNull()
+  })
+
+  it('forgets the switch once the timer runs again', async () => {
+    runningOnMain()
+    const before = Date.now()
+    git(repo, 'switch', '--quiet', '-c', 'formularseite')
+    await checkedOut()
+    git(repo, 'switch', '--quiet', 'main')
+
+    await main(['start'], repo)
+
+    expect(timers()[0]?.switchedAt).toBeUndefined()
+    git(repo, 'switch', '--quiet', 'formularseite')
+    const session = Session.open()
+    expect(session.switchedByHook(session.context(repo)!, before)).toBeNull()
   })
 })
 

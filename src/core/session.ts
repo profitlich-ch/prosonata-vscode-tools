@@ -174,15 +174,20 @@ export class Session {
   }
 
   /**
-   * A branch switch in the terminal, with no VS Code window open, is noticed by
-   * nobody while it happens — a `post-checkout` hook is deliberately rejected
-   * (KONZEPT.md §5). It surfaces here, at the next write access, in retrospect
-   * and without a known moment.
+   * A timer still running on another branch of this working directory: the
+   * branch has changed under it (KONZEPT.md §5). Its time so far goes to the
+   * scope it was started in, and it is paused — never started on the new one.
    *
-   * The whole elapsed time therefore goes to the scope it was started in, and
-   * the timer is paused. Asking is left to the next window.
+   * Called at the switch itself by the `post-checkout` hook and by the editor's
+   * HEAD watch; otherwise at the next write access, in retrospect and without a
+   * known moment, when neither saw the switch. Whoever comes second finds no
+   * running timer and returns null, so a switch is cut once.
+   *
+   * @param options.atSwitch Set by the hook: the timer remembers the moment, so
+   *   that the editor coming second still asks whether to count on.
+   * @returns The branch whose timer was paused, or null.
    */
-  reconcileBranchSwitch(context: RepoContext): string | null {
+  reconcileBranchSwitch(context: RepoContext, options: { atSwitch?: boolean } = {}): string | null {
     let stray: { scope: Scope; startedAt: number } | null = null
     const now = this.clock.now()
     this.store.update((state) => {
@@ -197,7 +202,10 @@ export class Session {
 
       stray = { scope: timer.scope, startedAt: timer.startedAt }
       // One moment for the booking and the log line, so the two cannot differ by a second.
-      return pause(state, { now: () => now, today: () => this.clock.today() }, timer.scope)
+      const next = pause(state, { now: () => now, today: () => this.clock.today() }, timer.scope)
+      const paused = next.timers.find((candidate) => candidate.id === timer.id)
+      if (options.atSwitch && paused) paused.switchedAt = now
+      return next
     })
     if (stray === null) return null
 
@@ -206,6 +214,24 @@ export class Session {
     const { scope, startedAt } = stray as { scope: Scope; startedAt: number }
     this.recordSegmentAt({ ...context, scope }, startedAt, now, 'pause')
     return scope.branch
+  }
+
+  /**
+   * The branch whose timer the `post-checkout` hook paused at or after `since`,
+   * in this working directory, or null. The editor asks this when its own
+   * `reconcileBranchSwitch` found nothing left to cut: the switch happened, the
+   * hook was just quicker.
+   */
+  switchedByHook(context: RepoContext, since: number): string | null {
+    const timer = this.state().timers.find(
+      (candidate) =>
+        candidate.startedAt === null &&
+        candidate.switchedAt !== undefined &&
+        candidate.switchedAt >= since &&
+        candidate.scope.repoPath === context.scope.repoPath &&
+        candidate.scope.branch !== context.scope.branch,
+    )
+    return timer?.scope.branch ?? null
   }
 
   /**

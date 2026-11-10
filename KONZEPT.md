@@ -889,8 +889,9 @@ Stelle; ein laufender Timer fliesst von da an in ihn. Ohne diese Ausnahme liefe 
 ins Leere, denn `git start` und `prosonata start` sind der übliche Beginn eines Pakets, und danach
 hätte `take` immer abgelehnt.
 
-**Gefragt wird, wenn der Branch noch nichts Eigenes hat** und auf `main` Zeit offen steht – beim
-`prosonata start` dort und bei jedem Commit, bis der Branch eigene Zeit trägt. Die CLI nennt
+**Gefragt wird, wenn der Branch noch nichts Eigenes hat** und auf `main` Zeit offen steht – schon
+beim Wechsel dorthin (`post-checkout`, Abschnitt 5), beim `prosonata start` dort und bei jedem
+Commit, bis der Branch eigene Zeit trägt. Die CLI nennt
 die Zeit und `take`, der Editor bietet in seinen Fragen zum Branch-Wechsel einen Knopf
 «… von main mitnehmen». Unbeantwortet hält der Squash-Merge die Zeit später ohnehin an, und die
 Frage kommt als `held` zurück; jetzt gestellt, wird sie gestellt, solange man es noch weiss.
@@ -1117,11 +1118,37 @@ Eintrag auf einen anderen Branch übernehmen*). Von selbst geschieht das nie: Ob
 Arbeit gehört, die mitwandert, oder zu einer, die auf dem alten Branch fertig war, weiss nur, wer
 sie gemessen hat.
 
-Geschieht der Wechsel im Terminal **ohne offenes VS-Code-Fenster**, bemerkt es niemand – ein
-`post-checkout`-Hook ist bewusst verworfen (Abschnitt 11). Der Wechsel fällt dann erst beim
-nächsten Schreibzugriff auf, rückblickend und ohne bekannten Zeitpunkt. In diesem Fall geht
-die gesamte Zeit an den alten Scope, der Timer wird pausiert, und die Frage kommt beim
-nächsten Öffnen.
+**Ohne offenes VS-Code-Fenster schneidet der `post-checkout`-Hook.** Er tut im Moment des
+Wechsels, was die HEAD-Beobachtung im Editor tut: Das laufende Segment geht an den alten Scope,
+der Timer wird pausiert und **nicht** auf dem neuen Branch gestartet, und steht auf `main`
+offene Zeit, fragt die Ausgabe nach `take`, mit «Hinweis KI». Das widerspricht Abschnitt 11
+nicht: Verworfen ist dort das automatische Starten, nicht das Schneiden und Fragen.
+
+Vorher fiel ein solcher Wechsel erst beim nächsten Schreibzugriff auf, rückblickend und ohne
+bekannten Zeitpunkt, und die **ganze** Zeit seit dem Start ging an den alten Scope, auch die
+Arbeit, die schon auf dem neuen Branch geschah. Das traf vor allem Agenten-Sitzungen ohne
+Editor: `git switch -c thema`, zwanzig Minuten Arbeit, Commit – die zwanzig Minuten landeten
+auf `main`, und `take` konnte sie von der alten `main`-Zeit nicht mehr trennen. Wo der Hook
+fehlt – ein Repository, dessen Projekt einen eigenen `post-checkout` mitliefert, oder einer,
+der noch nicht nachgerüstet ist –, gilt dieser Rückfallweg weiter.
+
+Was der Hook auslässt, und warum:
+
+- **Datei-Checkouts.** `git checkout -- datei` ruft denselben Hook, mit `0` statt `1` als
+  drittem Argument.
+- **Losgelösten HEAD.** Rebase, Bisect und `git checkout <sha>` arbeiten darauf; geschnitten
+  würde sonst bei jedem Schritt ein Segment auf einen Branch namens `HEAD`. Gemessen: Ein
+  Rebase ruft den Hook nur für den losgelösten Checkout am Anfang und hängt HEAD am Ende ohne
+  Hook wieder an.
+- **Denselben Branch.** Ob der Branch wechselte, steht nicht in den zwei SHAs – ein neuer
+  Branch an derselben Stelle hat denselben Commit –, sondern am Timer: `reconcileBranchSwitch`
+  schneidet nur einen, der auf einem anderen Branch läuft.
+
+**Läuft der Editor, kommt er als Zweiter** und findet keinen laufenden Timer mehr; geschnitten
+wird einmal. Damit er trotzdem fragt, ob weitergezählt wird, merkt sich der Timer den Moment
+des Schnitts (`switchedAt`). Der Editor wertet ihn nur aus, wenn er nach seinem letzten Blick
+auf HEAD liegt – ein alter Schnitt von heute Morgen ist nicht dieser Wechsel –, und der nächste
+Start löscht ihn.
 
 **Worktrees beachten.** Paralleles Arbeiten an mehreren Branches geschieht über
 `git worktree` oder mehrere Klone. In einem Worktree ist `.git` eine **Datei**, nicht ein
@@ -1686,9 +1713,22 @@ das gewesen.
 
 ### Hook
 
-`post-commit`, der einzige Hook. Ruft die CLI, die den gemeinsamen Kern nutzt. Er schneidet
-das Segment, schreibt den lokalen Zustand und annotiert die SHA – **gesendet wird nicht im
-Hook**, sondern aufgeschoben (Abschnitt 4). Der Commit wartet dadurch nie auf das Netz.
+`post-commit` bucht. Er ruft die CLI, die den gemeinsamen Kern nutzt, schneidet das Segment,
+schreibt den lokalen Zustand und annotiert die SHA – **gesendet wird nicht im Hook**, sondern
+aufgeschoben (Abschnitt 4). Der Commit wartet dadurch nie auf das Netz.
+
+`post-checkout` schneidet nur, beim Branch-Wechsel (Abschnitt 5). Er geht nie ans Netz und
+wartet auf keine Antwort, denn ein Checkout darf an ihm weder hängen noch scheitern. Beide
+installiert `prosonata init`, jeden in seine eigene Datei; die Reparatur beim Start der
+Extension vergleicht beide Blöcke und rüstet so auch Repositories nach, die vor dem zweiten
+Hook eingerichtet wurden. Liefert das Projekt einen eigenen `post-checkout` mit, bleibt er
+unberührt und der `post-commit` wird trotzdem installiert; gewarnt wird dann nur bei der
+Einrichtung, nicht bei jedem Fensterstart, denn es fehlt nur der Schnitt im Moment des Wechsels.
+
+**`post-checkout` verlässt das Skript nicht vorzeitig.** Statt `|| exit 0` steht der Aufruf in
+einem `if`: In dieser Datei steht oft auch Git LFS, und eine Zeile, die nach unserem Block
+eingetragen wird, liefe sonst nie. Der `post-commit` hat noch das `exit 0`; für ihn gilt
+dasselbe, nur ist dort ein fremder Nachbar seltener.
 
 **Der Hook sagt, was noch zu tun ist**, denn seine Ausgabe liest jeder, der committet, auch ein
 Agent – `prosonata status` dagegen nur, wer daran denkt:
@@ -2131,7 +2171,9 @@ Nicht erneut vorschlagen:
 - **Automatischer Timer-Start** durch `post-checkout`, `post-merge`, Editor-Öffnen oder
   Branch-Wechsel. Verworfen ist das **Starten**, nicht das Fragen: Seit einer Rückfrage bei einem
   erstmals gesehenen Branch (Abschnitt 3) bemerkt das Werkzeug den Zeitpunkt und legt ihn vor –
-  begonnen wird der Timer erst durch eine Antwort. Diese Unterscheidung trägt Abschnitt 1.
+  begonnen wird der Timer erst durch eine Antwort. Diese Unterscheidung trägt Abschnitt 1. Der
+  `post-checkout`-Hook hält sich daran: Er schneidet und pausiert, er fragt, aber er startet nie
+  (Abschnitt 5).
 - **Manuelles Beenden eines Timers.** Ein Timer kennt Start und Pause. Abgeschlossen werden
   Zeiteinträge, nicht Timer.
 - **Versand beim Push (`pre-push`).** Bindet an ein Remote, versagt bei tagelanger lokaler
@@ -2242,7 +2284,8 @@ Gebaut sind die Punkte 1 bis 9 der Reihenfolge unten, dazu Zeitkorrektur, Verwer
 Zuschlagen, Segmentprotokoll samt Bericht, der Abgleich über mehrere Rechner, der Modus *pro
 Branch und Tag*, die Schlaferkennung, das Durchsehen und Berichtigen der Zeiteinträge, der
 Anspruch vor dem Anlegen (Abschnitt 7), die Maschinendaten in `apiComments` (Abschnitt 3) und
-das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnitt 4).
+das Anhalten abgelehnter Einträge samt Erkennung gelöschter Projekte (Abschnitt 4) und der
+`post-checkout`-Hook, der beim Branch-Wechsel schneidet (Abschnitt 5).
 
 **Noch nicht gebaut** – jeweils an Ort und Stelle gekennzeichnet:
 

@@ -4,8 +4,8 @@ import { createInterface } from 'node:readline/promises'
 
 import { inProsonataOrder, type Project } from '../core/api.js'
 import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
-import { describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
-import { installHook, isInstalled, publishCli, publishedCli } from '../core/hooks.js'
+import { currentBranch, describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
+import { installHooks, isInstalled, publishCli, publishedCli, type InstallResult } from '../core/hooks.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid, setMode } from '../core/repo-config.js'
 import type { EntryMode, TimeEntry } from '../core/types.js'
 import { noteFor, readAdjustment } from '../core/adjust.js'
@@ -45,7 +45,7 @@ import { t } from '../core/l10n.js'
 
 /** A function, not a constant: `t()` must run after index.ts has chosen the language. */
 function usage(): string {
-  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hook\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [no|branch] [text] close the open time entry and send it; with no or branch the one of another branch, without text with the one it has\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [no retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [no close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata held [no attach|close|drop]\n                                    main time held at a squash merge: to the merged branch, own text, discard\n  prosonata sent [count|no text|drop]\n                                    entries sent from here: list, change the text, delete one without time\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
+  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hooks\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [no|branch] [text] close the open time entry and send it; with no or branch the one of another branch, without text with the one it has\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [no retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [no close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata held [no attach|close|drop]\n                                    main time held at a squash merge: to the merged branch, own text, discard\n  prosonata sent [count|no text|drop]\n                                    entries sent from here: list, change the text, delete one without time\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n  prosonata post-checkout           called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
 }
 
 export async function main(argv: string[], cwd = process.cwd()): Promise<number> {
@@ -105,6 +105,8 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return adjust(cwd, argument)
       case 'post-commit':
         return await postCommit(cwd)
+      case 'post-checkout':
+        return postCheckout(cwd, argv.slice(1))
       case '--help':
       case '-h':
         return help('')
@@ -247,11 +249,11 @@ async function chooseProject(cwd: string): Promise<number> {
   }
 
   const cli = publishCliOrOwnPath()
-  const hook = installHook(repo.root, { node: process.execPath, cli })
-  process.stdout.write(`${HOOK_LINE[hook.action](hook.path)}\n`)
-  if (hook.excluded) {
-    process.stdout.write(`  ${t('lies in the working tree (core.hooksPath) and is listed in .git/info/exclude')}\n`)
-  }
+  const hooks = installHooks(repo.root, { node: process.execPath, cli })
+  for (const hook of hooks) reportHook(hook)
+  // Without the post-commit a commit books nothing, so this is no "ready". A
+  // project's own post-checkout costs only the cut at the switch.
+  if (hooks.some((hook) => hook.hook === 'post-commit' && hook.action === 'tracked')) return 1
   process.stdout.write(`${t('ready — "{0}" in {1}', project.projectName, repo.root)}\n`)
   return 0
 }
@@ -1129,6 +1131,49 @@ async function postCommit(cwd: string): Promise<number> {
 }
 
 /**
+ * Called by the `post-checkout` hook with git's three arguments: the previous
+ * HEAD, the new one, and 1 for a branch checkout. Does at the moment of the
+ * switch what the editor's HEAD watch does — cuts the running segment and books
+ * it to the branch it was started on, pauses, asks about main time
+ * (KONZEPT.md §5). It never starts the timer on the new branch: that is a
+ * person's answer (§11).
+ *
+ * Offline and without a question to wait for: a checkout must never stall or
+ * fail because of this. Whether the branch really changed is not read from the
+ * two SHAs — a new branch made where one stands has the same commit — but from
+ * the timer: `reconcileBranchSwitch` cuts only one that runs on another branch.
+ */
+function postCheckout(cwd: string, args: string[]): number {
+  try {
+    // 0 is a file checkout, `git checkout -- file`: no branch changed.
+    if (args[2] !== '1') return 0
+    /*
+     * A detached HEAD is every step of a rebase or a bisect, and
+     * `git checkout <sha>`. Cut there, each step would book a segment to a
+     * branch called HEAD; the switch that counts is the one back onto a branch.
+     */
+    if (currentBranch(cwd) === null) return 0
+
+    const session = Session.open()
+    const context = session.context(cwd)
+    if (!context) return 0
+
+    const from = session.reconcileBranchSwitch(context, { atSwitch: true })
+    if (from !== null) {
+      process.stderr.write(
+        `prosonata: ${t('switched from {0} — the time so far went there, and the timer is paused. To count on {1}: "prosonata start"', from, context.scope.branch)}\n`,
+      )
+    }
+    const asked = askAboutMainTime(session, context, 'prosonata: ')
+    if (from !== null && !asked) askTheUser('prosonata: ')
+    return 0
+  } catch (error) {
+    process.stderr.write(`prosonata: ${(error as Error).message}\n`)
+    return 0
+  }
+}
+
+/**
  * The line for an agent reading along: what comes before it is a person's to
  * decide. Spelled out in the output because an agent acts on what it reads now,
  * not on a rule it read an hour ago (docs/ki-anbindung.md).
@@ -1179,14 +1224,15 @@ function remindOfFinishedBranches(session: Session, context: RepoContext, squash
  * ask whether it came along (KONZEPT.md §3, *übernehmen*). Asked, never done —
  * only whoever measured it knows.
  */
-function askAboutMainTime(session: Session, context: RepoContext, prefix = ''): void {
+function askAboutMainTime(session: Session, context: RepoContext, prefix = ''): boolean {
   const main = session.mainTimeToTake(context)
-  if (!main) return
+  if (!main) return false
   const seconds = main.seconds + main.foreignSeconds + runningSeconds(session.state(), session.clock, main.scope)
   process.stderr.write(
     `${prefix}${t('{0} open on {1} — if it belongs to this branch: "prosonata take {1}"', format(seconds), main.scope.branch)}\n`,
   )
   askTheUser(prefix)
+  return true
 }
 
 /**
@@ -1354,12 +1400,24 @@ function notARepo(): number {
   return 1
 }
 
-/** What `installHook` did, as a whole sentence per action. */
-const HOOK_LINE: Record<'created' | 'appended' | 'updated' | 'unchanged', (path: string) => string> = {
+/** What `installHooks` did, as a whole sentence per action. */
+const HOOK_LINE: Record<InstallResult['action'], (path: string) => string> = {
   created: (path) => t('Hook created: {0}', path),
   appended: (path) => t('Hook appended: {0}', path),
   updated: (path) => t('Hook updated: {0}', path),
   unchanged: (path) => t('Hook unchanged: {0}', path),
+  tracked: (path) => t('{0} belongs to the repository — this tool does not write there', path),
+}
+
+function reportHook(hook: InstallResult): void {
+  if (hook.action === 'tracked') {
+    process.stderr.write(`${HOOK_LINE.tracked(hook.path)}\n`)
+    return
+  }
+  process.stdout.write(`${HOOK_LINE[hook.action](hook.path)}\n`)
+  if (hook.excluded) {
+    process.stdout.write(`  ${t('lies in the working tree (core.hooksPath) and is listed in .git/info/exclude')}\n`)
+  }
 }
 
 /** `1:23:45`, the same shape the status bar shows. */

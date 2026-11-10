@@ -77,6 +77,8 @@ async function workOnce(active: Session, context: RepoContext): Promise<void> {
 }
 
 let lastHead: string | null = null
+/** When `lastHead` was last read unchanged: a switch happened after this. */
+let lastHeadAt = 0
 
 /**
  * HEAD is watched only while a timer runs — a single file pointer, not an
@@ -85,6 +87,8 @@ let lastHead: string | null = null
  */
 function watchHead(active: Session, context: RepoContext): void {
   const head = readHead(context.repo.headFile)
+  const since = lastHeadAt
+  lastHeadAt = active.clock.now()
   if (head === null || lastHead === head) {
     lastHead ??= head
     return
@@ -101,8 +105,11 @@ function watchHead(active: Session, context: RepoContext): void {
    * at was mistaken for the old one and stopped — and `startedAt` was cleared
    * without booking, so the running segment was thrown away while the message
    * claimed it had gone to the old branch.
+   *
+   * The `post-checkout` hook usually got there first and left nothing to cut;
+   * the question whether to count on is still ours to ask.
    */
-  const from = active.reconcileBranchSwitch(context)
+  const from = active.reconcileBranchSwitch(context) ?? active.switchedByHook(context, since)
   if (from === null) return askAboutNewBranch(active, context)
 
   const keepCounting = t('Keep counting here')

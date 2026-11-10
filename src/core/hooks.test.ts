@@ -4,7 +4,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
-import { HookIsTracked, hookBlock, hookNeedsRepair, hookPath, installHook, isInstalled, publishCli, publishedCli } from './hooks.js'
+import {
+  HookIsTracked,
+  hookBlock,
+  hookNeedsRepair,
+  hookPath,
+  installHook,
+  installHooks,
+  isInstalled,
+  publishCli,
+  publishedCli,
+} from './hooks.js'
 
 const paths = { node: '/opt/node/v22/bin/node', cli: '/ext/dist/cli.cjs' }
 
@@ -91,7 +101,7 @@ describe('installing', () => {
 describe('repair', () => {
   it('is due when the recorded Node path no longer matches', () => {
     const dir = repo()
-    installHook(dir, paths)
+    installHooks(dir, paths)
 
     expect(hookNeedsRepair(dir, paths)).toBe(false)
     // What happens after an nvm upgrade.
@@ -109,6 +119,110 @@ describe('repair', () => {
 
     expect(hookNeedsRepair(dir, paths)).toBe(true)
     expect(installHook(dir, paths).action).toBe('updated')
+  })
+})
+
+/*
+ * The second hook cuts the running segment at a branch switch (KONZEPT.md §5).
+ * It shares the file with Git LFS more often than not, and it runs at every
+ * checkout — of files, too.
+ */
+describe('the post-checkout hook', () => {
+  /** Runs the hook file the way git would, and says whether a line after ours still ran. */
+  function runsWhatFollows(dir: string, ...args: string[]): boolean {
+    const path = hookPath(dir, 'post-checkout')
+    const marker = join(dir, 'after-ours')
+    writeFileSync(path, `${readFileSync(path, 'utf8')}touch "${marker}"\n`)
+    execFileSync('sh', [path, ...args], { cwd: dir })
+    return existsSync(marker)
+  }
+
+  it('calls the CLI with the three arguments of git, and never fails the checkout', () => {
+    const block = hookBlock(paths, 'post-checkout')
+
+    expect(block).toContain('"/ext/dist/cli.cjs" post-checkout "$1" "$2" "$3" || true')
+    expect(block).toContain('ELECTRON_RUN_AS_NODE=1 "/opt/node/v22/bin/node"')
+  })
+
+  it('starts Node only for a branch checkout in a configured repository', () => {
+    const block = hookBlock(paths, 'post-checkout')
+
+    expect(block).toContain('if [ "$3" = 1 ] && git config --local --get prosonata.active')
+  })
+
+  // `|| exit 0`, as in the post-commit, would end the script before Git LFS.
+  it('lets a line after it run, for a file checkout and an unconfigured repository alike', () => {
+    const dir = repo()
+    installHook(dir, paths, 'post-checkout')
+
+    expect(runsWhatFollows(dir, 'a', 'b', '0')).toBe(true)
+    expect(runsWhatFollows(dir, 'a', 'b', '1')).toBe(true)
+  })
+
+  it('is installed beside the post-commit, each in its own file', () => {
+    const dir = repo()
+
+    const results = installHooks(dir, paths)
+
+    expect(results.map((result) => [result.hook, result.action])).toEqual([
+      ['post-commit', 'created'],
+      ['post-checkout', 'created'],
+    ])
+    expect(readFileSync(hookPath(dir, 'post-commit'), 'utf8')).toContain('cli.cjs" post-commit')
+    expect(readFileSync(hookPath(dir, 'post-checkout'), 'utf8')).toContain('cli.cjs" post-checkout')
+    expect(isInstalled(dir, 'post-checkout')).toBe(true)
+  })
+
+  it('keeps the post-checkout of Git LFS', () => {
+    const dir = repo()
+    const lfs = '#!/bin/sh\ngit lfs post-checkout "$@"\n'
+    writeFileSync(hookPath(dir, 'post-checkout'), lfs, { mode: 0o755 })
+
+    expect(installHook(dir, paths, 'post-checkout').action).toBe('appended')
+    expect(readFileSync(hookPath(dir, 'post-checkout'), 'utf8')).toMatch(/^#!\/bin\/sh\ngit lfs post-checkout "\$@"\n/)
+  })
+
+  // Every repository set up before this hook existed.
+  it('makes a repository with only the post-commit due for repair, and the repair adds it', () => {
+    const dir = repo()
+    installHook(dir, paths)
+
+    expect(hookNeedsRepair(dir, paths)).toBe(true)
+    expect(installHooks(dir, paths).map((result) => result.action)).toEqual(['unchanged', 'created'])
+    expect(hookNeedsRepair(dir, paths)).toBe(false)
+  })
+
+  /*
+   * The post-commit is the one that books. A project that ships its own
+   * post-checkout loses the cut at the switch, not its time tracking.
+   */
+  it('leaves a tracked post-checkout alone and still installs the post-commit', () => {
+    const dir = repo()
+    execFileSync('git', ['config', '--local', 'core.hooksPath', '.githooks'], { cwd: dir })
+    mkdirSync(join(dir, '.githooks'))
+    writeFileSync(join(dir, '.githooks', 'post-checkout'), '#!/bin/sh\necho projekt\n', { mode: 0o755 })
+    execFileSync('git', ['add', '.githooks/post-checkout'], { cwd: dir })
+
+    const results = installHooks(dir, paths)
+
+    expect(results.map((result) => [result.hook, result.action])).toEqual([
+      ['post-commit', 'created'],
+      ['post-checkout', 'tracked'],
+    ])
+    expect(readFileSync(join(dir, '.githooks', 'post-checkout'), 'utf8')).not.toContain('prosonata')
+    expect(readFileSync(join(dir, '.git', 'info', 'exclude'), 'utf8')).toContain('/.githooks/post-commit')
+  })
+
+  it('keeps both hooks out of commits when they land in the working tree', () => {
+    const dir = repo()
+    execFileSync('git', ['config', '--local', 'core.hooksPath', '.githooks'], { cwd: dir })
+
+    installHooks(dir, paths)
+
+    const exclude = readFileSync(join(dir, '.git', 'info', 'exclude'), 'utf8')
+    expect(exclude).toContain('/.githooks/post-commit')
+    expect(exclude).toContain('/.githooks/post-checkout')
+    expect(execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' })).toBe('')
   })
 })
 

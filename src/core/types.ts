@@ -142,6 +142,12 @@ export interface Timer {
   startedAt: number | null
   /** The entry this timer's time flows into. */
   entryId: string
+  /**
+   * Epoch milliseconds the `post-checkout` hook paused this timer at a branch
+   * switch. Read by the editor, which finds the timer already paused and would
+   * otherwise not ask whether to count on; cleared by the next start.
+   */
+  switchedAt?: number
 }
 
 /** A write to ProSonata that is due but has not gone out yet (KONZEPT.md §4). */

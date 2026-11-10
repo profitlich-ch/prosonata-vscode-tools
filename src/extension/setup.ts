@@ -3,7 +3,7 @@ import * as vscode from 'vscode'
 import { inProsonataOrder, type Category, type Project } from '../core/api.js'
 import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { type GitRepo } from '../core/git.js'
-import { hookNeedsRepair, installHook, publishCli } from '../core/hooks.js'
+import { hookNeedsRepair, installHooks, publishCli, type InstallResult } from '../core/hooks.js'
 import { t } from '../core/l10n.js'
 import { readRepoConfig, rememberCategory, rememberProject, setGrid } from '../core/repo-config.js'
 import { applyCategory, applyProject, unfinishedOnOtherProject } from '../core/tracking.js'
@@ -215,7 +215,7 @@ function cliForHook(): string | null {
     return paths.cli()
   } catch (error) {
     void vscode.window.showWarningMessage(
-      t('ProSonata: the CLI could not be placed at {0} — {1}. The post-commit hook stays as it is.', paths.cli(), (error as Error).message),
+      t('ProSonata: the CLI could not be placed at {0} — {1}. The hooks stay as they are.', paths.cli(), (error as Error).message),
     )
     return null
   }
@@ -226,10 +226,20 @@ export function installHookHere(repoRoot: string): void {
   if (cli === null) return
 
   try {
-    installHook(repoRoot, { node: process.execPath, cli })
+    for (const hook of installHooks(repoRoot, { node: process.execPath, cli }).filter(isTracked)) {
+      void vscode.window.showWarningMessage(t('ProSonata: the {0} hook could not be installed — {1}', hook.hook, trackedMessage(hook)))
+    }
   } catch (error) {
-    void vscode.window.showWarningMessage(t('ProSonata: the post-commit hook could not be installed — {0}', (error as Error).message))
+    void vscode.window.showWarningMessage(t('ProSonata: the hooks could not be installed — {0}', (error as Error).message))
   }
+}
+
+function isTracked(hook: InstallResult): boolean {
+  return hook.action === 'tracked'
+}
+
+function trackedMessage(hook: InstallResult): string {
+  return t('{0} belongs to the repository — this tool does not write there', hook.path)
 }
 
 export async function chooseGrid(_session: Session, repo: GitRepo): Promise<void> {
@@ -250,9 +260,17 @@ export function repairHookIfNeeded(): void {
   if (!hookNeedsRepair(repo.repo.root, { node: process.execPath, cli })) return
 
   try {
-    installHook(repo.repo.root, { node: process.execPath, cli })
+    /*
+     * The message names the file, and for a tracked hook that is the whole point.
+     * Only for the post-commit, at every window start: without it nothing is
+     * booked. A project's own post-checkout costs the cut at the switch, which
+     * the editor makes while it is open — said once at setup, not every morning.
+     */
+    const hooks = installHooks(repo.repo.root, { node: process.execPath, cli })
+    for (const hook of hooks.filter((hook) => isTracked(hook) && hook.hook === 'post-commit')) {
+      void vscode.window.showWarningMessage(t('ProSonata: the {0} hook could not be repaired — {1}', hook.hook, trackedMessage(hook)))
+    }
   } catch (error) {
-    // The message names the file, and for a tracked hook that is the whole point.
-    void vscode.window.showWarningMessage(t('ProSonata: the post-commit hook could not be repaired — {0}', (error as Error).message))
+    void vscode.window.showWarningMessage(t('ProSonata: the hooks could not be repaired — {0}', (error as Error).message))
   }
 }

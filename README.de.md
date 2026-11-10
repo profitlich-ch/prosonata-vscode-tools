@@ -65,7 +65,7 @@ Die Reihenfolge ist fest, und ein Schritt darin ist eine Sperre:
 flowchart TD
     accTitle: Reihenfolge der Einrichtung: Konto, Projekt, Zeitkategorie, dann kann der Timer laufen
     A["<b>Konto einrichten</b><br/>Basis-URL und Benutzer-Key nach ~/.prosonata/config.json"] --> B
-    B["<b>Projekt für dieses Repository wählen</b><br/>verknüpft das Repository und installiert den post-commit-Hook"] --> C
+    B["<b>Projekt für dieses Repository wählen</b><br/>verknüpft das Repository und installiert die Hooks"] --> C
     C{"Zeitkategorie<br/>gewählt?"}
     C -- "nein" --> D["ProSonata verlangt eine.<br/>Es wird <b>nichts</b> geschrieben,<br/>und das Panel sagt es."]
     D --> C
@@ -73,7 +73,7 @@ flowchart TD
     E -.-> F["Jederzeit später: Zeitraster und Modus.<br/>Der Wechsel zu „ein Eintrag pro Commit“<br/>schliesst den offenen Branch-Eintrag ab."]
 ```
 
-Klicke auf **ProSonata: Projekt für dieses Repository wählen** – das verknüpft das Repository mit einem Projekt und installiert den `post-commit`-Hook. Das Projekt zeigt danach sein Budget, etwa „15.25 von 20 h“. Geholt wird es beim Öffnen des Fensters und jedes Mal, wenn ein abgeschlossener Zeiteintrag ProSonata erreicht hat – nicht laufend.
+Klicke auf **ProSonata: Projekt für dieses Repository wählen** – das verknüpft das Repository mit einem Projekt und installiert die Hooks `post-commit` und `post-checkout`; ein vorhandener Hook, etwa der von Git LFS, behält seine Zeilen. Das Projekt zeigt danach sein Budget, etwa „15.25 von 20 h“. Geholt wird es beim Öffnen des Fensters und jedes Mal, wenn ein abgeschlossener Zeiteintrag ProSonata erreicht hat – nicht laufend.
 
 Gleich danach fragt die Extension nach der **Zeitkategorie**. ProSonata verlangt eine auf jedem Zeiteintrag; solange keine gewählt ist, wird nichts geschrieben. Ändern lässt sie sich jederzeit über die Zeile *Kategorie* im Panel, und die Änderung gilt auch für die Einträge, die noch offen sind.
 
@@ -313,11 +313,18 @@ wird. Die Segmente bleiben im Log, wo sie gemessen wurden, und eine Zeile
 **Übernommen von main** auf dem neuen Branch sagt, warum ihre Zeit dort
 verrechnet wird.
 
-Daran denken musst du nicht. Hat `main` offene Zeit, sagt es `prosonata start`
-auf einem Branch, der noch nichts Eigenes hat, und ebenso jeder Commit dort, bis
-der Branch eigene Zeit trägt. Im Editor bietet die Frage nach einem
+Daran denken musst du nicht. Hat `main` offene Zeit, sagt es schon der Wechsel
+selbst – der `post-checkout`-Hook läuft bei `git switch -c thema` –, ebenso
+`prosonata start` auf einem Branch, der noch nichts Eigenes hat, und jeder Commit
+dort, bis der Branch eigene Zeit trägt. Im Editor bietet die Frage nach einem
 Branch-Wechsel **… von main mitnehmen** an. Ob die Zeit zum neuen Branch gehört,
 wird nie für dich entschieden.
+
+Läuft beim Wechsel der Timer, bucht der Hook die bisherige Zeit auf den Branch,
+auf dem sie gemessen wurde, und pausiert den Timer, genau in diesem Moment. Auf
+dem neuen Branch startet er ihn nie: Das tut `prosonata start` oder die Frage des
+Editors nach dem Wechsel. Ein Checkout von Dateien und der losgelöste HEAD eines
+Rebase oder Bisect ändern nichts.
 
 Hat der neue Branch schon einen offenen Eintrag mit Zeit oder Text, wird nichts
 übernommen – leg die beiden stattdessen beim Durchsehen der Zeiteinträge
@@ -401,7 +408,7 @@ steht in ProSonata, aber nicht hier.
 ## CLI-Befehle
 
 ```sh
-prosonata init                    Konto und dieses Repository einrichten, Hook installieren
+prosonata init                    Konto und dieses Repository einrichten, Hooks installieren
 prosonata start                   Timer dieses Branches starten oder fortsetzen
 prosonata pause [h:mm|minutes]    Timer pausieren; mit Dauer wird nur diese gebucht
 prosonata status                  was läuft, was offen ist, was wartet
@@ -450,6 +457,9 @@ der Ausgabe, die der Agent in diesem Moment liest, was zu tun ist:
 - Der Hook nennt einen Commit ohne Trailer, einen fertigen Branch, dessen
   Eintrag noch offen ist, und offene `main`-Zeit auf einem Branch ohne eigene
   Zeit.
+- Beim Branch-Wechsel bucht der `post-checkout`-Hook die laufende Zeit auf den
+  alten Branch und pausiert. Arbeit auf dem neuen Branch zählt erst, wenn dort
+  der Timer gestartet wird, und die Ausgabe sagt das.
 - Wo ein Mensch entscheiden muss, sagt es eine eigene Zeile: **Hinweis KI: User
   um Entscheidung bitten.** – bei offener `main`-Zeit, beim Squash-Merge
   angehaltener Zeit, einem anderswo abgeschlossenen Eintrag und bei `adjust`

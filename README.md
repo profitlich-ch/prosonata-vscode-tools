@@ -65,7 +65,7 @@ The order is fixed, and one step in it is a gate:
 flowchart TD
     accTitle: Setup order: account, project, time category, then the timer can run
     A["<b>Set Up Account</b><br/>base URL and user key to ~/.prosonata/config.json"] --> B
-    B["<b>Choose Project for This Repository</b><br/>links the repository and installs the post-commit hook"] --> C
+    B["<b>Choose Project for This Repository</b><br/>links the repository and installs the hooks"] --> C
     C{"Time category<br/>chosen?"}
     C -- "no" --> D["ProSonata requires one.<br/><b>Nothing</b> is written,<br/>and the panel says so."]
     D --> C
@@ -73,7 +73,7 @@ flowchart TD
     E -.-> F["Any time later: rounding grid and mode.<br/>Switching to “one entry per commit”<br/>closes the open branch entry."]
 ```
 
-Click **ProSonata: Choose Project for This Repository** — it links the repository to a project and installs the `post-commit` hook. The project then shows its budget, such as “15.25 of 20 h”. It is fetched when the window opens and every time a closed time entry has reached ProSonata — not continuously.
+Click **ProSonata: Choose Project for This Repository** — it links the repository to a project and installs the `post-commit` and `post-checkout` hooks; an existing hook, such as that of Git LFS, keeps its lines. The project then shows its budget, such as “15.25 of 20 h”. It is fetched when the window opens and every time a closed time entry has reached ProSonata — not continuously.
 
 Right after that the extension asks for the **time category**. ProSonata requires one on every time entry; as long as none is chosen, nothing is written. You can change it at any time through the *Category* row in the panel, and the change also applies to the entries that are still open.
 
@@ -307,11 +307,18 @@ second changes, only where the time is billed. The segments stay in the log
 where they were measured, and a line **Taken from main** on the new branch
 says why their time is billed there.
 
-You don't have to remember it. When `main` has open time, `prosonata start`
-on a branch that holds nothing of its own yet says so, and so does every
+You don't have to remember it. When `main` has open time, the switch itself
+says so — the `post-checkout` hook runs at `git switch -c topic` —, as does
+`prosonata start` on a branch that holds nothing of its own yet, and every
 commit there until the branch has time of its own. In the editor, the question
 after a branch switch offers **Take … from main along**. Whether the time
 belongs to the new branch is never decided for you.
+
+If the timer is running at the switch, the hook books the time so far to the
+branch it was measured on and pauses the timer, at that very moment. It never
+starts the timer on the new branch: `prosonata start` does, or the editor's
+question after the switch. A checkout of files, and the detached HEAD of a
+rebase or a bisect, change nothing.
 
 If the new branch already has an open entry with time or text, nothing is
 taken — merge the two when browsing the time entries instead. The empty entry
@@ -390,7 +397,7 @@ another one is in ProSonata, but not here.
 ## CLI commands
 
 ```sh
-prosonata init                    set up account and this repository, install the hook
+prosonata init                    set up account and this repository, install the hooks
 prosonata start                   start or resume this branch's timer
 prosonata pause [h:mm|minutes]    pause the timer; with a duration, only that is booked
 prosonata status                  what is running, what is open, what is waiting
@@ -437,6 +444,9 @@ done in the output the agent reads at that moment:
 
 - The hook names a commit without a trailer, a finished branch whose entry is
   still open, and open `main` time on a branch without time of its own.
+- At a branch switch the `post-checkout` hook books the running time to the
+  old branch and pauses. Work on the new branch counts only once the timer is
+  started there, and the output says so.
 - Where a person has to decide, a line of its own says **Note for AI: ask the
   user to decide.** — for open `main` time, time held at a squash merge, an
   entry closed elsewhere, and `adjust` or discarding without a terminal.

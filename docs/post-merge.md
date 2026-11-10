@@ -7,8 +7,8 @@ gebaut**.
 ## Die Lücke
 
 Auf dem Hauptbranch schliesst jeder Commit seinen Zeiteintrag ab (KONZEPT §3). Ein Merge-Commit
-**ist** ein Commit — nur ruft Git dafür einen anderen Hook, und das Werkzeug installiert bisher
-nur `post-commit`.
+**ist** ein Commit — nur ruft Git dafür einen anderen Hook, und das Werkzeug installiert
+`post-commit` und `post-checkout`, aber keinen `post-merge`.
 
 Am eigenen Rechner in einem Wegwerf-Repository gemessen:
 
@@ -89,13 +89,13 @@ gehören nach TypeScript, nicht in die Shell — nur dort sind sie prüfbar, und
 viermal still ausgefallen (KONZEPT §8). Trifft keine Ausnahme zu, geht es denselben Weg wie ein
 Commit, also durch `Session.commit`.
 
-Mitzuziehen wäre:
+Mitzuziehen ist seit dem `post-checkout` wenig: `HOOKS` in `src/core/hooks.ts` um `post-merge`
+erweitern und in `hookBlock` dessen Zeile ergänzen. Installation, Reparaturprüfung,
+`core.hooksPath`, `info/exclude` und die Regel für verfolgte Hooks gehen über diese Liste.
 
 | Was | Warum |
 |---|---|
-| `prosonata init` installiert **beide** Hooks | sonst bleibt der neue in bestehenden Repos aus |
-| `hookNeedsRepair` und `isInstalled` sehen beide an | heute prüfen sie nur `post-commit`, und ein fehlender zweiter fiele nie auf |
-| `core.hooksPath` und die Regel für verfolgte Hooks gelten mit | in `KSA-wuslon-editor` liegt bereits ein fremder `post-merge` in `.githooks` — dort bricht die Installation ab und sagt es |
+| ein verfolgter fremder `post-merge` wird als `tracked` gemeldet, nicht geworfen | in `KSA-wuslon-editor` liegt bereits einer in `.githooks`; der `post-commit` muss dort trotzdem installiert werden, und `installHooks` tut das |
 
 ## Offen: der Merge ohne Trailer
 

@@ -60,6 +60,7 @@ export function start(state: State, clock: Clock, options: StartOptions): State 
   if (running) {
     const timer = findTimerIn(next, options.scope)!
     timer.startedAt = clock.now()
+    delete timer.switchedAt
     return next
   }
 

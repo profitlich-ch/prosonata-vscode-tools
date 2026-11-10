@@ -32,6 +32,17 @@ are in German.
   that holds nothing of its own yet, and at every commit there until it does.
   In the editor, the questions after a branch switch offer **Take … from main
   along**.
+- **A `post-checkout` hook** cuts the running segment at the moment of a
+  branch switch, books it to the branch it was measured on and pauses the
+  timer — without a VS Code window as well. It never starts the timer on the
+  new branch, and asks about open `main` time with the note for AI. Until now
+  a switch in the terminal surfaced only at the next commit, and all the time
+  since the start went to the old branch, including the work already done on
+  the new one. File checkouts and the detached HEAD of a rebase or bisect are
+  left alone. `prosonata init` installs the hook, the extension adds it to
+  repositories set up earlier when it starts, and an existing
+  `post-checkout`, such as that of Git LFS, keeps its lines. With a window
+  open the editor still asks whether to count on, without cutting twice.
 - **A README section on coding agents**, with a block for `AGENTS.md`.
 - **The CLI checks the Node version** before it does anything. On a Node
   older than 18, which lacks the global `fetch`, it says so and names the
