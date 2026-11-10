@@ -36,14 +36,33 @@ ProSonatas `apiComments` (`EXTENSION_ID` in `src/core/api-comments.ts`).
 
 ## Jede neue Version wird installiert
 
-Ein Release ist erst fertig, wenn die neue Fassung auch läuft. Nach der Veröffentlichung
-kommt sie über den Marketplace; bis VS Code sie holt, oder für einen Stand vor dem Release:
+Ein Release ist erst fertig, wenn die neue Fassung auch läuft. **Ein Release kommt aus dem
+Marketplace**, sobald der Workflow es dort veröffentlicht hat:
 
 ```sh
-npm run install-vsix
+code --install-extension profitlich.prosonata-vscode-tools --force
 ```
 
-Danach VS Code neu laden, damit die Extension neu startet.
+Danach VS Code neu laden, damit die Extension neu startet, und nachsehen, dass VS Code sie als
+Marketplace-Installation führt und weiter aktualisiert – `source: "gallery"`, ohne
+`pinned: true`:
+
+```sh
+node -e 'const l=require(process.env.HOME+"/.vscode/extensions/extensions.json");console.log(l.filter(e=>e.identifier.id==="profitlich.prosonata-vscode-tools").map(e=>[e.version,e.metadata]))'
+```
+
+**`pinned: true` ist der Befund, nicht `source`.** Auch eine Installation aus dem Marketplace kann
+angeheftet sein; gemessen am 2026-11-10 mit 1.0.1. Dann ist das automatische Aktualisieren für
+diese Extension aus und wird in der Erweiterungsansicht in ihrem Kontextmenü wieder eingeschaltet.
+
+**`npm run install-vsix` nur für einen Stand vor dem Release**, und nie als Ersatz für das
+Warten auf den Marketplace. VS Code heftet eine VSIX-Installation an (`source: "vsix"`,
+`pinned: true`) und aktualisiert sie danach nicht mehr – auch nicht, wenn der Marketplace eine
+höhere Version hat. Wer per VSIX ausprobiert hat, installiert nach dem nächsten Release aus dem
+Marketplace neu und prüft die Anheftung, wie oben.
+
+*Anlass:* Nach dem Release von 2.0.0 wurde der Release-Stand per VSIX installiert, «bis VS Code
+sie holt», wie es hier stand. Geholt hätte VS Code danach nie mehr etwas (`v2.0.0`, 2026-11-10).
 
 **Warum das eine Regel ist und keine Empfehlung.** Am 4. September 2026 war `0.9.0` vom 3. August
 installiert, während im Repo `0.11.2` stand. Drei Fehlerbehebungen liefen dadurch ins Leere —
@@ -53,7 +72,8 @@ installiert ist, und dieses Werkzeug schreibt in ein Abrechnungssystem: Der Scha
 weg, wenn man ihn bemerkt.
 
 Der Abstand fällt von selbst nicht auf, weil nichts die installierte Fassung mit dem Repo
-vergleicht. Nachsehen lässt er sich so:
+vergleicht – und eine angeheftete VSIX-Installation lässt ihn mit jedem Release wachsen.
+Nachsehen lässt er sich so:
 
 ```sh
 ls -d ~/.vscode/extensions/*prosonata*      # installierte Version

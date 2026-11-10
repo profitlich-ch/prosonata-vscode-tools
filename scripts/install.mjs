@@ -18,8 +18,12 @@ import { join } from 'node:path'
  * Konto") runs the extension straight from the working copy, with no packaging
  * and no installation at all.
  *
- * Neither route gives automatic updates — those only come from the marketplace,
- * and a hand-installed extension has no source VS Code could check.
+ * Neither route gives automatic updates. VS Code pins an extension installed
+ * from a VSIX (`"source": "vsix", "pinned": true` in extensions.json) and leaves
+ * it alone even when the marketplace has a higher version. A release is
+ * therefore installed from the marketplace, and this script says so on every run.
+ * Reinstalling from there does not reliably unpin it: a marketplace install of
+ * 1.0.1 was found pinned as well, so the auto update has to be switched on.
  */
 
 const root = process.cwd()
@@ -34,7 +38,11 @@ execFileSync(codeCommand(vsix), ['--install-extension', vsix, '--force'], { cwd:
 
 console.log(`\ninstalliert ${vsix}`)
 console.log('Fenster neu laden (Entwickler: Fenster neu laden), dann ist sie in jedem VS Code.')
-console.log('Später aktualisieren: diesen Befehl erneut ausführen.')
+console.log('')
+console.log('Achtung: VS Code heftet eine VSIX-Installation an und aktualisiert sie nicht mehr')
+console.log('aus dem Marketplace. Nach dem nächsten Release von dort neu installieren:')
+console.log('  code --install-extension profitlich.prosonata-vscode-tools --force')
+console.log('und im Kontextmenü der Extension das automatische Aktualisieren einschalten.')
 
 /**
  * The `code` command, whether or not it is on the PATH. VS Code does not put it
