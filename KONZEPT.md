@@ -1988,6 +1988,20 @@ Lizenz. Der Rest kommt von der Veröffentlichung:
   - **README, Changelog und Commit-Messages sind englisch**, ab 0.26.0; ältere Einträge im
     Changelog bleiben deutsch. README und Changelog sind im Marketplace die Seite der
     Extension. `KONZEPT.md`, `CLAUDE.md` und `docs/` bleiben deutsch.
+  - **Die README gibt es auch deutsch**, als `README.de.md`, ab 2026-11-10. Die Zielgruppe
+    spricht Deutsch; eine Anleitung nur auf Englisch für ein deutsches Abrechnungsprodukt
+    verlangt von ihr eine Übersetzung im Kopf, und genau dort, wo es um Geld geht. Englisch
+    bleibt die Hauptfassung: Marketplace, Open VSX und die Detailseite in VS Code zeigen nur
+    eine README und wählen nicht nach Anzeigesprache. Ganz oben in beiden steht der Wechsel
+    `English | Deutsch`; `vsce` schreibt den relativen Link auf GitHub um, im Marketplace
+    führt er also zur deutschen Fassung im Repo. Ins `.vsix` kommt sie nicht.
+
+    *Der Preis ist die Pflege: Zwei Fassungen laufen auseinander, sobald eine Änderung nur in
+    einer landet, und eine veraltete Anleitung für ein Werkzeug, das in die Abrechnung
+    schreibt, richtet Schaden an. Deshalb gehört jede Änderung in beide, und
+    `src/readme.test.ts` vergleicht ihren Aufbau. Den Wortlaut prüft er nicht. Verworfen: eine
+    kurze deutsche Fassung, die für Details auf die englische verweist – weniger Pflege, aber
+    gerade die Details sind es, die man in der eigenen Sprache lesen will.*
 
   *Bis 0.25.0 war alles Sichtbare deutsch: ProSonata sei ein deutsches Produkt, eine englische
   Oberfläche darüber eine Übersetzungsschicht, die niemand braucht. Abgelöst am 2026-10-29 –

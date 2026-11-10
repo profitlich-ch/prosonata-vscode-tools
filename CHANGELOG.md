@@ -19,6 +19,8 @@ are in German.
   is written for these until someone answers, and until now they showed only
   while the panel was open. Running timers are not counted; they stay in the
   status bar.
+- **The README in German**, as `README.de.md`, linked from the top of the
+  English one. A test keeps the two in step.
 
 ### Changed
 

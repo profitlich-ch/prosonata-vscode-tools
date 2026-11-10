@@ -18,6 +18,7 @@ tsconfig.json
 package-lock.json
 KONZEPT.md
 CLAUDE.md
+README.de.md
 
 **/*.ts
 **/*.map

@@ -10,6 +10,12 @@ hier steht. Fachliche Entscheidungen und ihre Begründungen stehen in [KONZEPT.m
 englisch mit deutscher Übersetzung (KONZEPT.md §10). `KONZEPT.md`, diese Datei und `docs/`
 bleiben deutsch.
 
+**Die README gibt es zweimal:** `README.md` englisch, `README.de.md` deutsch. Jede Änderung
+an der einen gehört im selben Commit in die andere. `src/readme.test.ts` vergleicht den Aufbau
+(Abschnitte, Codeblöcke, Tabellenzeilen), nicht den Wortlaut – einen geänderten Satz findet er
+nicht. Begriffe aus der Oberfläche stehen in der deutschen Fassung so, wie sie in
+`l10n/bundle.l10n.de.json` und `package.nls.de.json` heissen.
+
 **Jeder sichtbare Text geht durch `t()`** aus `core/l10n.ts`, englisch, mit der deutschen Fassung
 in `l10n/bundle.l10n.de.json`; Titel aus `package.json` in `package.nls.json` und
 `package.nls.de.json`. Das erste Argument von `t()` ist ein String-Literal mit `{0}`-Platzhaltern,

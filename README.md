@@ -1,6 +1,8 @@
 ProSonata Tools for Visual Studio Code
 ===========
 
+English | [Deutsch](README.de.md)
+
 This VS Code extension creates [ProSonata](https://www.prosonata.de) time entries straight from VS Code, bound to commits and branches, through the ProSonata API. Instead of starting a timer in ProSonata's web interface and typing the description by hand, you start the timer in VS Code, and the measured time becomes one time entry per branch — or, switchable, per branch and day or per commit — with a description taken from the commit.
 
 The idea: a time entry represents a piece of work the client can be billed for. If you bill by deliverable, it doesn't matter whether the work took one day or several; if you bill by time, the two other modes are for you.
@@ -487,6 +489,9 @@ Visible texts go through `t()` from `src/core/l10n.ts`, in English; the German
 translation is in `l10n/bundle.l10n.de.json`, the command titles in
 `package.nls.json` and `package.nls.de.json`. A test fails when a text has no
 German translation.
+
+This README exists twice: `README.md` in English and `README.de.md` in German.
+A change belongs in both; a test fails when their structure no longer matches.
 
 The full reasoning, including the rejected alternatives and why, is in
 [KONZEPT.md](KONZEPT.md) (German). The API behaviour the tool relies on was
