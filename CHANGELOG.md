@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-11-10
+
 ### Breaking Changes
 
 - **`prosonata adjust` needs a terminal.** It is the one command whose number
