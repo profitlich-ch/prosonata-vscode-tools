@@ -29,6 +29,7 @@ import {
   entriesToMove,
   findEntry,
   foldRolledBack,
+  isEmptyPlaceholder,
   isEmptyRemainder,
   keepFromRunning,
   keepResting,
@@ -46,6 +47,7 @@ import {
   queueWriteFor,
   resumeAfterAdding,
   resumeAsNew,
+  runningSeconds,
   daySpans,
   dayOf,
   nextMidnight,
@@ -204,6 +206,30 @@ export class Session {
     const { scope, startedAt } = stray as { scope: Scope; startedAt: number }
     this.recordSegmentAt({ ...context, scope }, startedAt, now, 'pause')
     return scope.branch
+  }
+
+  /**
+   * The open time on the main branch that `take` could bring onto this branch,
+   * or null when there is nothing to ask about (KONZEPT.md §3, *übernehmen*).
+   *
+   * Whether it belongs here only whoever measured it knows — work that moved
+   * along with `git switch -c`, or work finished over there. Left unanswered,
+   * the squash merge holds it later and the question comes back as `held`;
+   * asked now, it is asked while it is still remembered. Hence the question,
+   * and never a move on its own.
+   *
+   * Only while this branch holds nothing of its own: `take` refuses anything
+   * but an empty placeholder.
+   */
+  mainTimeToTake(context: RepoContext): TimeEntry | null {
+    if (context.scope.branch === context.mainBranch) return null
+    const state = this.state()
+    const own = openEntry(state, context.scope)
+    if (own && !isEmptyPlaceholder(own)) return null
+
+    const main = openEntry(state, { repoPath: context.scope.repoPath, branch: context.mainBranch })
+    if (!main || main.awaitingDecision) return null
+    return main.seconds + main.foreignSeconds + runningSeconds(state, this.clock, main.scope) > 0 ? main : null
   }
 
   /**
@@ -382,7 +408,7 @@ export class Session {
     const entry = openEntry(before, from)
     if (!entry || (entry.timeId === null && entry.seconds + entry.foreignSeconds === 0)) return { kind: 'nothing' }
     const occupied = openEntry(before, context.scope)
-    if (occupied) return { kind: 'occupied', entry: occupied }
+    if (occupied && !isEmptyPlaceholder(occupied)) return { kind: 'occupied', entry: occupied }
     if (entry.awaitingDecision) return { kind: 'awaiting' }
 
     const after = this.store.update((state) =>
@@ -538,10 +564,13 @@ export class Session {
     branchSwitched: boolean
     /** The branch whose squash merge this was, when main time was held for it. */
     heldFor: string | null
+    /** The branch whose squash merge this was, held time or not — its entry is still open. */
+    squashed: string | null
   } {
     let booked = 0
     let hadTimer = false
     let closed = false
+    let squashed: string | null = null
     /** Where the time went — the entry that was closed, or the one still open. */
     let bookedInto: string | undefined
 
@@ -551,6 +580,7 @@ export class Session {
 
     const state = this.store.update((current) => {
       const holdFor = squashOf(current, context, options)
+      squashed = holdFor?.branch ?? null
       const outcome = commit(current, {
         scope: context.scope,
         mode: context.mode,
@@ -611,7 +641,15 @@ export class Session {
     // closing line here rather than only where somebody closes one by hand.
     const finished = state.entries.find((entry) => entry.id === bookedInto && entry.state === 'closed')
     if (finished) this.recordEntryClosed(finished)
-    return { state, booked, hadTimer, closed, branchSwitched: switched !== null, heldFor: held?.heldAtMerge?.branch ?? null }
+    return {
+      state,
+      booked,
+      hadTimer,
+      closed,
+      branchSwitched: switched !== null,
+      heldFor: held?.heldAtMerge?.branch ?? null,
+      squashed,
+    }
   }
 
   /**

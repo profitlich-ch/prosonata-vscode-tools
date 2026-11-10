@@ -307,8 +307,16 @@ second changes, only where the time is billed. The segments stay in the log
 where they were measured, and a line **Taken from main** on the new branch
 says why their time is billed there.
 
-If the new branch already has an open entry, nothing is taken — merge the two
-when browsing the time entries instead.
+You don't have to remember it. When `main` has open time, `prosonata start`
+on a branch that holds nothing of its own yet says so, and so does every
+commit there until the branch has time of its own. In the editor, the question
+after a branch switch offers **Take … from main along**. Whether the time
+belongs to the new branch is never decided for you.
+
+If the new branch already has an open entry with time or text, nothing is
+taken — merge the two when browsing the time entries instead. The empty entry
+that `prosonata start` leaves on a new branch doesn't count; the taken entry
+replaces it.
 
 ## Merging a branch
 
@@ -320,8 +328,10 @@ The order at the end of a package, after a squash merge:
    hook says so, and the sidebar shows **Before the merge of …**. Clicking it
    offers three answers: attach the time to the merged branch's entry, close it
    with a text of its own, or discard it. In the terminal: `prosonata held`.
-2. **Deleting the branch.** Its entry shows as **Branch deleted** in the
-   sidebar and in `prosonata status`. `prosonata close <branch>` closes it with
+2. **Deleting the branch.** The hook has already named the branch's entry at
+   the merge commit, since nothing runs when a branch is deleted. Its entry
+   shows as **Branch deleted** in the sidebar and in `prosonata status`, and
+   every further commit on `main` names it again. `prosonata close <branch>` closes it with
    the text it has — the last trailer — or with the text you give after the
    name.
 3. **Checking what went out.** `prosonata sent` lists the entries sent from
@@ -413,9 +423,44 @@ A command that takes an argument asks for it when it is left out — with the
 argument it runs without asking, which also makes it fit for scripts. `close`
 without a text uses the one the entry has and asks only when there is none.
 Without a terminal nothing waits for an answer: the command stops and says
-what is missing. `--help` after any command, or `prosonata help <command>`,
-shows its help and does nothing else. The earlier German argument values
-(`exakt`, `tag`, `neu`, `alle`, `ab`, `bis`) still work.
+what is missing. `adjust` is the exception: its number comes from whoever
+types it, not from the clock, so without a terminal it doesn't run at all. The
+panel's time adjustment is not affected. `--help` after any command, or
+`prosonata help <command>`, shows its help and does nothing else. The earlier
+German argument values (`exakt`, `tag`, `neu`, `alle`, `ab`, `bis`) still work.
+
+## Working with coding agents
+
+A coding agent that commits drives the time tracking whether it knows it or
+not, and it can call every CLI command. The tool therefore says what is to be
+done in the output the agent reads at that moment:
+
+- The hook names a commit without a trailer, a finished branch whose entry is
+  still open, and open `main` time on a branch without time of its own.
+- Where a person has to decide, a line of its own says **Note for AI: ask the
+  user to decide.** — for open `main` time, time held at a squash merge, an
+  entry closed elsewhere, and `adjust` or discarding without a terminal.
+
+What the tool can't see belongs in the agent's instructions. A block for
+`AGENTS.md`:
+
+```md
+## Time tracking (ProSonata)
+
+In repositories with the prosonata post-commit hook:
+
+- Every commit carries a `Prosonata:` trailer in its last paragraph. It describes
+  the work of the whole branch, not this step, in the words of whoever reads the
+  invoice. The last one wins.
+- Never invent a duration and never run `prosonata adjust`: time comes from the
+  clock. `prosonata start` and `prosonata pause` are fine.
+- When prosonata's output says "Note for AI: ask the user to decide." (in German
+  "Hinweis KI: User um Entscheidung bitten."), ask the user and wait for the answer.
+```
+
+Claude Code reads `CLAUDE.md` rather than `AGENTS.md`; a line `@AGENTS.md`
+there imports it. A hook that runs `prosonata pause` when an agent session ends
+is a setting of the agent, not of this tool.
 
 ## What the extension doesn't do
 

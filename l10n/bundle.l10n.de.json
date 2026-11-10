@@ -419,5 +419,13 @@
   "what should happen to {0}? retry, move or drop": "was soll mit {0} geschehen? retry, move oder drop",
   "Without text": "Ohne Text",
   "written to {0}, mode 0600": "nach {0} geschrieben, Modus 0600",
+  "Note for AI: ask the user to decide.": "Hinweis KI: User um Entscheidung bitten.",
+  "no \"{0}:\" trailer — \"{1}\" becomes the invoice text. Amend the commit with a trailer before it is sent": "kein \"{0}:\"-Trailer — \"{1}\" wird der Rechnungstext. Den Commit mit Trailer berichtigen (amend), bevor er gesendet ist",
+  "no \"{0}:\" trailer — the entry on {1} has no text yet: a trailer in the next commit, or \"prosonata text <text>\"": "kein \"{0}:\"-Trailer — der Eintrag auf {1} hat noch keinen Text: ein Trailer im nächsten Commit, oder \"prosonata text <Text>\"",
+  "the entry of {0} is still open — once the branch is done: \"prosonata close {0} [text]\"": "der Eintrag von {0} ist noch offen — ist der Branch fertig: \"prosonata close {0} [Text]\"",
+  "{0} open on {1} — if it belongs to this branch: \"prosonata take {1}\"": "{0} offen auf {1} — gehört die Zeit zu diesem Branch: \"prosonata take {1}\"",
+  "adjusting the time needs a person — on a terminal or in the editor": "Zeit korrigieren kann nur ein Mensch — im Terminal oder im Editor",
+  "\"prosonata resume add\" or \"prosonata resume new\"": "\"prosonata resume add\" oder \"prosonata resume neu\"",
+  "Take {0} from {1} along": "{0} von {1} mitnehmen",
   "prosonata needs Node.js {0} or newer, this is {1} at {2}. Install a newer one; if the Git hook runs this one, run \"prosonata init\" again with the newer one.\n": "prosonata braucht Node.js {0} oder neuer, dies ist {1} unter {2}. Ein neueres installieren; läuft der Git-Hook mit diesem hier, danach \"prosonata init\" mit dem neueren erneut ausführen.\n"
 }

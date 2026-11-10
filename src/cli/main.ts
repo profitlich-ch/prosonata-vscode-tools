@@ -531,6 +531,12 @@ async function resume(cwd: string, argument: string): Promise<number> {
     process.stdout.write(
       `${t('"{0}" was closed on another machine, {1} more accrued here', entry.text || context.scope.branch, format(unwrittenSeconds(entry)))}\n`,
     )
+    // Without a terminal the question below has nobody to answer it.
+    if (argument === '' && !process.stdin.isTTY) {
+      process.stderr.write(`${t('"prosonata resume add" or "prosonata resume new"')}\n`)
+      askTheUser()
+      return 2
+    }
     const wanted = argument !== '' ? argument : await ask(t('Add or new? [add|new]: '))
     if (wanted !== 'add' && wanted !== 'neu' && wanted !== 'new') {
       process.stderr.write(`${t('not an answer: {0} — use "add" or "new"', wanted)}\n`)
@@ -577,6 +583,7 @@ async function start(cwd: string): Promise<number> {
     process.stderr.write(`${describeRunningElsewhere(session.runningElsewhereSince, session.clock.now())}\n`)
   }
   process.stdout.write(`${t('running on {0} — {1}', context.scope.branch, nameOfProject(context))}\n`)
+  askAboutMainTime(session, context)
   return 0
 }
 
@@ -709,6 +716,7 @@ function report(result: SendResult): number {
   }
   if (result.awaitingDecision.length > 0) {
     process.stderr.write(`${t('closed on another machine — "prosonata resume" decides where the remaining time goes')}\n`)
+    askTheUser()
   }
   if (result.missingCategory.length > 0) {
     process.stderr.write(`${t('no time category for this project — choose one with "prosonata category", ProSonata requires it')}\n`)
@@ -909,6 +917,7 @@ async function held(argument: string): Promise<number> {
     process.stdout.write(`\n  ${t('"prosonata held <no> attach"        to the entry of the merged branch')}\n`)
     process.stdout.write(`  ${t('"prosonata held <no> close <text>"  close with a text of its own and send')}\n`)
     process.stdout.write(`  ${t('"prosonata held <no> drop"          discard — the time is not billed')}\n`)
+    askTheUser()
     return 0
   }
 
@@ -947,6 +956,7 @@ async function held(argument: string): Promise<number> {
       // can answer — an agent is told so instead of left waiting.
       if (!process.stdin.isTTY) {
         process.stderr.write(`${t('discarding held time needs a person — on a terminal or in the editor')}\n`)
+        askTheUser()
         return 2
       }
       const answer = await ask(t('Discard {0} held before the merge of {1}? It is not billed [y/N] ', format(entry.seconds), entry.heldAtMerge.branch))
@@ -1085,7 +1095,8 @@ async function postCommit(cwd: string): Promise<number> {
     const trailer = trailerOf(cwd, session.config.trailerKey, sha)
     const text = trailer && trailer !== '' ? trailer : subjectOf(cwd, sha)
 
-    const outcome = session.commit(context, { text, fromTrailer: trailer !== null && trailer !== '', sha })
+    const fromTrailer = trailer !== null && trailer !== ''
+    const outcome = session.commit(context, { text, fromTrailer, sha })
 
     if (outcome.branchSwitched) {
       process.stderr.write(
@@ -1094,18 +1105,22 @@ async function postCommit(cwd: string): Promise<number> {
     }
     if (!outcome.hadTimer) {
       process.stderr.write(`prosonata: ${t('no timer was running — this commit booked nothing')}\n`)
-      return 0
     }
     if (outcome.booked > 0) {
       const booked = format(outcome.booked)
       process.stderr.write(`prosonata: ${outcome.closed ? t('{0} booked, entry closed', booked) : t('{0} booked', booked)}\n`)
     }
+    if (!fromTrailer) warnAboutMissingTrailer(session, context, outcome.closed, text)
     if (outcome.heldFor !== null) {
       process.stderr.write(
         `prosonata: ${t('squash merge of {0} — the open time on {1} is held, not closed under its text: "prosonata held"', outcome.heldFor, context.scope.branch)}\n`,
       )
+      askTheUser('prosonata: ')
     }
-    await session.flush()
+    remindOfFinishedBranches(session, context, outcome.squashed)
+    askAboutMainTime(session, context, 'prosonata: ')
+    // Without a timer this commit queued nothing, and the hook stays off the network.
+    if (outcome.hadTimer) await session.flush()
     return 0
   } catch (error) {
     process.stderr.write(`prosonata: ${(error as Error).message}\n`)
@@ -1114,10 +1129,84 @@ async function postCommit(cwd: string): Promise<number> {
 }
 
 /**
+ * The line for an agent reading along: what comes before it is a person's to
+ * decide. Spelled out in the output because an agent acts on what it reads now,
+ * not on a rule it read an hour ago (docs/ki-anbindung.md).
+ */
+function askTheUser(prefix = ''): void {
+  process.stderr.write(`${prefix}${t('Note for AI: ask the user to decide.')}\n`)
+}
+
+/**
+ * A commit without a trailer, said while it can still be put right: on the
+ * main branch the subject becomes the invoice line, on a branch the entry goes
+ * on without a text. Silent when the branch entry already has one — an earlier
+ * trailer stands until the next replaces it.
+ */
+function warnAboutMissingTrailer(session: Session, context: RepoContext, closed: boolean, subject: string): void {
+  const key = session.config.trailerKey
+  if (closed) {
+    process.stderr.write(
+      `prosonata: ${t('no "{0}:" trailer — "{1}" becomes the invoice text. Amend the commit with a trailer before it is sent', key, subject)}\n`,
+    )
+    return
+  }
+  const entry = openEntry(session.state(), context.scope)
+  if (entry && entry.text === '') {
+    process.stderr.write(
+      `prosonata: ${t('no "{0}:" trailer — the entry on {1} has no text yet: a trailer in the next commit, or "prosonata text <text>"', key, context.scope.branch)}\n`,
+    )
+  }
+}
+
+/**
+ * Branch entries that are done but still open, named at a commit on the main
+ * branch — the squash merge above all, after which the branch is usually
+ * deleted, and no hook runs for that. `status` says the same, but only to
+ * whoever asks; on 3 November 2026 three such entries stayed open in ksasz.ch.
+ */
+function remindOfFinishedBranches(session: Session, context: RepoContext, squashed: string | null): void {
+  if (context.scope.branch !== context.mainBranch) return
+  const branches = new Set<string>(squashed === null ? [] : [squashed])
+  for (const { entry } of session.finishedEntries(context)) branches.add(entry.scope.branch)
+  for (const branch of branches) {
+    process.stderr.write(`prosonata: ${t('the entry of {0} is still open — once the branch is done: "prosonata close {0} [text]"', branch)}\n`)
+  }
+}
+
+/**
+ * Open main time on a branch that holds nothing of its own yet: the moment to
+ * ask whether it came along (KONZEPT.md §3, *übernehmen*). Asked, never done —
+ * only whoever measured it knows.
+ */
+function askAboutMainTime(session: Session, context: RepoContext, prefix = ''): void {
+  const main = session.mainTimeToTake(context)
+  if (!main) return
+  const seconds = main.seconds + main.foreignSeconds + runningSeconds(session.state(), session.clock, main.scope)
+  process.stderr.write(
+    `${prefix}${t('{0} open on {1} — if it belongs to this branch: "prosonata take {1}"', format(seconds), main.scope.branch)}\n`,
+  )
+  askTheUser(prefix)
+}
+
+/**
  * Winds the clock forward or back (KONZEPT.md §3). Same words as in the editor:
  * a signed amount, or `ab`/`bis` with a time of day.
  */
 function adjust(cwd: string, argument: string): number {
+  /*
+   * The one command whose number comes from whoever types it, not from the
+   * clock — so it needs somebody at a terminal, as discarding held time does.
+   * An agent that believes it knows how long something took would otherwise
+   * put that belief on an invoice (docs/ki-anbindung.md, Stufe 4). The panel
+   * does not come through here.
+   */
+  if (!process.stdin.isTTY) {
+    process.stderr.write(`${t('adjusting the time needs a person — on a terminal or in the editor')}\n`)
+    askTheUser()
+    return 2
+  }
+
   const session = Session.open()
   const context = session.context(cwd)
   if (!context) return notARepo()

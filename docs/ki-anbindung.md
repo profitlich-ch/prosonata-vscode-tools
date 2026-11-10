@@ -1,9 +1,10 @@
 # KI-Anbindung der Zeiterfassung
 
 Überlegungen dazu, wie ein Coding-Agent dieses Werkzeug bedient. Ergänzt [KONZEPT.md](../KONZEPT.md),
-ersetzt nichts darin. Die Stufen 1 bis 4 sind Überlegungen vom September 2026, nichts davon ist
-gebaut. Der [Ablauf an der Paketgrenze](#ablauf-an-der-paketgrenze) beschreibt dagegen die CLI, wie
-sie ist.
+ersetzt nichts darin. Die Stufen 1 bis 3 sind Überlegungen vom September 2026 und nicht gebaut;
+Stufe 4 setzt das Werkzeug seit November 2026 für `adjust` selbst durch. Die
+[Hinweise in der Ausgabe](#hinweise-in-der-ausgabe) und der
+[Ablauf an der Paketgrenze](#ablauf-an-der-paketgrenze) beschreiben die CLI, wie sie ist.
 
 ## Ausgangslage
 
@@ -103,6 +104,11 @@ Kein `adjust`, keine Antwort auf die Frage „wie viel davon zählt", kein Zusch
 einem abgeschlossenen Eintrag. `start` und `pause` sind davon **nicht** betroffen: Sie wählen
 einen Zeitpunkt, und die Zahl kommt von der Uhr.
 
+Für `adjust` hängt das nicht mehr an einer Anweisung: Ohne Terminal bricht der Befehl ab und sagt,
+dass ein Mensch entscheidet (KONZEPT.md §3, *Zeit vor- und zurückdrehen*). Bittet der Mensch den
+Agenten, Zeit nachzutragen, nennt der Agent den Befehl, und getippt wird er vom Menschen – dann
+stammt die Zahl auch von ihm.
+
 Sollte das je gewollt sein, ist die **Herkunft** die Vorbedingung, nicht die Kür: `Timer.origin`
 ist bereits als `'local' | 'remote'` angelegt und laut §7 „heute konstant `local`". Dort und im
 Segmentprotokoll gehört festgehalten, dass ein Agent geschrieben hat. Ohne das ist eine
@@ -110,15 +116,32 @@ Reklamation an einer Rechnung nicht beantwortbar.
 
 ---
 
+## Hinweise in der Ausgabe
+
+Eine Regel in der `AGENTS.md` hängt am Erinnern: Gelesen wird sie zu Beginn der Sitzung, gebraucht
+zwei Stunden später mitten im Merge. Zuverlässig liest ein Agent nur die Ausgabe des Befehls, den
+er gerade ausführt. Deshalb sagt das Werkzeug dort, was zu tun ist (KONZEPT.md §8, *Hook* und
+*CLI*):
+
+- Der Hook meldet einen **fehlenden Trailer**, einen **fertigen Branch-Eintrag**, der noch offen
+  ist, und **offene `main`-Zeit** auf einem Branch ohne eigene Zeit.
+- Wo ein Mensch entscheiden muss, steht eine eigene Zeile **«Note for AI: ask the user to
+  decide.»**, deutsch «Hinweis KI: User um Entscheidung bitten.».
+
+In die `AGENTS.md` gehört damit nur noch, was das Werkzeug nicht sehen kann: dass ein Trailer die
+Leistung des Branches in der Sprache der Rechnung beschreibt, dass keine Zahl erfunden wird, und
+dass eine solche Zeile befolgt wird. Der Block dafür steht in der README.
+
 ## Ablauf an der Paketgrenze
 
 Für einen Agenten, der ein Paket auf einem Branch beginnt, mergt und abschliesst. Jeder Schritt
 ist ein Befehl, keiner verlangt eine Zahl. Ein Befehl, der ohne Terminal eine Antwort bräuchte,
 bricht mit einer Meldung ab, statt zu warten – die Meldung sagt, was fehlt.
 
-1. **Beim Anlegen des Branches:** `prosonata status` auf `main`. Steht dort offene Zeit, die zum
-   Paket gehört – angefangene Arbeit, die auf den Branch mitwandert –, auf dem neuen Branch
-   `prosonata take main`. Gehört sie nicht dazu, bleibt sie, wo sie ist.
+1. **Beim Anlegen des Branches:** Steht auf `main` offene Zeit, nennen `prosonata start` und der
+   erste Commit auf dem Branch sie, mit «Hinweis KI». Der Agent fragt, ob sie zum Paket gehört –
+   angefangene Arbeit, die auf den Branch mitwandert –, und führt auf Antwort `prosonata take main`
+   aus. Gehört sie nicht dazu, bleibt sie, wo sie ist.
 2. **Beim Squash-Merge:** nichts zusätzlich. Trägt der Merge-Commit den Trailer des Branches und
    hat `main` offene Zeit, hält der Hook sie an und sagt es; sie geht nicht mehr unter dem Text des
    Branches hinaus. **Wohin sie gehört, entscheidet ein Mensch**: Der Agent meldet die Zeile aus
@@ -126,8 +149,9 @@ bricht mit einer Meldung ab, statt zu warten – die Meldung sagt, was fehlt.
    `prosonata held <Nr> close "<Text>"`; `drop` braucht einen Menschen am Terminal oder im
    Editor. Ein Merge mit `--no-ff` löst keinen Hook aus ([post-merge.md](post-merge.md)); die
    offene `main`-Zeit bleibt dann einfach offen.
-3. **Nach dem Merge und dem Löschen des Branches:** `prosonata status` zeigt den Eintrag als
-   «Branch gelöscht». Beschreibt sein Text – der letzte Trailer – die Leistung des ganzen
+3. **Nach dem Merge und dem Löschen des Branches:** Der Hook hat beim Merge-Commit gemeldet, dass
+   der Eintrag des Branches noch offen ist; `prosonata status` zeigt ihn als «Branch gelöscht».
+   Beschreibt sein Text – der letzte Trailer – die Leistung des ganzen
    Branches, schliesst `prosonata close <branch>` ihn damit ab. Sonst
    `prosonata close <branch> "<Text>"`. Ein Eintrag ohne Zeit wird nicht abgeschlossen.
 4. **Prüfen, was hinausging:** `prosonata sent` zeigt die gesendeten Einträge mit ihrer

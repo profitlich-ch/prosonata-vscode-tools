@@ -814,6 +814,14 @@ brauchen: einmal, um die Wirkung zu zeigen, einmal, um sie zu tun.
 Antwortet jemand auf die Frage nach dem lange laufenden Segment mit einer **Dauer**, bleibt davon
 der **Anfang**: Gearbeitet wurde, als der Timer gestartet wurde; vergessen wurde das Anhalten.
 
+**Korrigieren braucht einen Menschen.** `prosonata adjust` ist der einzige Befehl, dessen Zahl von
+dem kommt, der ihn tippt, statt von der Uhr. Ohne Terminal – ein Agent, ein Skript ohne
+Bedienung – bricht er ab, wie das Verwerfen angehaltener Zeit. Ohne laufenden Timer ist eine
+Dauer nach oben durch nichts begrenzt, und ein Agent, der zu wissen glaubt, wie lange etwas
+gedauert hat, schriebe diese Annahme auf eine Rechnung. Das Panel ruft den Kern direkt auf und
+ist davon nicht betroffen; wer am Bildschirm klickt, ist ein Mensch. Gegen Absicht schützt die
+Prüfung nicht – ein Terminal lässt sich vortäuschen –, wohl aber gegen den arglosen Aufruf.
+
 ### Nacharbeit einem geschlossenen Eintrag zuschlagen
 
 Auf dem Hauptbranch schliesst ein Commit seinen Eintrag, und der Timer läuft in einen neuen
@@ -874,6 +882,19 @@ hierher:
 Abgelehnt wird, wenn der neue Branch schon einen offenen Eintrag hat: Zwei Einträge
 zusammenzulegen ist eine andere Frage, und es gibt sie schon (*Zeiteinträge durchsehen*).
 Ebenso ein Eintrag, der auf eine Entscheidung wartet – er gehört dem, der die Frage beantwortet.
+
+**Ausgenommen ist der leere Platzhalter**, den `start` auf einem neuen Branch anlegt: ohne Zeit,
+ohne Text, ProSonata noch unbekannt. Er weicht, und der übernommene Eintrag tritt an seine
+Stelle; ein laufender Timer fliesst von da an in ihn. Ohne diese Ausnahme liefe die Frage unten
+ins Leere, denn `git start` und `prosonata start` sind der übliche Beginn eines Pakets, und danach
+hätte `take` immer abgelehnt.
+
+**Gefragt wird, wenn der Branch noch nichts Eigenes hat** und auf `main` Zeit offen steht – beim
+`prosonata start` dort und bei jedem Commit, bis der Branch eigene Zeit trägt. Die CLI nennt
+die Zeit und `take`, der Editor bietet in seinen Fragen zum Branch-Wechsel einen Knopf
+«… von main mitnehmen». Unbeantwortet hält der Squash-Merge die Zeit später ohnehin an, und die
+Frage kommt als `held` zurück; jetzt gestellt, wird sie gestellt, solange man es noch weiss.
+Eine Schwelle gibt es nicht: Das Raster rundet auf, auch fünf Minuten werden eine Viertelstunde.
 
 **Keine Sekunde ändert sich**, nur die Zuordnung. Deshalb darf auch ein Agent den Befehl aufrufen,
 ohne die Regel zu berühren, dass Zahlen allein von der Uhr kommen (Abschnitt 12, Punkt 5).
@@ -1550,6 +1571,16 @@ Damit ist die CLI zugleich die Schnittstelle für einen **Coding-Agenten**: Wer 
 kann all das bereits, ohne dass etwas anzubinden wäre. Was ein Agent davon tun sollte und was
 nicht, steht in [docs/ki-anbindung.md](docs/ki-anbindung.md).
 
+**Was ein Mensch entscheiden muss, sagt die Ausgabe selbst.** Eine Zeile «Note for AI: ask the
+user to decide.» – deutsch «Hinweis KI: User um Entscheidung bitten.» – steht überall, wo eine
+Frage vorliegt, die nur beantworten kann, wer dabei war: offene `main`-Zeit auf einem neuen
+Branch, angehaltene Zeit beim Squash-Merge, ein anderswo abgeschlossener Eintrag, `adjust` und
+das Verwerfen ohne Terminal. Ein Agent handelt nach dem, was er gerade liest, nicht nach einer
+Regel, die er vor einer Stunde gelesen hat; eine Anweisung in seiner `AGENTS.md` ist eine
+Ergänzung, keine Sicherung. Für einen Menschen ist die Zeile harmlos. Befehle, die sonst fragen
+würden, brechen ohne Terminal ab, statt auf eine Antwort zu warten – `resume` ohne Antwort
+ebenso wie `close` ohne Text.
+
 ### Extension
 
 Aufgeteilt in Module, seit die Einstiegsdatei über tausend Zeilen trug: `view.ts` hält den
@@ -1658,6 +1689,20 @@ das gewesen.
 `post-commit`, der einzige Hook. Ruft die CLI, die den gemeinsamen Kern nutzt. Er schneidet
 das Segment, schreibt den lokalen Zustand und annotiert die SHA – **gesendet wird nicht im
 Hook**, sondern aufgeschoben (Abschnitt 4). Der Commit wartet dadurch nie auf das Netz.
+
+**Der Hook sagt, was noch zu tun ist**, denn seine Ausgabe liest jeder, der committet, auch ein
+Agent – `prosonata status` dagegen nur, wer daran denkt:
+
+- **Kein Trailer.** Auf dem Hauptbranch wird die Betreffzeile der Rechnungstext; der Hook nennt
+  sie, solange ein `--amend` sie noch vor dem Versand ersetzt (*Zurückgerollte Commits*). Auf
+  einem Branch, dessen Eintrag noch keinen Text hat, sagt er das; trägt der Eintrag schon einen,
+  schweigt er, denn der steht, bis ein neuer Trailer ihn ersetzt.
+- **Ein fertiger Branch-Eintrag ist noch offen.** Beim Squash-Merge nennt er den gemergten
+  Branch und `close`, ebenso bei jedem Commit auf dem Hauptbranch einen Eintrag, dessen Branch
+  gemergt oder gelöscht ist. Beim Löschen eines Branches läuft kein Hook, der Merge-Commit ist
+  der letzte Moment. Anlass: Am 3. November 2026 blieben in ksasz.ch drei solche Einträge offen.
+- **Offene `main`-Zeit** auf einem Branch ohne eigene Zeit, mit der Frage aus Abschnitt 3
+  (*übernehmen*).
 
 **Der Hook darf sich nicht auf `$PATH` verlassen.** Git führt ihn mit der Umgebung des
 Prozesses aus, der `git` aufgerufen hat – und die ist nicht immer deine:
@@ -2180,7 +2225,9 @@ Nicht erneut vorschlagen:
    selben Branch sind dagegen schon heute abgedeckt: Die Suche filtert auf `userID=myself`, jede
    führt ihren eigenen Zeiteintrag (Abschnitt 3).
 5. **Bedienung durch einen Coding-Agenten** – ausgearbeitet in
-   [docs/ki-anbindung.md](docs/ki-anbindung.md), nichts davon gebaut. Die Trennlinie liegt dabei
+   [docs/ki-anbindung.md](docs/ki-anbindung.md). Gebaut sind die Hinweise in der Ausgabe von
+   Hook und CLI und die Sperre für `adjust` ohne Terminal (Abschnitt 8, *CLI* und *Hook*); offen
+   ist das Anhalten am Sitzungsende. Die Trennlinie liegt dabei
    nicht zwischen „mit KI" und „ohne", sondern zwischen einem Hook, der beim Sitzungsende
    deterministisch `prosonata pause` ruft, und einem Modell, das beurteilt, wie viel Zeit zählt.
    Das erste ist eine Zeile Konfiguration, das zweite schreibt Kundenrechnungen. Vorgesehen sind

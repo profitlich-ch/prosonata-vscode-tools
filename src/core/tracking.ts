@@ -357,13 +357,23 @@ export interface TakeOptions {
  * waiting in the new scope now flows into this entry. Refuses, by returning the
  * state unchanged, when there is nothing to take, when the new scope already
  * has an open entry, or when the entry waits for a decision.
+ *
+ * An empty placeholder in the new scope does not count as an entry: `start`
+ * leaves one on a new branch, and the question whether main's time belongs
+ * there comes right then (KONZEPT.md §3). It goes, and the entry taken stands
+ * in its place.
  */
 export function takeEntry(state: State, options: TakeOptions): State {
   const entry = openEntry(state, options.from)
-  if (!entry || entry.awaitingDecision || openEntry(state, options.to)) return state
+  const occupied = openEntry(state, options.to)
+  if (!entry || entry.awaitingDecision || (occupied && !isEmptyPlaceholder(occupied))) return state
   if (isRunning(findTimer(state, options.from))) return state
 
   const next = structuredClone(state)
+  if (occupied) {
+    next.entries = next.entries.filter((candidate) => candidate.id !== occupied.id)
+    next.pending = next.pending.filter((write) => write.entryId !== occupied.id)
+  }
   const moved = findEntry(next, entry.id)!
   moved.scope = { ...options.to }
   moved.key = options.key
@@ -987,6 +997,22 @@ export function openBranchEntries(state: State, repoPath: string, mainBranch: st
  * behind on a branch that is deleted afterwards — the successor that took over
  * the timer (KONZEPT.md §3, *Abschluss*).
  */
+/**
+ * An entry nothing has gone into yet, and that ProSonata has not seen — what
+ * `start` leaves on a new branch until its first segment is booked. Unlike an
+ * empty remainder its timer may be running: the running segment has not been
+ * booked, so it can flow into another entry instead.
+ */
+export function isEmptyPlaceholder(entry: TimeEntry): boolean {
+  return (
+    entry.seconds === 0 &&
+    entry.foreignSeconds === 0 &&
+    entry.timeId === null &&
+    entry.creating === undefined &&
+    entry.text === ''
+  )
+}
+
 export function isEmptyRemainder(state: State, entry: TimeEntry): boolean {
   return (
     entry.seconds === 0 &&

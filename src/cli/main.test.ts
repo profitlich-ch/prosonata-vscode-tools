@@ -236,6 +236,129 @@ describe('time held at a squash merge', () => {
   })
 })
 
+/*
+ * What an agent must hand to a person says so in the output it is reading at
+ * that moment, not in a rule it may have forgotten (docs/ki-anbindung.md).
+ */
+const AI_NOTE = 'Note for AI: ask the user to decide.'
+
+function commitOn(branch: string, message: string): void {
+  git(repo, 'switch', '--quiet', branch === 'main' ? 'main' : '-c', ...(branch === 'main' ? [] : [branch]))
+  git(repo, 'commit', '--quiet', '--allow-empty', '-m', message)
+}
+
+describe('adjusting the time', () => {
+  it('needs a terminal, so no number comes from an agent', async () => {
+    openOnMain(1800)
+
+    expect(await main(['adjust', '+90'], repo)).toBe(2)
+
+    expect(err).toContain('needs a person')
+    expect(err).toContain(AI_NOTE)
+    expect(stored()?.seconds).toBe(1800)
+  })
+})
+
+describe('an entry closed on another machine', () => {
+  it('without an answer and without a terminal asks for the user instead of waiting', async () => {
+    openOn('main', 1800, 'Warenkorb', { awaitingDecision: true, remoteFinalSeconds: 600 })
+
+    expect(await main(['resume'], repo)).toBe(2)
+
+    expect(err).toContain('"prosonata resume add" or "prosonata resume new"')
+    expect(err).toContain(AI_NOTE)
+    expect(stored()).toMatchObject({ awaitingDecision: true })
+  })
+})
+
+describe('a commit without a trailer', () => {
+  it('on a branch says that the entry has no text yet', async () => {
+    commitOn('formularseite', 'Formular angelegt')
+    openOn('formularseite', 600, '')
+
+    await main(['post-commit'], repo)
+
+    expect(err).toContain('no "Prosonata:" trailer — the entry on formularseite has no text yet')
+  })
+
+  it('on a branch whose entry already has a text says nothing', async () => {
+    commitOn('formularseite', 'Formular angelegt')
+    openOn('formularseite', 600, 'Formular für Anmeldungen')
+
+    await main(['post-commit'], repo)
+
+    expect(err).not.toContain('trailer')
+  })
+
+  it('on the main branch names the subject that becomes the invoice text', async () => {
+    commitOn('main', 'fix: Rundung')
+    openOnMain(600)
+
+    await main(['post-commit'], repo)
+
+    expect(err).toContain('no "Prosonata:" trailer — "fix: Rundung" becomes the invoice text')
+  })
+
+  it('with a trailer says nothing about one', async () => {
+    commitOn('main', 'fix: Rundung\n\nProsonata: Rabattberechnung korrigiert')
+    openOnMain(600)
+
+    await main(['post-commit'], repo)
+
+    expect(err).not.toContain('trailer')
+  })
+})
+
+describe('the squash merge of a branch', () => {
+  it('names the entry of the merged branch that is still open', async () => {
+    git(repo, 'branch', 'formularseite')
+    openOn('formularseite', 1800, 'Formular für Anmeldungen')
+
+    commitOn('main', 'Formularseite\n\nProsonata: Formular für Anmeldungen')
+    await main(['post-commit'], repo)
+
+    expect(err).toContain('the entry of formularseite is still open — once the branch is done: "prosonata close formularseite [text]"')
+  })
+})
+
+describe('open main time on a new branch', () => {
+  it('is asked about when the timer starts there, and take brings it along', async () => {
+    openOnMain(40 * 60, 'Vorarbeit')
+    git(repo, 'switch', '--quiet', '-c', 'formularseite')
+
+    await main(['start'], repo)
+
+    expect(err).toContain('0:40:00 open on main — if it belongs to this branch: "prosonata take main"')
+    expect(err).toContain(AI_NOTE)
+
+    expect(await main(['take', 'main'], repo)).toBe(0)
+    expect(stored()).toMatchObject({ scope: { branch: 'formularseite' }, seconds: 40 * 60 })
+  })
+
+  it('is asked about at the first commit there, when no timer ran', async () => {
+    openOnMain(40 * 60)
+    commitOn('formularseite', 'Formular\n\nProsonata: Formular')
+
+    await main(['post-commit'], repo)
+
+    expect(err).toContain('open on main — if it belongs to this branch: "prosonata take main"')
+    expect(err).toContain(AI_NOTE)
+  })
+
+  it('is not asked about once the branch has time of its own', async () => {
+    const onMain = openOnMain(40 * 60)
+    new StateStore(paths.state()).update((state) => ({
+      ...state,
+      entries: [...state.entries, { ...onMain, id: 'f0aa', key: 'k2', scope: { repoPath: repo, branch: 'formularseite' }, seconds: 600 }],
+    }))
+    commitOn('formularseite', 'Formular\n\nProsonata: Formular')
+
+    await main(['post-commit'], repo)
+
+    expect(err).not.toContain('take main')
+  })
+})
+
 describe('closing an entry without time', () => {
   it('closes nothing and sends nothing', async () => {
     openOnMain(0)

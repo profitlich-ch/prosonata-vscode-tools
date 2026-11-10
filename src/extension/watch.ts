@@ -106,15 +106,38 @@ function watchHead(active: Session, context: RepoContext): void {
   if (from === null) return askAboutNewBranch(active, context)
 
   const keepCounting = t('Keep counting here')
+  const takeAlong = takeAlongLabel(active, context)
   void vscode.window
     .showInformationMessage(
       t('ProSonata: the branch has changed. The time so far went to {0}. Keep counting here?', from),
       keepCounting,
+      ...(takeAlong ? [takeAlong] : []),
       t('Leave paused'),
     )
     .then((answer) => {
-      if (answer === keepCounting) void vscode.commands.executeCommand('prosonata.start')
+      if (answer === takeAlong) takeMainTimeAndStart(active, context)
+      else if (answer === keepCounting) void vscode.commands.executeCommand('prosonata.start')
     })
+}
+
+/**
+ * The button for open main time that may have come along with the switch
+ * (KONZEPT.md §3, *übernehmen*), or undefined when there is none. Offered, not
+ * done: whether it belongs here only whoever measured it knows.
+ */
+function takeAlongLabel(active: Session, context: RepoContext): string | undefined {
+  const main = active.mainTimeToTake(context)
+  if (!main) return undefined
+  const seconds = main.seconds + main.foreignSeconds + runningSeconds(active.state(), active.clock, main.scope)
+  return t('Take {0} from {1} along', clock(seconds), main.scope.branch)
+}
+
+function takeMainTimeAndStart(active: Session, context: RepoContext): void {
+  const result = active.take(context, context.mainBranch)
+  if (result.kind === 'occupied') {
+    void vscode.window.showWarningMessage(t('ProSonata: {0} already has an open entry, nothing taken. Merge the two when browsing the time entries.', context.scope.branch))
+  }
+  void vscode.commands.executeCommand('prosonata.start')
 }
 
 /** Branches already asked about in this window; see `askAboutNewBranch`. */
@@ -140,14 +163,17 @@ function askAboutNewBranch(active: Session, context: RepoContext): void {
 
   askedAbout.add(context.key)
   const startTimer = t('Start timer')
+  const takeAlong = takeAlongLabel(active, context)
   void vscode.window
     .showInformationMessage(
       t('ProSonata: {0} is new. Start the timer?', context.scope.branch),
       startTimer,
+      ...(takeAlong ? [takeAlong] : []),
       t('Not now'),
     )
     .then((answer) => {
-      if (answer === startTimer) void vscode.commands.executeCommand('prosonata.start')
+      if (answer === takeAlong) takeMainTimeAndStart(active, context)
+      else if (answer === startTimer) void vscode.commands.executeCommand('prosonata.start')
     })
 }
 

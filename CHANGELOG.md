@@ -7,8 +7,32 @@ are in German.
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- **`prosonata adjust` needs a terminal.** It is the one command whose number
+  comes from whoever types it rather than from the clock, and without a running
+  timer nothing limits it. Started without a terminal — by a coding agent, or a
+  script nobody sits at — it now stops with exit code 2 and says that a person
+  decides. The panel's time adjustment is not affected. Migration: run it from a
+  terminal, or adjust in the panel.
+
 ### Added
 
+- **Hints in the hook's output** for what is still to be done: a commit without
+  a `Prosonata:` trailer — on `main` with the subject that would become the
+  invoice text, on a branch whose entry has no text yet —, a finished branch
+  whose entry is still open, named at the squash merge and at every later
+  commit on `main`, and open `main` time on a branch without time of its own.
+- **"Note for AI: ask the user to decide."** on a line of its own wherever a
+  person has to decide: open `main` time on a new branch, time held at a squash
+  merge, an entry closed elsewhere, `adjust` and discarding without a terminal.
+  A coding agent reads the output of the command it runs; a rule in its
+  instructions it may have forgotten.
+- **Open `main` time is asked about** when `prosonata start` runs on a branch
+  that holds nothing of its own yet, and at every commit there until it does.
+  In the editor, the questions after a branch switch offer **Take … from main
+  along**.
+- **A README section on coding agents**, with a block for `AGENTS.md`.
 - **The CLI checks the Node version** before it does anything. On a Node
   older than 18, which lacks the global `fetch`, it says so and names the
   binary, instead of failing at the first request — in the Git hook, where

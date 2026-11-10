@@ -16,7 +16,7 @@ import { StateStore } from './state-store.js'
 import { planMerge } from './merge.js'
 import { describeRepo } from './git.js'
 import { readRepoConfig, rememberCategory, rememberProject } from './repo-config.js'
-import { findEntry, openEntry } from './tracking.js'
+import { findEntry, openEntry, setText } from './tracking.js'
 import { EXACT } from './working-time.js'
 
 /**
@@ -1580,12 +1580,53 @@ describe('taking the open entry of another branch', () => {
   })
 
   it('refuses when this branch already has an open entry', async () => {
-    const { session } = await workedOnMain()
+    const { session, clock } = await workedOnMain()
     await session.start(topic)
+    clock.advance(5 * 60)
     session.pause(topic)
 
     expect(session.take(topic, 'main').kind).toBe('occupied')
     expect(openEntry(session.state(), main.scope)?.seconds).toBe(40 * 60)
+  })
+
+  /*
+   * `start` on a new branch leaves an empty placeholder, and the question
+   * whether main's time came along is asked right then (KONZEPT.md §3).
+   */
+  it('takes the place of the empty placeholder that start left, and the running timer flows on into it', async () => {
+    const { session, clock } = await workedOnMain()
+    await session.start(topic)
+    const placeholder = openEntry(session.state(), topic.scope)!
+
+    expect(session.take(topic, 'main').kind).toBe('done')
+
+    const state = session.state()
+    expect(state.entries.some((entry) => entry.id === placeholder.id)).toBe(false)
+    expect(state.pending.some((write) => write.entryId === placeholder.id)).toBe(false)
+    clock.advance(20 * 60)
+    session.pause(topic)
+    expect(openEntry(session.state(), topic.scope)?.seconds).toBe(60 * 60)
+  })
+
+  it('does not take the place of a placeholder that already has a text', async () => {
+    const { session } = await workedOnMain()
+    await session.start(topic)
+    session.store.update((state) => setText(state, openEntry(state, topic.scope)!.id, 'Formulare', NINE))
+
+    expect(session.take(topic, 'main').kind).toBe('occupied')
+  })
+
+  it('offers main time to a branch that holds nothing of its own yet', async () => {
+    const { session, clock } = await workedOnMain()
+    session.pause(main)
+
+    expect(session.mainTimeToTake(topic)?.seconds).toBe(40 * 60)
+    await session.start(topic)
+    expect(session.mainTimeToTake(topic)).not.toBeNull()
+    clock.advance(5 * 60)
+    session.pause(topic)
+    expect(session.mainTimeToTake(topic)).toBeNull()
+    expect(session.mainTimeToTake(main)).toBeNull()
   })
 
   it('has nothing to take from a branch without time', async () => {

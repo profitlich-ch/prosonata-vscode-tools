@@ -313,8 +313,16 @@ wird. Die Segmente bleiben im Log, wo sie gemessen wurden, und eine Zeile
 **Übernommen von main** auf dem neuen Branch sagt, warum ihre Zeit dort
 verrechnet wird.
 
-Hat der neue Branch schon einen offenen Eintrag, wird nichts übernommen – leg die
-beiden stattdessen beim Durchsehen der Zeiteinträge zusammen.
+Daran denken musst du nicht. Hat `main` offene Zeit, sagt es `prosonata start`
+auf einem Branch, der noch nichts Eigenes hat, und ebenso jeder Commit dort, bis
+der Branch eigene Zeit trägt. Im Editor bietet die Frage nach einem
+Branch-Wechsel **… von main mitnehmen** an. Ob die Zeit zum neuen Branch gehört,
+wird nie für dich entschieden.
+
+Hat der neue Branch schon einen offenen Eintrag mit Zeit oder Text, wird nichts
+übernommen – leg die beiden stattdessen beim Durchsehen der Zeiteinträge
+zusammen. Der leere Eintrag, den `prosonata start` auf einem neuen Branch
+anlegt, zählt nicht; der übernommene Eintrag tritt an seine Stelle.
 
 ## Einen Branch mergen
 
@@ -327,8 +335,10 @@ Die Reihenfolge am Ende eines Pakets, nach einem Squash-Merge:
    darauf bietet drei Antworten: die Zeit dem Eintrag des gemergten Branches
    zuschlagen, sie mit eigenem Text abschliessen oder sie verwerfen. Im Terminal:
    `prosonata held`.
-2. **Den Branch löschen.** Sein Eintrag erscheint in der Seitenleiste und in
-   `prosonata status` als **Branch gelöscht**. `prosonata close <branch>`
+2. **Den Branch löschen.** Der Hook hat den Eintrag des Branches schon beim
+   Merge-Commit genannt, denn beim Löschen eines Branches läuft nichts. Sein
+   Eintrag erscheint in der Seitenleiste und in `prosonata status` als
+   **Branch gelöscht**, und jeder weitere Commit auf `main` nennt ihn wieder. `prosonata close <branch>`
    schliesst ihn mit dem Text ab, den er hat – dem letzten Trailer –, oder mit dem
    Text, den du nach dem Namen angibst.
 3. **Prüfen, was rausging.** `prosonata sent` listet die aus diesem Repository
@@ -424,9 +434,49 @@ Ein Befehl, der ein Argument nimmt, fragt danach, wenn es fehlt – mit Argument
 läuft er ohne Rückfrage, was ihn auch für Skripte tauglich macht. `close` ohne
 Text nimmt den, den der Eintrag hat, und fragt nur, wenn es keinen gibt. Ohne
 Terminal wartet nichts auf eine Antwort: Der Befehl bricht ab und sagt, was fehlt.
-`--help` nach einem beliebigen Befehl, oder `prosonata help <befehl>`, zeigt seine
-Hilfe und tut sonst nichts. Die früheren deutschen Werte für Argumente (`exakt`,
-`tag`, `neu`, `alle`, `ab`, `bis`) funktionieren weiterhin.
+`adjust` ist die Ausnahme: Seine Zahl kommt von dem, der ihn tippt, nicht von der
+Uhr, deshalb läuft er ohne Terminal gar nicht. Die Zeitkorrektur im Panel ist
+davon nicht betroffen. `--help` nach einem beliebigen Befehl, oder
+`prosonata help <befehl>`, zeigt seine Hilfe und tut sonst nichts. Die früheren
+deutschen Werte für Argumente (`exakt`, `tag`, `neu`, `alle`, `ab`, `bis`)
+funktionieren weiterhin.
+
+## Mit Coding-Agenten arbeiten
+
+Ein Coding-Agent, der committet, bedient die Zeiterfassung, ob er davon weiss
+oder nicht, und er kann jeden CLI-Befehl aufrufen. Deshalb sagt das Werkzeug in
+der Ausgabe, die der Agent in diesem Moment liest, was zu tun ist:
+
+- Der Hook nennt einen Commit ohne Trailer, einen fertigen Branch, dessen
+  Eintrag noch offen ist, und offene `main`-Zeit auf einem Branch ohne eigene
+  Zeit.
+- Wo ein Mensch entscheiden muss, sagt es eine eigene Zeile: **Hinweis KI: User
+  um Entscheidung bitten.** – bei offener `main`-Zeit, beim Squash-Merge
+  angehaltener Zeit, einem anderswo abgeschlossenen Eintrag und bei `adjust`
+  oder Verwerfen ohne Terminal.
+
+Was das Werkzeug nicht sehen kann, gehört in die Anweisungen des Agenten. Ein
+Block für die `AGENTS.md`:
+
+```md
+## Zeiterfassung (ProSonata)
+
+In Repositories mit dem prosonata-Hook in post-commit:
+
+- Jeder Commit trägt im letzten Absatz einen `Prosonata:`-Trailer. Er beschreibt
+  die Leistung des ganzen Branches, nicht diesen Schritt, in der Sprache dessen,
+  der die Rechnung liest. Der letzte gewinnt.
+- Nie eine Dauer erfinden und nie `prosonata adjust` ausführen: Die Zeit kommt
+  von der Uhr. `prosonata start` und `prosonata pause` sind erlaubt.
+- Sagt die Ausgabe von prosonata "Hinweis KI: User um Entscheidung bitten."
+  (englisch "Note for AI: ask the user to decide."), den User fragen und die
+  Antwort abwarten.
+```
+
+Claude Code liest die `CLAUDE.md`, nicht die `AGENTS.md`; eine Zeile
+`@AGENTS.md` darin bindet sie ein. Ein Hook, der beim Ende einer Agenten-Sitzung
+`prosonata pause` aufruft, ist eine Einstellung des Agenten, nicht dieses
+Werkzeugs.
 
 ## Was die Extension nicht tut
 
