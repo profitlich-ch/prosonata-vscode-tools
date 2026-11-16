@@ -7,6 +7,12 @@ are in German.
 
 ## [Unreleased]
 
+### Changed
+
+- **More Marketplace keywords**, in English and German, so the extension turns
+  up in searches for time tracking, timesheets and billing, not only for
+  ProSonata.
+
 ## [2.0.0] — 2026-11-10
 
 ### Breaking Changes

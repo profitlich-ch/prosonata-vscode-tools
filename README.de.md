@@ -20,10 +20,10 @@ Was nach ProSonata geht, bleibt deutsch: Ein offener Eintrag ist mit `[LAUFEND]`
 Suche in VS Code unter Erweiterungen nach **ProSonata Tools**, oder im Terminal:
 
 ```sh
-code --install-extension profitlich.prosonata-vscode-tools
+code --install-extension Profitlich.prosonata-vscode-tools
 ```
 
-Die Extension steht im [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=profitlich.prosonata-vscode-tools) und auf [Open VSX](https://open-vsx.org/extension/Profitlich/prosonata-vscode-tools) – dort finden sie auch Cursor, VSCodium und Windsurf. Updates kommen von selbst.
+Die Extension steht im [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Profitlich.prosonata-vscode-tools) und auf [Open VSX](https://open-vsx.org/extension/Profitlich/prosonata-vscode-tools) – dort finden sie auch Cursor, VSCodium und Windsurf. Updates kommen von selbst.
 
 ### Fertiges Paket
 

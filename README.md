@@ -20,10 +20,10 @@ What goes into ProSonata stays German: an open entry is marked `[LAUFEND]`, and 
 Search for **ProSonata Tools** under Extensions in VS Code, or in a terminal:
 
 ```sh
-code --install-extension profitlich.prosonata-vscode-tools
+code --install-extension Profitlich.prosonata-vscode-tools
 ```
 
-The extension is in the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=profitlich.prosonata-vscode-tools) and on [Open VSX](https://open-vsx.org/extension/Profitlich/prosonata-vscode-tools) — where Cursor, VSCodium and Windsurf find it too. Updates arrive by themselves.
+The extension is in the [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=Profitlich.prosonata-vscode-tools) and on [Open VSX](https://open-vsx.org/extension/Profitlich/prosonata-vscode-tools) — where Cursor, VSCodium and Windsurf find it too. Updates arrive by themselves.
 
 ### Ready-made package
 

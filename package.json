@@ -19,11 +19,22 @@
     "SCM Providers"
   ],
   "keywords": [
-    "time tracking",
-    "zeiterfassung",
     "prosonata",
+    "time tracking",
+    "time tracker",
+    "timer",
+    "timesheet",
+    "zeiterfassung",
+    "stundenerfassung",
     "git",
-    "invoicing"
+    "git hook",
+    "commit",
+    "branch",
+    "invoicing",
+    "billing",
+    "abrechnung",
+    "agency",
+    "freelance"
   ],
   "engines": {
     "node": ">=22",
