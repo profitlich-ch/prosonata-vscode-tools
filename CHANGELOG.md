@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-11-16
+
 ### Added
 
 - **Possible duplicates are marked** in “Browse Time Entries”: two entries of
