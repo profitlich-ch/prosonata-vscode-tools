@@ -12,6 +12,9 @@ are in German.
 - **More Marketplace keywords**, in English and German, so the extension turns
   up in searches for time tracking, timesheets and billing, not only for
   ProSonata.
+- **Invoiced entries are left out of “Browse Time Entries”.** They showed up
+  with a checkbox although none of the actions may touch them; the title now
+  says how many were left out.
 
 ## [2.0.0] — 2026-11-10
 

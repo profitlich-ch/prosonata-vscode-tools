@@ -38,8 +38,23 @@ export async function browseEntries(session: Session, context: RepoContext): Pro
     return
   }
 
+  /*
+   * Invoiced entries are left out rather than shown: nothing here may touch
+   * them, and a multi-select QuickPick gives every row a checkbox — the stable
+   * API has no row that is shown but cannot be ticked. A row with a checkbox
+   * that does nothing is worse than a count in the title.
+   */
+  const open = found.entries.filter((entry) => !entry.isInvoiced)
+  const invoiced = found.entries.length - open.length
+  if (open.length === 0) {
+    void vscode.window.showInformationMessage(
+      t('ProSonata: all {0} time entries of this project are invoiced — they can only be changed in ProSonata.', invoiced),
+    )
+    return
+  }
+
   const grid = session.gridFor(context.scope.repoPath)
-  const picked = await choose(found.entries, grid)
+  const picked = await choose(open, invoiced, grid)
   if (!picked) return
 
   if ('edit' in picked) return editEntry(session, context, picked.edit, grid)
@@ -51,19 +66,21 @@ export async function browseEntries(session: Session, context: RepoContext): Pro
 type Choice = { action: 'merge' | 'remove'; entries: RemoteEntry[] } | { edit: RemoteEntry }
 
 /**
- * The list itself. Returns what was ticked and which button was pressed.
+ * The list itself, of entries that are not invoiced. Returns what was ticked and
+ * which button was pressed.
  *
  * The buttons are made here, not once per module: their tooltips are
  * translated, and the language is only known once the extension is active.
  */
-function choose(entries: RemoteEntry[], grid: TimeGrid): Promise<Choice | null> {
+function choose(entries: RemoteEntry[], invoiced: number, grid: TimeGrid): Promise<Choice | null> {
   const merge: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('merge'), tooltip: t('Merge selected') }
   const remove: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('trash'), tooltip: t('Delete selected') }
   // Per row, because editing one entry has nothing to do with what is ticked.
   const edit: vscode.QuickInputButton = { iconPath: new vscode.ThemeIcon('edit'), tooltip: t('Change text and hours') }
 
   const pick = vscode.window.createQuickPick<Row>()
-  pick.title = t('ProSonata: time entries')
+  pick.title =
+    invoiced === 0 ? t('ProSonata: time entries') : t('ProSonata: time entries ({0} invoiced not shown)', invoiced)
   pick.placeholder = t('Tick several, then merge or delete at the top right')
   pick.canSelectMany = true
   pick.matchOnDescription = true
@@ -141,11 +158,10 @@ async function editEntry(
 
 function row(entry: RemoteEntry, grid: TimeGrid, edit: vscode.QuickInputButton): Row {
   const day = entry.date.slice(8, 10) + '.' + entry.date.slice(5, 7) + '.'
-  const marks = entry.isInvoiced ? ` · ${t('invoiced')}` : ''
   return {
     label: entry.detail === '' ? t('(no text)') : entry.detail,
-    description: `${billedTime(hoursToSeconds(entry.hours), grid)} h · ${day} · #${entry.timeID}${marks}`,
-    buttons: entry.isInvoiced ? [] : [edit],
+    description: `${billedTime(hoursToSeconds(entry.hours), grid)} h · ${day} · #${entry.timeID}`,
+    buttons: [edit],
     entry,
   }
 }

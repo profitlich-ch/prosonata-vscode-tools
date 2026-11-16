@@ -379,9 +379,10 @@ durchsehen“. Es bietet drei Aktionen:
   wird die Summe aus ProSonata angezeigt, mit einem Hinweis, warum.
 - **Löschen** – nach einer Bestätigung mit den Zahlen.
 
-**Fakturierte Einträge bleiben stehen**, bei allen drei Aktionen: Sie gehören zur
-Rechnung. Das Log der Segmente wird nicht angepasst; es bleibt das Archiv der
-Messung, korrigiert wird die Abrechnung.
+**Fakturierte Einträge stehen nicht in der Liste**: Sie gehören zur Rechnung,
+und keine der drei Aktionen darf sie anfassen. Wie viele ausgeblendet sind,
+steht im Titel. Das Log der Segmente wird nicht angepasst; es bleibt das Archiv
+der Messung, korrigiert wird die Abrechnung.
 
 ## Das Log
 

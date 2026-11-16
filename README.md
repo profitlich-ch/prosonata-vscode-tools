@@ -369,7 +369,8 @@ It offers three actions:
   instance — the total from ProSonata is shown, with a note explaining why.
 - **Delete** — after confirming with the figures.
 
-**Invoiced entries stay** in all three actions: they belong to the invoice. The
+**Invoiced entries are not in the list**: they belong to the invoice, and none
+of the three actions may touch them. The title says how many were left out. The
 segment log is not adjusted; it remains the archive of the measurement, while
 the billing is what gets corrected.
 

@@ -968,6 +968,12 @@ Die Liste selbst ist eine native QuickPick, kein Webview – aus demselben Grund
 Auswahlen in Abschnitt 8. Gebraucht wird Mehrfachauswahl und ein Knopf je Zeile, und beides hat
 die QuickPick.
 
+**Fakturierte Einträge stehen nicht in der Liste**, der Titel nennt ihre Zahl. Gezeigt, aber
+nicht ankreuzbar ginge nicht: Bei Mehrfachauswahl bekommt jede Zeile der QuickPick ein
+Kästchen, und die stabile API kennt keine gesperrte Zeile – nur Trenner, die weder Beschreibung
+tragen noch von der Suche gefunden werden. Ein Kästchen, das sich nicht ankreuzen lässt, wäre
+schlechter als eine Zahl im Titel (Issue #11).
+
 **Im Terminal gibt es einen Teil davon.** `close` sendet sofort; wer dabei einen Fehler macht,
 Mensch oder Agent, braucht einen Weg zurück, ohne den Editor zu öffnen. `prosonata sent [Anzahl]`
 zeigt die zuletzt gesendeten Einträge des Arbeitsverzeichnisses mit ProSonata-Nummer, Nr, Datum,
