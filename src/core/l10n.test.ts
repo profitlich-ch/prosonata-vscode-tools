@@ -22,7 +22,8 @@ function sourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((item) => {
     const path = join(dir, item.name)
     if (item.isDirectory()) return sourceFiles(path)
-    return item.name.endsWith('.ts') && !item.name.endsWith('.test.ts') ? [path] : []
+    // `.svelte` too: the webview has a `t()` of its own, fed from the same bundle.
+    return /\.(ts|svelte)$/.test(item.name) && !item.name.endsWith('.test.ts') ? [path] : []
   })
 }
 

@@ -4,7 +4,8 @@ import { existsSync } from 'node:fs'
 import { HttpApi, type Api, type RemoteEntry } from './api.js'
 import { localDate, systemClock, type Clock } from './clock.js'
 import { paths, readConfig, type Config } from './config.js'
-import { branchExists, describeRepo, mainBranch, stillOnBranch, workMerged, type GitRepo } from './git.js'
+import type { BranchSources } from './browse.js'
+import { branchExists, describeRepo, localBranches, mainBranch, stillOnBranch, workMerged, type GitRepo } from './git.js'
 import { entryIsOpen, findOfBranch } from './identity.js'
 import { Journal } from './journal.js'
 import { t, template } from './l10n.js'
@@ -1058,6 +1059,22 @@ export class Session {
     }
     const mine = this.segments.read().filter((segment) => segment.repoPath === context.scope.repoPath)
     return { entries, measured: measuredPerEntry(mine, timeIdOf) }
+  }
+
+  /**
+   * Every branch name this machine can put to an entry of ProSonata
+   * (browse.ts). The local branches come first and the state second, so where
+   * both know a key, the name from an entry that was really written wins.
+   */
+  branchesFor(context: RepoContext): BranchSources {
+    const byKey = new Map<string, string>()
+    const byTimeId = new Map<number, string>()
+    for (const name of localBranches(context.repo.root)) byKey.set(branchKey(context.repo.rootCommit, name), name)
+    for (const entry of this.state().entries) {
+      byKey.set(entry.key, entry.scope.branch)
+      if (entry.timeId !== null) byTimeId.set(entry.timeId, entry.scope.branch)
+    }
+    return { byTimeId, byKey }
   }
 
   /**

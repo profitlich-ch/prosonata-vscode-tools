@@ -141,6 +141,12 @@ export function workMerged(cwd: string, branch: string, into: string): boolean {
   return moves !== null && moves.split('\n').filter((line) => line !== '').length > 1
 }
 
+/** The names of the local branches, `feature/x` rather than `refs/heads/feature/x`. */
+export function localBranches(cwd: string): string[] {
+  const names = tryGit(cwd, 'for-each-ref', '--format=%(refname:short)', 'refs/heads')
+  return names?.split('\n').filter((line) => line !== '') ?? []
+}
+
 export function branchExists(cwd: string, branch: string): boolean {
   return tryGit(cwd, 'rev-parse', '--verify', '--quiet', `refs/heads/${branch}`) !== null
 }

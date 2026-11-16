@@ -8,6 +8,7 @@ import { describeRunningElsewhere } from '../core/sync.js'
 import { openEntry, runningSeconds } from '../core/tracking.js'
 import { clock } from './panel.js'
 import { askForDuration } from './adjust-ui.js'
+import { entriesChanged } from './browse.js'
 import { askAboutClosedElsewhere } from './entries.js'
 import { closedAmong, currentContext, currentSession, refreshBudget, reload } from './view.js'
 
@@ -66,7 +67,10 @@ async function workOnce(active: Session, context: RepoContext): Promise<void> {
     const result = await active.flush()
     // A budget in ProSonata only moves once time has actually arrived there —
     // and it is worth looking again exactly when an entry was finished.
-    if (closedAmong(active, result.sent)) void refreshBudget(active, context.projectId)
+    if (closedAmong(active, result.sent)) {
+      void refreshBudget(active, context.projectId)
+      entriesChanged()
+    }
   } catch {
     // Sending failures are not worth a popup every 30 seconds; they stay
     // pending and the panel shows the backlog.

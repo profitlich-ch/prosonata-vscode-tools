@@ -4,6 +4,10 @@
  * The value is the absolute total in decimal hours, never a difference — that
  * is what makes every write idempotent. Measured against the account: a PUT
  * replaces the value, it does not add to it.
+ *
+ * No imports, and it has to stay that way: the webview of the time entries
+ * bundles this file into the browser, for the same notation and the same
+ * parsing of hours as the host (docs/adr/0001).
  */
 
 /** Rounding grid, configurable per repository. Minutes, or exact. */
@@ -36,6 +40,34 @@ export function toHours(seconds: number, grid: TimeGrid = EXACT): number {
   const hours = seconds / 3600
   const factor = 10 ** DECIMALS
   return Math.round(hours * factor) / factor
+}
+
+/**
+ * `1:23` — hours and minutes. Seconds would be noise over a day.
+ *
+ * The sign goes in front of the whole thing: a correction of a quarter of an
+ * hour is `−0:15`, not `-1:-15`, which is what dividing a negative number into
+ * hours and minutes gives you.
+ */
+export function hoursAndMinutes(seconds: number): string {
+  const amount = Math.abs(seconds)
+  return `${seconds < 0 ? '−' : ''}${Math.floor(amount / 3600)}:${String(Math.floor((amount % 3600) / 60)).padStart(2, '0')}`
+}
+
+/**
+ * What ProSonata will hold for a stretch of time, in the notation people read:
+ * `1:16 h`, not `1.27 h`. Decimal hours are what the API stores and what every
+ * write sends — but nobody reads `1.27` as a quarter past.
+ */
+export function billedTime(seconds: number, grid: TimeGrid): string {
+  /*
+   * To the nearest minute, not down to it. A measured stretch is floored,
+   * because a timer must not claim a minute it has not reached — but this is a
+   * value already fixed by the grid, and 0.33 h is nearer twenty minutes than
+   * nineteen. Flooring also made the notation unstable: the browser fills its
+   * field with this text, and `0:20` typed back came out as `0:19`.
+   */
+  return hoursAndMinutes(Math.round((toHours(seconds, grid) * 3600) / 60) * 60)
 }
 
 /** Parses what the API returns, which is a string on GET and a number on write. */

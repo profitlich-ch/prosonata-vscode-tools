@@ -355,24 +355,31 @@ goes out, its time moves to the entry of the commit that replaced it.
 ## Browsing time entries
 
 The list icon in the title bar of the ProSonata panel fetches the time entries
-of the current repository from ProSonata into a list where several can be
-selected; in the Command Palette it is called “ProSonata: Browse Time Entries”.
-It offers three actions:
+of the current repository from ProSonata into a table in an editor tab; in the
+Command Palette it is called “ProSonata: Browse Time Entries”. The rows are
+grouped by branch — or by week — with a sum per group, and can be searched and
+sorted. Next to the hours, the table shows what the segment log on this computer
+measured into each entry, and it marks a **possible duplicate**: same branch,
+same day, same text. Above it stand the project's budget and the sum of your own
+entries. It offers three actions:
 
-- **Change text and hours** — the pencil icon on a row. Type hours as `h:mm` or
-  as a decimal number; the new total is written, rounded to the grid.
-- **Merge** — select several; one entry stays, the others are deleted once the
-  total is safely on the remaining one. The suggested hours come from the
-  measured segments, rounded to the grid **once**: merging afterwards says the
-  work was done in one go, and one go is rounded once, not three times. If the
-  segments don't cover the entries — because another computer measured, for
-  instance — the total from ProSonata is shown, with a note explaining why.
+- **Change text and hours** — click the text or the hours of a row. Type hours
+  as `h:mm` or as a decimal number and press Enter; the new total is written,
+  rounded to the grid. Escape discards the change.
+- **Merge** — tick several; the bar below the table shows what they come to.
+  One entry stays, the others are deleted once the total is safely on the
+  remaining one. The suggested hours come from the measured segments, rounded to
+  the grid **once**: merging afterwards says the work was done in one go, and one
+  go is rounded once, not three times. If the segments don't cover the entries —
+  because another computer measured, for instance — the total from ProSonata is
+  shown, with a note explaining why.
 - **Delete** — after confirming with the figures.
 
-**Invoiced entries are not in the list**: they belong to the invoice, and none
-of the three actions may touch them. The title says how many were left out. The
-segment log is not adjusted; it remains the archive of the measurement, while
-the billing is what gets corrected.
+**Invoiced entries can't be ticked**: they belong to the invoice, and none of
+the three actions may touch them. They are hidden until you tick “Show
+invoiced”. Every change is checked against what ProSonata holds at that moment,
+not against the table on screen. The segment log is not adjusted; it remains the
+archive of the measurement, while the billing is what gets corrected.
 
 ## The log
 

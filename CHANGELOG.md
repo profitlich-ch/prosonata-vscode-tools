@@ -7,14 +7,25 @@ are in German.
 
 ## [Unreleased]
 
+### Added
+
+- **Possible duplicates are marked** in “Browse Time Entries”: two entries of
+  the same branch, day and text.
+
 ### Changed
 
 - **More Marketplace keywords**, in English and German, so the extension turns
   up in searches for time tracking, timesheets and billing, not only for
   ProSonata.
-- **Invoiced entries are left out of “Browse Time Entries”.** They showed up
-  with a checkbox although none of the actions may touch them; the title now
-  says how many were left out.
+- **“Browse Time Entries” is a table in an editor tab** instead of a list in
+  the Command Palette. It groups the entries by branch or week with a sum per
+  group, searches and sorts them, and shows what the segment log measured into
+  each entry. Text and hours are changed right in the row. Ticked entries show
+  their sum and what merging them would come to — rounded per entry against
+  rounded once — before anything is written.
+- **Invoiced entries can't be ticked any more.** They used to show up with a
+  checkbox although none of the actions may touch them; now they are hidden
+  until “Show invoiced” is ticked, and then stand greyed out without one.
 
 ## [2.0.0] — 2026-11-10
 

@@ -363,26 +363,34 @@ Eintrag des Commits um, der ihn ersetzt hat.
 ## Zeiteinträge durchsehen
 
 Das Listen-Symbol in der Titelleiste des ProSonata-Panels holt die Zeiteinträge
-des aktuellen Repositorys aus ProSonata in eine Liste, in der sich mehrere
-auswählen lassen; in der Befehlspalette heisst es „ProSonata: Zeiteinträge
-durchsehen“. Es bietet drei Aktionen:
+des aktuellen Repositorys aus ProSonata in eine Tabelle in einem Editor-Tab; in
+der Befehlspalette heisst es „ProSonata: Zeiteinträge durchsehen“. Die Zeilen
+sind nach Branch – oder nach Woche – gruppiert, mit einer Summe je Gruppe, und
+lassen sich durchsuchen und sortieren. Neben den Stunden zeigt die Tabelle, was
+das Segmentprotokoll auf diesem Rechner in jeden Eintrag gemessen hat, und sie
+markiert ein **mögliches Doppel**: gleicher Branch, gleicher Tag, gleicher Text.
+Darüber stehen das Budget des Projekts und die Summe deiner eigenen Einträge. Es
+bietet drei Aktionen:
 
-- **Text und Stunden ändern** – das Stift-Symbol in einer Zeile. Stunden tippst du
-  als `h:mm` oder als Dezimalzahl; geschrieben wird die neue Summe, aufs Raster
-  gerundet.
-- **Zusammenlegen** – mehrere auswählen; ein Eintrag bleibt, die anderen werden
-  gelöscht, sobald die Summe sicher auf dem verbleibenden steht. Die
-  vorgeschlagenen Stunden kommen aus den gemessenen Segmenten, **einmal** aufs
-  Raster gerundet: Wer nachträglich zusammenlegt, sagt, dass die Arbeit in einem
-  Zug getan wurde, und ein Zug wird einmal gerundet, nicht dreimal. Decken die
-  Segmente die Einträge nicht ab – weil etwa ein anderer Rechner gemessen hat –,
-  wird die Summe aus ProSonata angezeigt, mit einem Hinweis, warum.
+- **Text und Stunden ändern** – Text oder Stunden einer Zeile anklicken. Stunden
+  tippst du als `h:mm` oder als Dezimalzahl und drückst Enter; geschrieben wird
+  die neue Summe, aufs Raster gerundet. Escape verwirft die Änderung.
+- **Zusammenlegen** – mehrere ankreuzen; die Leiste unter der Tabelle zeigt, was
+  sie ergeben. Ein Eintrag bleibt, die anderen werden gelöscht, sobald die Summe
+  sicher auf dem verbleibenden steht. Die vorgeschlagenen Stunden kommen aus den
+  gemessenen Segmenten, **einmal** aufs Raster gerundet: Wer nachträglich
+  zusammenlegt, sagt, dass die Arbeit in einem Zug getan wurde, und ein Zug wird
+  einmal gerundet, nicht dreimal. Decken die Segmente die Einträge nicht ab –
+  weil etwa ein anderer Rechner gemessen hat –, wird die Summe aus ProSonata
+  angezeigt, mit einem Hinweis, warum.
 - **Löschen** – nach einer Bestätigung mit den Zahlen.
 
-**Fakturierte Einträge stehen nicht in der Liste**: Sie gehören zur Rechnung,
-und keine der drei Aktionen darf sie anfassen. Wie viele ausgeblendet sind,
-steht im Titel. Das Log der Segmente wird nicht angepasst; es bleibt das Archiv
-der Messung, korrigiert wird die Abrechnung.
+**Fakturierte Einträge lassen sich nicht ankreuzen**: Sie gehören zur Rechnung,
+und keine der drei Aktionen darf sie anfassen. Sie sind ausgeblendet, bis du
+„Fakturierte zeigen“ ankreuzt. Jede Änderung wird gegen das geprüft, was
+ProSonata in diesem Moment hält, nicht gegen die Tabelle auf dem Schirm. Das Log
+der Segmente wird nicht angepasst; es bleibt das Archiv der Messung, korrigiert
+wird die Abrechnung.
 
 ## Das Log
 

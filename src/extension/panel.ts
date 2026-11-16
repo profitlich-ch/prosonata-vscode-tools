@@ -463,15 +463,20 @@ function elsewhere(entry: TimeEntry): string {
 }
 
 function describeProject(project: RepoProject | undefined, projectId: number, budget?: Budget): string {
-  const name = !project ? `#${projectId}` : project.no ? `${project.no} ${project.name}` : project.name
+  const name = projectLabel(project, projectId)
   // Only with a plan to measure against: "15,25 h" alone says nothing about
   // whether the pot is full or empty.
   if (!budget || budget.planned <= 0) return name
-  return t('{0} · {1} of {2} h', name, hours(budget.needed), hours(budget.planned))
+  return t('{0} · {1} of {2} h', name, decimalHours(budget.needed), decimalHours(budget.planned))
+}
+
+/** `24-017 Feature Buchungsmodul` — with the number a customer call and an invoice refer to. */
+export function projectLabel(project: RepoProject | undefined, projectId: number): string {
+  return !project ? `#${projectId}` : project.no ? `${project.no} ${project.name}` : project.name
 }
 
 /** `15.25` or `15,25` — decimal hours, as the budget is agreed, in the display language. */
-function hours(value: number): string {
+export function decimalHours(value: number): string {
   return new Intl.NumberFormat(vscode.env.language, { maximumFractionDigits: 2, useGrouping: false }).format(value)
 }
 

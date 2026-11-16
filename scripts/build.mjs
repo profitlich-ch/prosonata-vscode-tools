@@ -1,5 +1,6 @@
 import { chmodSync, readFileSync } from 'node:fs'
 import * as esbuild from 'esbuild'
+import sveltePlugin from 'esbuild-svelte'
 
 /**
  * One tool, one output format (KONZEPT.md §8).
@@ -46,12 +47,34 @@ const cli = {
   banner: { js: '#!/usr/bin/env node' },
 }
 
+/*
+ * The table of time entries runs in a webview, which is a browser: no Node, no
+ * `vscode`, one script and one stylesheet loaded under a content security
+ * policy (docs/adr/0001). Svelte compiles away; its CSS comes out as
+ * browse.css next to the script instead of being injected, so the policy needs
+ * no inline styles.
+ */
+const webview = {
+  bundle: true,
+  platform: 'browser',
+  target: 'es2022',
+  format: 'iife',
+  sourcemap: true,
+  minify: !watch,
+  logLevel: 'info',
+  entryPoints: { browse: 'src/webview/main.ts' },
+  outdir: 'dist/webview',
+  mainFields: ['svelte', 'browser', 'module', 'main'],
+  conditions: ['svelte', 'browser'],
+  plugins: [sveltePlugin({ compilerOptions: { css: 'external' } })],
+}
+
 if (watch) {
-  const contexts = await Promise.all([esbuild.context(extension), esbuild.context(cli)])
+  const contexts = await Promise.all([esbuild.context(extension), esbuild.context(cli), esbuild.context(webview)])
   await Promise.all(contexts.map((context) => context.watch()))
   console.log('watching for changes')
 } else {
-  await Promise.all([esbuild.build(extension), esbuild.build(cli)])
+  await Promise.all([esbuild.build(extension), esbuild.build(cli), esbuild.build(webview)])
   chmodSync(cli.outfile, 0o755)
-  console.log('built: dist/extension.cjs and dist/cli.cjs')
+  console.log('built: dist/extension.cjs, dist/cli.cjs and dist/webview/')
 }

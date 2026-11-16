@@ -947,9 +947,10 @@ mit fremdem Text. Akut wird er erst mit dem `post-merge`-Hook; dort ist dieselbe
 ### Zeiteinträge durchsehen und berichtigen
 
 Die Zeiteinträge des aktuellen Repositories lassen sich aus dem Editor **durchsehen**: eine
-QuickPick-Liste aus ProSonata, mehrfach wählbar, mit drei Handlungen – **Text und Stunden
-ändern**, **zusammenlegen**, **löschen**. Nur das aktuelle Repository, denn die Frage, die dazu führt, lautet
-immer „was habe ich hier gebucht", nie „was steht in allen Projekten".
+Tabelle in einem Editor-Tab, mit den Einträgen aus ProSonata, mehrfach wählbar, mit drei
+Handlungen – **Text und Stunden ändern**, **zusammenlegen**, **löschen**. Nur das aktuelle
+Repository, denn die Frage, die dazu führt, lautet immer „was habe ich hier gebucht", nie „was
+steht in allen Projekten".
 
 - **Zusammenlegen ist eine Aussage über die Arbeit**: Wer im Nachhinein drei Einträge zu einem
   macht, sagt damit, das sei in einem Rutsch entstanden – und ein Rutsch wird **einmal** gerundet,
@@ -964,15 +965,33 @@ immer „was habe ich hier gebucht", nie „was steht in allen Projekten".
   Abrechnung. Dass beide danach verschieden sind, ist kein Widerspruch, sondern der Grund, warum
   es zwei Ebenen gibt (Abschnitt 2).
 
-Die Liste selbst ist eine native QuickPick, kein Webview – aus demselben Grund wie alle
-Auswahlen in Abschnitt 8. Gebraucht wird Mehrfachauswahl und ein Knopf je Zeile, und beides hat
-die QuickPick.
+**Die Tabelle ist die einzige Webview** ([docs/adr/0001](docs/adr/0001-zeiteintraege-als-webview-tabelle.md)).
+Eine QuickPick war sie bis 2.0.0; was sie nicht konnte, ist der Grund für die Tabelle:
 
-**Fakturierte Einträge stehen nicht in der Liste**, der Titel nennt ihre Zahl. Gezeigt, aber
-nicht ankreuzbar ginge nicht: Bei Mehrfachauswahl bekommt jede Zeile der QuickPick ein
-Kästchen, und die stabile API kennt keine gesperrte Zeile – nur Trenner, die weder Beschreibung
-tragen noch von der Suche gefunden werden. Ein Kästchen, das sich nicht ankreuzen lässt, wäre
-schlechter als eine Zahl im Titel (Issue #11).
+- **Den Branch zeigen.** ProSonata kennt ihn nicht, nur seinen Schlüssel in `apiComments` oder
+  im alten Marker. Zurückgerechnet wird er aus dem, was hier einen Schlüssel erzeugt haben kann:
+  den Einträgen im lokalen Zustand und den lokalen Branches. Was keiner davon erklärt – ein in
+  ProSonata erfasster Eintrag, ein Branch, den es hier nie gab –, steht in einer eigenen Gruppe
+  *ohne Branch* am Ende. Gruppiert wird nach Branch oder nach Kalenderwoche, mit Summe.
+- **Fakturierte Einträge zeigen, ohne sie wählbar zu machen.** Sie stehen grau und ohne
+  Kästchen da, auf Wunsch eingeblendet (Issue #11). Die QuickPick kannte keine gesperrte Zeile
+  und liess sie deshalb weg.
+- **Vorher zeigen, was eine Handlung ergibt.** Die Auswahl nennt ihre Summe, und sobald zwei
+  Einträge gewählt sind, steht daneben, was ein Zusammenlegen ergäbe – einzeln gerundet gegen
+  einmal gerundet. Eine Spalte zeigt, was das Segmentprotokoll dieses Rechners je Eintrag kennt;
+  ein Strich heisst „unbekannt", nicht null.
+- **Doppel sichtbar machen.** Gleicher Branch, gleicher Tag, gleicher Text ist das Muster der
+  doppelt angelegten Einträge. Ein Hinweis, kein Urteil: Zwei Commits auf `main` dürfen an einem
+  Tag dasselbe sagen.
+
+**Die Webview zeichnet nur.** Die Zeilen kommen fertig entschieden aus dem Host, zurück kommen
+Absichten. Jede Absicht, die schreibt, holt die Einträge neu und plant gegen das, was ProSonata
+*jetzt* hält – nicht gegen die Zeilen auf dem Schirm, die Minuten alt sein können. Ein
+Zusammenlegen, dessen Plan nicht mehr der gezeigte ist, wird abgewiesen und neu gezeigt: Die
+getippte Zahl galt einer anderen Summe. Text und Stunden werden in der Zelle geändert; ein Feld,
+das man ohne Änderung verlässt, schliesst sich, eines mit Änderung bleibt offen – ein verirrter
+Klick schreibt nie in eine Rechnung. Das Löschen fragt weiter mit dem modalen Dialog von
+VS Code, wie jede Frage, die sich nicht zurücknehmen lässt.
 
 **Im Terminal gibt es einen Teil davon.** `close` sendet sofort; wer dabei einen Fehler macht,
 Mensch oder Agent, braucht einen Weg zurück, ohne den Editor zu öffnen. `prosonata sent [Anzahl]`
@@ -1520,6 +1539,12 @@ additiv daneben, ohne die Identität anzutasten.
 | `src/core` | Logik, Zustand, API-Client. Importiert **niemals** `vscode`. |
 | `src/cli` | bin `prosonata`. Wird vom `post-commit`-Hook aufgerufen. |
 | `src/extension` | QuickPicks, Statusleiste, `FileSystemWatcher`. |
+| `src/webview` | Die Tabelle der Zeiteinträge, Svelte, läuft im Browser der Webview. |
+
+`src/webview` ist kein vierter Einstiegspunkt mit eigener Logik, sondern eine Oberfläche der
+Extension. Sie bündelt aus `core` nur Module ohne Importe – `browse-view.ts` und
+`working-time.ts` –, damit sie dieselbe Schreibweise und dieselbe Gruppierung verwendet, statt
+sie nachzubauen ([docs/adr/0001](docs/adr/0001-zeiteintraege-als-webview-tabelle.md)).
 
 Die Trennung ist die zentrale Strukturentscheidung. Läge die Logik in der Extension, könnte
 der Hook sie nicht nutzen und man baute sie ein zweites Mal.
@@ -1695,8 +1720,9 @@ das gewesen.
   VS Code an dieser Stelle unterbringt, was der Ansicht als Ganzes gilt – eine Zeile dafür wäre
   eine Zeile, die keinen Zustand zeigt. Das Durchsehen erscheint nur mit eingerichtetem Projekt,
   das Zahnrad nur mit eingerichtetem Konto; sonst führten sie ins Leere.
-- Dropdowns über `window.showQuickPick` – native Liste mit Suchfeld, kein UI-Code, kein
-  Webview, kein Svelte.
+- Dropdowns über `window.showQuickPick` – native Liste mit Suchfeld, kein UI-Code. Die
+  einzige Webview ist die Tabelle der Zeiteinträge (Abschnitt 3); eine Auswahl wird keine,
+  solange die QuickPick hergibt, was sie braucht.
 - Der Projekt-QuickPick ist **dreistufig**: oben die im Repo registrierten Projekte, darunter
   die eigenen (`userID=myself`), zuunterst alle übrigen. Gezeigt werden nur **offene, aktive**
   Projekte ohne Vorlagen – `projectStatus=0&activeStatus=1`. Ohne diesen Filter stünden nach
@@ -2212,7 +2238,11 @@ Nicht erneut vorschlagen:
 - **Branch → Projekt-Mapping.** Granularitäten passen nicht: viele kurzlebige Branches, ein
   langlebiges Projekt. Der Branch bestimmt den Zeiteintrag, nicht das Projekt.
 - **Eigenes Review-Frontend.** Die Texte entstehen im Commit, die Zeiteinträge stehen in
-  ProSonata und sind dort editierbar. Die ProSonata-Oberfläche ist das Review.
+  ProSonata und sind dort editierbar. Die ProSonata-Oberfläche ist das Review. Die Tabelle der
+  Zeiteinträge (Abschnitt 3) ist keines: Sie schreibt nichts, was das Durchsehen nicht schon
+  schrieb, und zeigt nur, was ProSonata nicht zeigen kann – den Branch, die Deckung durch das
+  Protokoll, das einmalige Runden beim Zusammenlegen
+  ([docs/adr/0001](docs/adr/0001-zeiteintraege-als-webview-tabelle.md)).
 - **Sync von `state.json` über iCloud/Dropbox.** Latenz in Minuten, atomares `rename` überlebt
   keine Sync-Engine, gleichzeitige Schreiber. Kaputte Konstruktion.
 - **Addition statt absoluter Summe.** Nicht idempotent, Retry verdoppelt, Rundungsdrift,

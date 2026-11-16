@@ -11,11 +11,23 @@ import de from '../../l10n/bundle.l10n.de.json'
  */
 export const t = l10n.t
 
-const BUNDLES: Record<string, l10n.l10nJsonFormat> = { de }
+const BUNDLES: Record<string, Record<string, string>> = { de }
+
+let active: Record<string, string> = {}
 
 /** Switches every following `t()` to this language; an unknown one means English. */
 export function setLanguage(language: string | undefined): void {
-  l10n.config({ contents: BUNDLES[baseLanguage(language)] ?? {} })
+  active = BUNDLES[baseLanguage(language)] ?? {}
+  l10n.config({ contents: active })
+}
+
+/**
+ * The translations in use, for the webview: `t()` does not run there, so the
+ * host hands it the same bundle (docs/adr/0001). Empty for English, where the
+ * message is its own text.
+ */
+export function activeStrings(): Record<string, string> {
+  return active
 }
 
 /** `de-CH`, `de_CH.UTF-8` and `de` are all German. */
