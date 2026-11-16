@@ -45,7 +45,7 @@ import { t } from '../core/l10n.js'
 
 /** A function, not a constant: `t()` must run after index.ts has chosen the language. */
 function usage(): string {
-  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hooks\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [no|branch] [text] close the open time entry and send it; with no or branch the one of another branch, without text with the one it has\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [no retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [no close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata held [no attach|close|drop]\n                                    main time held at a squash merge: to the merged branch, own text, discard\n  prosonata sent [count|no text|drop]\n                                    entries sent from here: list, change the text, delete one without time\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n  prosonata post-checkout           called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
+  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hooks\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [id|branch] [text] close the open time entry and send it; with id or branch the one of another branch, without text with the one it has\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [id retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [id close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata held [id attach|close|drop]\n                                    main time held at a squash merge: to the merged branch, own text, discard\n  prosonata sent [count|id text|drop]\n                                    entries sent from here: list, change the text, delete one without time\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n  prosonata post-checkout           called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
 }
 
 export async function main(argv: string[], cwd = process.cwd()): Promise<number> {
@@ -400,12 +400,19 @@ async function closeEntry(cwd: string, argument: string): Promise<number> {
   let named: TimeEntry | undefined
   if (/^[0-9a-f]{8}$/.test(first)) {
     named = openBranchEntries(session.state(), context.repo.root, context.mainBranch).find((candidate) => candidate.id.startsWith(first))
+    // An id that matches nothing once fell through and closed this branch's
+    // entry with the id as its text — sent at once, beyond undoing from here.
+    if (!named) return unknownReference(first)
+  } else if (/^#?\d+$/.test(argument.trim())) {
+    // A bare number is no invoice text; it is someone meaning an entry, most
+    // likely by the ProSonata number the web interface shows.
+    return unknownReference(argument.trim())
   } else if (first !== '') {
     // Only finished branches: a branch still in use is closed from itself, and
     // its name is less likely to be mistaken for the first word of a text.
     const matches = session.finishedEntries(context).filter(({ entry }) => entry.scope.branch === first)
     if (matches.length > 1) {
-      process.stderr.write(`${t('{0} has more than one open entry — close it by number, "prosonata status" lists them', first)}\n`)
+      process.stderr.write(`${t('{0} has more than one open entry — close it by its id, "prosonata status" lists them', first)}\n`)
       return 2
     }
     named = matches[0]?.entry
@@ -435,6 +442,14 @@ async function closeEntry(cwd: string, argument: string): Promise<number> {
   session.closeEntry(entry.id, text)
   process.stdout.write(`${t('closed: {0}', text)}\n`)
   return report(await session.flush(true))
+}
+
+/** `close` was given an entry it cannot find; it names where that entry is handled instead. */
+function unknownReference(ref: string): number {
+  process.stderr.write(
+    `${/^#?\d+$/.test(ref) ? t('{0} is no open entry — close takes the id "prosonata status" shows; an entry already in ProSonata is changed with "prosonata sent"', ref) : t('no open entry {0} — "prosonata status" lists them', ref)}\n`,
+  )
+  return 2
 }
 
 /**
@@ -667,7 +682,7 @@ async function status(cwd: string): Promise<number> {
   const resting = session.restingEntries()
   if (resting.length > 0) {
     process.stdout.write(
-      `  ${t('dormant for {0} days or longer: {1} — "prosonata resting <no> close|keep|drop"', session.config.restingDays, resting.length)}\n`,
+      `  ${t('dormant for {0} days or longer: {1} — "prosonata resting <id> close|keep|drop"', session.config.restingDays, resting.length)}\n`,
     )
     for (const quiet of resting) {
       process.stdout.write(
@@ -677,12 +692,12 @@ async function status(cwd: string): Promise<number> {
   }
   const refused = rejectedEntries(state)
   if (refused.length > 0) {
-    process.stdout.write(`  ${t('rejected by ProSonata: {0} — "prosonata rejected <no> retry|move|drop"', refused.length)}\n`)
+    process.stdout.write(`  ${t('rejected by ProSonata: {0} — "prosonata rejected <id> retry|move|drop"', refused.length)}\n`)
     listRejected(refused, '    ')
   }
   const waiting = heldEntries(state)
   if (waiting.length > 0) {
-    process.stdout.write(`  ${t('held at a squash merge: {0} — "prosonata held <no> attach|close|drop"', waiting.length)}\n`)
+    process.stdout.write(`  ${t('held at a squash merge: {0} — "prosonata held <id> attach|close|drop"', waiting.length)}\n`)
     listHeld(waiting, '    ')
   }
 
@@ -749,9 +764,9 @@ async function rejected(argument: string): Promise<number> {
       return 0
     }
     listRejected(refused, '  ')
-    process.stdout.write(`\n  ${t('"prosonata rejected <no> retry"  send again')}\n`)
-    process.stdout.write(`  ${t('"prosonata rejected <no> move"   move to another project and send')}\n`)
-    process.stdout.write(`  ${t('"prosonata rejected <no> drop"   discard — the time is already in ProSonata')}\n`)
+    process.stdout.write(`\n  ${t('"prosonata rejected <id> retry"  send again')}\n`)
+    process.stdout.write(`  ${t('"prosonata rejected <id> move"   move to another project and send')}\n`)
+    process.stdout.write(`  ${t('"prosonata rejected <id> drop"   discard — the time is already in ProSonata')}\n`)
     return 0
   }
 
@@ -811,9 +826,9 @@ async function resting(argument: string): Promise<number> {
         `  ${entry.id.slice(0, 8)}  ${basename(entry.scope.repoPath)}/${entry.scope.branch}  ${entry.text || t('(no text)')}  ${format(entry.foreignSeconds + entry.seconds)}\n`,
       )
     }
-    process.stdout.write(`\n  ${t('"prosonata resting <no> close [text]"  close and send')}\n`)
-    process.stdout.write(`  ${t('"prosonata resting <no> keep"          keep — ask again in {0} days', session.config.restingDays)}\n`)
-    process.stdout.write(`  ${t('"prosonata resting <no> drop"          discard — the time is already in ProSonata some other way')}\n`)
+    process.stdout.write(`\n  ${t('"prosonata resting <id> close [text]"  close and send')}\n`)
+    process.stdout.write(`  ${t('"prosonata resting <id> keep"          keep — ask again in {0} days', session.config.restingDays)}\n`)
+    process.stdout.write(`  ${t('"prosonata resting <id> drop"          discard — the time is already in ProSonata some other way')}\n`)
     return 0
   }
 
@@ -916,9 +931,9 @@ async function held(argument: string): Promise<number> {
       return 0
     }
     listHeld(waiting, '  ')
-    process.stdout.write(`\n  ${t('"prosonata held <no> attach"        to the entry of the merged branch')}\n`)
-    process.stdout.write(`  ${t('"prosonata held <no> close <text>"  close with a text of its own and send')}\n`)
-    process.stdout.write(`  ${t('"prosonata held <no> drop"          discard — the time is not billed')}\n`)
+    process.stdout.write(`\n  ${t('"prosonata held <id> attach"        to the entry of the merged branch')}\n`)
+    process.stdout.write(`  ${t('"prosonata held <id> close <text>"  close with a text of its own and send')}\n`)
+    process.stdout.write(`  ${t('"prosonata held <id> drop"          discard — the time is not billed')}\n`)
     askTheUser()
     return 0
   }
@@ -1014,8 +1029,8 @@ async function sent(cwd: string, argument: string): Promise<number> {
         `  #${remote.timeID}  ${entry.id.slice(0, 8)}  ${day}  ${hours} h  ${remote.detail || t('(no text)')}${invoiced}\n`,
       )
     }
-    process.stdout.write(`\n  ${t('"prosonata sent <no> text <text>"  change the text')}\n`)
-    process.stdout.write(`  ${t('"prosonata sent <no> drop"         delete — only an entry without time')}\n`)
+    process.stdout.write(`\n  ${t('"prosonata sent <id> text <text>"  change the text')}\n`)
+    process.stdout.write(`  ${t('"prosonata sent <id> drop"         delete — only an entry without time')}\n`)
     return 0
   }
 

@@ -431,19 +431,19 @@ prosonata project                 Projekt dieses Repositorys wählen
 prosonata category                Zeitkategorie dieses Projekts wählen
 prosonata grid [exact|5|15|30]    auf so viele Minuten runden
 prosonata mode [branch|day|commit] ein Eintrag pro Branch, pro Branch und Tag oder pro Commit
-prosonata close [no|branch] [text] offenen Zeiteintrag abschliessen und senden; mit Nummer oder Branch den eines anderen Branches
+prosonata close [id|branch] [text] offenen Zeiteintrag abschliessen und senden; mit Nummer oder Branch den eines anderen Branches
 prosonata text <text>             Text des offenen Zeiteintrags ändern
 prosonata discard                 laufendes Segment verwerfen, ohne es zu buchen
 prosonata attach                  Zeit dem Eintrag des letzten Commits zuschlagen
 prosonata take [branch]           offenen Eintrag eines anderen Branches samt Zeit auf diesen übernehmen
 prosonata resume [add|new]        einen anderswo abgeschlossenen Eintrag entscheiden
-prosonata rejected [no retry|move|drop]
+prosonata rejected [id retry|move|drop]
                                   abgelehnte Einträge: erneut senden, in ein anderes Projekt verschieben, verwerfen
-prosonata resting [no close|keep|drop]
+prosonata resting [id close|keep|drop]
                                   seit Wochen ruhende Einträge: abschliessen, behalten, verwerfen
-prosonata held [no attach|close|drop]
+prosonata held [id attach|close|drop]
                                   beim Squash-Merge angehaltene Zeit von main: zum gemergten Branch, eigener Text, verwerfen
-prosonata sent [count|no text|drop]
+prosonata sent [count|id text|drop]
                                   von hier gesendete Einträge: auflisten, Text ändern, einen ohne Zeit löschen
 prosonata tidy                    leere Reste gelöschter Branches in allen Repositorys entfernen
 prosonata log [branch|all|?]      gemessene Segmente, ohne Angabe die dieses Branches

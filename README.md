@@ -343,8 +343,8 @@ The order at the end of a package, after a squash merge:
    name.
 3. **Checking what went out.** `prosonata sent` lists the entries sent from
    this repository with their ProSonata numbers. A wrong text is corrected with
-   `prosonata sent <no> text "…"`, an entry without time removed with
-   `prosonata sent <no> drop`. Anything with time is corrected when browsing the
+   `prosonata sent <id> text "…"`, an entry without time removed with
+   `prosonata sent <id> drop`. Anything with time is corrected when browsing the
    time entries.
 
 A merge with `--no-ff` creates a merge commit, for which git calls no hook this
@@ -417,19 +417,19 @@ prosonata project                 choose this repository's project
 prosonata category                choose this project's time category
 prosonata grid [exact|5|15|30]    round to this many minutes
 prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit
-prosonata close [no|branch] [text] close the open time entry and send it; with a number or branch, another branch's
+prosonata close [id|branch] [text] close the open time entry and send it; with an id or branch, another branch's
 prosonata text <text>             change the text of the open time entry
 prosonata discard                 discard the running segment without booking it
 prosonata attach                  attach time to the entry of the last commit
 prosonata take [branch]           take the open entry of another branch onto this one, time and all
 prosonata resume [add|new]        resolve an entry closed elsewhere
-prosonata rejected [no retry|move|drop]
+prosonata rejected [id retry|move|drop]
                                   rejected entries: send again, move to another project, discard
-prosonata resting [no close|keep|drop]
+prosonata resting [id close|keep|drop]
                                   entries dormant for weeks: close, keep, discard
-prosonata held [no attach|close|drop]
+prosonata held [id attach|close|drop]
                                   main time held at a squash merge: to the merged branch, own text, discard
-prosonata sent [count|no text|drop]
+prosonata sent [count|id text|drop]
                                   entries sent from here: list, change the text, delete one without time
 prosonata tidy                    remove empty leftovers of deleted branches in all repositories
 prosonata log [branch|all|?]      measured segments, this branch's if none is given

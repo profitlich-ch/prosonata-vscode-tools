@@ -7,6 +7,20 @@ are in German.
 
 ## [Unreleased]
 
+### Changed
+
+- **The help names the entry reference `id`** instead of `no`, which read as
+  the word “no”: `prosonata close [id|branch]`, `prosonata resting <id> …` and
+  the like.
+
+### Fixed
+
+- **`prosonata close` refuses a reference it cannot find.** An unknown id, or
+  a ProSonata number such as `2950`, used to become the text of this branch's
+  entry, which was then closed and sent. It now says where to look instead:
+  `prosonata status` for open entries, `prosonata sent` for those already in
+  ProSonata.
+
 ## [2.1.0] — 2026-11-16
 
 ### Added

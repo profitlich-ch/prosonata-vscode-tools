@@ -200,6 +200,39 @@ describe('closing the entry of a finished branch by its name', () => {
 })
 
 /*
+ * A reference that matches no open entry used to become the text of this
+ * branch's entry, which was then closed and sent.
+ */
+describe('closing by a reference that matches no open entry', () => {
+  it('refuses an unknown id', async () => {
+    openOnMain(1800, 'Warenkorb')
+
+    expect(await main(['close', 'abc12345'], repo)).toBe(2)
+
+    expect(err).toContain('no open entry abc12345')
+    expect(stored()).toMatchObject({ state: 'open', text: 'Warenkorb' })
+  })
+
+  it('refuses a ProSonata number and points to sent', async () => {
+    openOnMain(1800, 'Warenkorb')
+
+    expect(await main(['close', '#2950'], repo)).toBe(2)
+    expect(await main(['close', '2950'], repo)).toBe(2)
+
+    expect(err).toContain('"prosonata sent"')
+    expect(stored()).toMatchObject({ state: 'open', text: 'Warenkorb' })
+  })
+
+  it('still takes a text that begins with a number', async () => {
+    openOnMain(1800)
+
+    await main(['close', '2', 'Formulare', 'angepasst'], repo)
+
+    expect(stored()).toMatchObject({ state: 'closed', text: '2 Formulare angepasst' })
+  })
+})
+
+/*
  * Main time held at a squash merge waits for an answer (KONZEPT.md §3). The
  * terminal shows it and takes the answers an agent may give; throwing the
  * time away is not one of them.
