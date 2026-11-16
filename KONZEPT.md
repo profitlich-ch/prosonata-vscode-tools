@@ -959,6 +959,17 @@ steht in allen Projekten".
   gerundet; decken sie nicht, ist die Summe aus ProSonata die Vorbelegung, mit dem Hinweis, warum.
   Die überzähligen Einträge werden per `DELETE` entfernt, nachdem die Summe sicher auf dem
   bleibenden steht – dieselbe Reihenfolge wie beim Zuschlagen.
+- **Welcher Eintrag bleibt, wählt die Person**, vorbelegt ist der älteste. An ihm hängen die
+  Nummer auf der Rechnung, die Kategorie und der Branch.
+- **Ein offener Eintrag bleibt immer.** Sein Branch schreibt weiter in ihn, und der Versand legt
+  einen Eintrag, der in ProSonata fehlt, mit der ganzen lokalen Summe neu an – ein gelöschter
+  offener Eintrag stünde beim nächsten Schreiben ein zweites Mal da, mit allen seinen Stunden,
+  lange nachdem jemand das mit dem Zusammenlegen in Verbindung brächte. Ein Test hat es gezeigt:
+  3,0 h in ProSonata, wo 2,0 h gearbeitet waren. Zwei offene Einträge werden deshalb nicht
+  zusammengelegt, und gelöscht wird ein offener Eintrag hier nie. Den zusammengelegten Text
+  bekommt auch die lokale Kopie, sonst schriebe der Branch beim nächsten Mal seinen alten Text
+  darüber. Stunden ändern darf man an einem offenen Eintrag: Der Versand erkennt die fremde
+  Änderung an `lastWritten` und rechnet sie mit.
 - **Fakturierte Einträge** bleiben unberührt, auch beim Löschen einer Auswahl, die sie enthält:
   Sie gehören der Rechnung, nicht dem Werkzeug.
 - **Das Protokoll wird nicht nachgezogen.** Es bleibt das Archiv der Messung; berichtigt wird die

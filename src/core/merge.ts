@@ -1,4 +1,6 @@
 import type { RemoteEntry } from './api.js'
+import { entryIsOpen } from './identity.js'
+import { DEFAULT_MARKER_WORD } from './marker.js'
 import { isMarker, type Segment } from './segments.js'
 import { gridStep, hoursToSeconds, toHours, type TimeGrid } from './working-time.js'
 
@@ -68,12 +70,43 @@ export function measuredPerEntry(segments: Segment[], timeIdOf: Map<string, numb
   return seconds
 }
 
-export function planMerge(entries: RemoteEntry[], measured: Map<number, number>, grid: TimeGrid): MergePlan | null {
+export interface MergeChoice {
+  /** The entry the person wants to stay. Ignored when it cannot: see `planMerge`. */
+  keep?: number
+  /** Whether an entry still collects time on its branch. */
+  isOpen?: (entry: RemoteEntry) => boolean
+}
+
+/**
+ * Which entry stays: an open one if there is one, else the one chosen, else
+ * the oldest.
+ *
+ * **An open entry always stays.** Its branch goes on writing to it, and the
+ * sender recreates an entry that is gone from ProSonata with the whole local
+ * total — so deleting an open entry in a merge books its hours a second time,
+ * at the next write, long after anyone would connect it with the merge. Two
+ * open entries cannot be merged for the same reason: one of them would go.
+ * Null then.
+ */
+export function chooseKeep(usable: RemoteEntry[], choice: MergeChoice): RemoteEntry | null {
+  const open = usable.filter((entry) => choice.isOpen?.(entry) ?? entryIsOpen(entry, DEFAULT_MARKER_WORD))
+  if (open.length > 1) return null
+  return open[0] ?? usable.find((entry) => entry.timeID === choice.keep) ?? usable[0] ?? null
+}
+
+export function planMerge(
+  entries: RemoteEntry[],
+  measured: Map<number, number>,
+  grid: TimeGrid,
+  choice: MergeChoice = {},
+): MergePlan | null {
   const refused = entries.filter((entry) => entry.isInvoiced).map((entry) => ({ entry, reason: 'invoiced' as const }))
   const usable = entries.filter((entry) => !entry.isInvoiced).sort((a, b) => a.timeID - b.timeID)
   if (usable.length < 2) return null
 
-  const [keep, ...drop] = usable as [RemoteEntry, ...RemoteEntry[]]
+  const keep = chooseKeep(usable, choice)
+  if (!keep) return null
+  const drop = usable.filter((entry) => entry !== keep)
 
   const addedSeconds = usable.reduce((sum, entry) => sum + Math.round(entry.hours * 3600), 0)
 
@@ -131,6 +164,8 @@ export interface RemovalPlan {
   remove: RemoteEntry[]
   /** The ones left standing because they are invoiced. */
   invoiced: RemoteEntry[]
+  /** The ones left standing because their branch still writes to them. */
+  open: RemoteEntry[]
   /** Their measured total, for the question put before the deletion. */
   seconds: number
 }
@@ -142,14 +177,20 @@ export interface RemovalPlan {
  * an invoice, not to this tool (KONZEPT.md §3), and a list that silently does
  * less than it says is worse than one that explains itself. They are handed back
  * so the question can name them.
+ *
+ * Open entries likewise: the next write of their branch would create them
+ * again with the whole local total, so the deletion would undo itself without
+ * a word. Discarding the time of a running branch is `discard`'s job.
  */
-export function planRemoval(entries: RemoteEntry[]): RemovalPlan | null {
-  const remove = entries.filter((entry) => !entry.isInvoiced)
+export function planRemoval(entries: RemoteEntry[], isOpen?: (entry: RemoteEntry) => boolean): RemovalPlan | null {
+  const open = (entry: RemoteEntry) => isOpen?.(entry) ?? entryIsOpen(entry, DEFAULT_MARKER_WORD)
+  const remove = entries.filter((entry) => !entry.isInvoiced && !open(entry))
   if (remove.length === 0) return null
 
   return {
     remove,
     invoiced: entries.filter((entry) => entry.isInvoiced),
+    open: entries.filter((entry) => !entry.isInvoiced && open(entry)),
     seconds: remove.reduce((sum, entry) => sum + hoursToSeconds(entry.hours), 0),
   }
 }

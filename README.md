@@ -372,8 +372,10 @@ entries. It offers three actions:
   the grid **once**: merging afterwards says the work was done in one go, and one
   go is rounded once, not three times. If the segments don't cover the entries —
   because another computer measured, for instance — the total from ProSonata is
-  shown, with a note explaining why.
-- **Delete** — after confirming with the figures.
+  shown, with a note explaining why. Which entry stays — its number, category
+  and branch — you choose in the form; the oldest is preselected. An entry that
+  is still open always stays, because its branch goes on writing to it.
+- **Delete** — after confirming with the figures. Open entries stay.
 
 **Invoiced entries can't be ticked**: they belong to the invoice, and none of
 the three actions may touch them. They are hidden until you tick “Show

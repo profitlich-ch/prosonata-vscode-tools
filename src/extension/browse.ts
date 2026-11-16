@@ -4,6 +4,7 @@ import * as vscode from 'vscode'
 
 import type { RemoteEntry } from '../core/api.js'
 import { browseRows } from '../core/browse.js'
+import { entryIsOpen } from '../core/identity.js'
 import type { BrowseData, MergePreview, ToHost, ToView } from '../core/browse-view.js'
 import { activeStrings, t } from '../core/l10n.js'
 import { planMerge, planRemoval, type MergePlan } from '../core/merge.js'
@@ -141,11 +142,11 @@ class EntryTable {
       case 'refresh':
         return this.load()
       case 'preview':
-        return this.#sendPreview(message.ids)
+        return this.#sendPreview(message.ids, message.keep)
       case 'edit':
         return this.#working(() => this.#edit(message.timeID, message.field, message.value))
       case 'merge':
-        return this.#working(() => this.#merge(message.ids, message.text, message.hours))
+        return this.#working(() => this.#merge(message.ids, message.keep, message.text, message.hours))
       case 'remove':
         return this.#working(() => this.#remove(message.ids))
     }
@@ -184,12 +185,21 @@ class EntryTable {
     return null
   }
 
-  #sendPreview(ids: number[]): void {
+  /** Whether an entry still collects time on its branch, by this account's marker word. */
+  #isOpen = (entry: RemoteEntry): boolean => entryIsOpen(entry, this.#active().session.config.markerWord)
+
+  #sendPreview(ids: number[], keep?: number): void {
     const entries = ids.flatMap((id) => this.#found?.entries.filter((entry) => entry.timeID === id) ?? [])
     const grid = this.#grid()
-    const plan = planMerge(entries, this.#found?.measured ?? new Map(), grid)
+    const plan = planMerge(entries, this.#found?.measured ?? new Map(), grid, { ...(keep === undefined ? {} : { keep }), isOpen: this.#isOpen })
     this.#preview = plan ? { ids: key(ids), plan } : null
-    this.#post({ kind: 'preview', ids, preview: plan ? describe(plan, ids, grid) : null })
+    if (plan) {
+      this.#post({ kind: 'preview', ids, preview: describe(plan, ids, grid, this.#isOpen) })
+    } else if (entries.filter((entry) => !entry.isInvoiced && this.#isOpen(entry)).length > 1) {
+      this.#post({ kind: 'preview', ids, preview: null, reason: t('Two open entries cannot be merged — one of them would be deleted.') })
+    } else {
+      this.#post({ kind: 'preview', ids, preview: null })
+    }
   }
 
   /**
@@ -248,22 +258,24 @@ class EntryTable {
    * on screen. If hours moved in between, the number someone typed was typed
    * against a different sum — so the table shows the new one and writes nothing.
    */
-  async #merge(ids: number[], text: string, hours: string): Promise<void> {
+  async #merge(ids: number[], keep: number, text: string, hours: string): Promise<void> {
     const shown = this.#preview?.ids === key(ids) ? this.#preview.plan : null
     const entries = await this.#fresh(ids)
     if (!entries) return
 
     const grid = this.#grid()
-    const plan = planMerge(entries, this.#found?.measured ?? new Map(), grid)
+    const plan = planMerge(entries, this.#found?.measured ?? new Map(), grid, { keep, isOpen: this.#isOpen })
     if (!plan) {
       this.#post({ kind: 'failed', message: t('ProSonata: merging needs two entries that are not invoiced.') })
       this.#show()
       return
     }
+    // The entry that stays is part of the plan: one that became open in the
+    // meantime takes the place of the one chosen, and that has to be seen first.
     if (!shown || !samePlan(shown, plan)) {
       this.#post({ kind: 'failed', message: t('ProSonata: the entries changed in the meantime — check the merge again.') })
       this.#show()
-      this.#sendPreview(ids)
+      this.#sendPreview(ids, keep)
       return
     }
     const seconds = parseHours(hours)
@@ -289,22 +301,27 @@ class EntryTable {
   async #remove(ids: number[]): Promise<void> {
     const entries = await this.#fresh(ids)
     if (!entries) return
-    const plan = planRemoval(entries)
+    const plan = planRemoval(entries, this.#isOpen)
     if (!plan) {
-      this.#post({ kind: 'failed', message: t('ProSonata: invoiced entries cannot be deleted here.') })
+      const open = entries.some((entry) => !entry.isInvoiced && this.#isOpen(entry))
+      this.#post({
+        kind: 'failed',
+        message: open
+          ? t('ProSonata: an open entry cannot be deleted here — its branch still writes to it.')
+          : t('ProSonata: invoiced entries cannot be deleted here.'),
+      })
       this.#show()
       return
     }
 
     const total = hoursAndMinutes(plan.seconds)
     const remove = t('Delete')
-    const answer = await vscode.window.showWarningMessage(
-      plan.invoiced.length > 0
-        ? t('Delete {0} time entries, {1} in total? {2} invoiced ones stay.', plan.remove.length, total, plan.invoiced.length)
-        : t('Delete {0} time entries, {1} in total?', plan.remove.length, total),
-      { modal: true },
-      remove,
-    )
+    const question = [
+      t('Delete {0} time entries, {1} in total?', plan.remove.length, total),
+      ...(plan.invoiced.length > 0 ? [t('{0} invoiced ones stay.', plan.invoiced.length)] : []),
+      ...(plan.open.length > 0 ? [t('{0} open ones stay.', plan.open.length)] : []),
+    ].join(' ')
+    const answer = await vscode.window.showWarningMessage(question, { modal: true }, remove)
     if (answer !== remove) return
 
     const { session } = this.#active()
@@ -327,10 +344,15 @@ function key(ids: number[]): string {
   return [...ids].sort((a, b) => a - b).join(',')
 }
 
-/** Whether two plans would write the same: the same entries, the same sums. */
+/** Whether two plans would write the same: the same entry staying, the same others, the same sums. */
 function samePlan(a: MergePlan, b: MergePlan): boolean {
-  const ids = (plan: MergePlan) => key([plan.keep.timeID, ...plan.drop.map((entry) => entry.timeID)])
-  return ids(a) === ids(b) && a.addedSeconds === b.addedSeconds && a.recomputedSeconds === b.recomputedSeconds
+  const ids = (plan: MergePlan) => key(plan.drop.map((entry) => entry.timeID))
+  return (
+    a.keep.timeID === b.keep.timeID &&
+    ids(a) === ids(b) &&
+    a.addedSeconds === b.addedSeconds &&
+    a.recomputedSeconds === b.recomputedSeconds
+  )
 }
 
 /**
@@ -339,16 +361,21 @@ function samePlan(a: MergePlan, b: MergePlan): boolean {
  * not, the sum of what ProSonata holds — and the smaller number is left out
  * rather than shown with a caveat nobody reads.
  */
-function describe(plan: MergePlan, ids: number[], grid: TimeGrid): MergePreview {
+function describe(plan: MergePlan, ids: number[], grid: TimeGrid, isOpen: (entry: RemoteEntry) => boolean): MergePreview {
   const proposed = plan.recomputedSeconds ?? plan.addedSeconds
   return {
     ids,
     keep: plan.keep.timeID,
-    drop: plan.drop.map((entry) => ({
-      timeID: entry.timeID,
-      date: entry.date,
-      hours: billedTime(hoursToSeconds(entry.hours), grid),
-    })),
+    keepFixed: isOpen(plan.keep),
+    members: [plan.keep, ...plan.drop]
+      .sort((a, b) => a.timeID - b.timeID)
+      .map((entry) => ({
+        timeID: entry.timeID,
+        date: entry.date,
+        hours: billedTime(hoursToSeconds(entry.hours), grid),
+        text: entry.detail,
+        open: isOpen(entry),
+      })),
     added: billedTime(plan.addedSeconds, grid),
     recomputed: plan.recomputedSeconds === null ? null : billedTime(plan.recomputedSeconds, grid),
     proposed: billedTime(proposed, grid),

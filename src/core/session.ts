@@ -1156,6 +1156,14 @@ export class Session {
       detail: text,
       date: plan.date,
     })
+    // The local copy follows, as with `retext`: an open entry that stays is
+    // written again by its branch, from the local text, and would otherwise
+    // put its old text back over the merged one.
+    this.store.update((state) => {
+      const next = structuredClone(state)
+      for (const entry of next.entries) if (entry.timeId === plan.keep.timeID) entry.text = text
+      return next
+    })
 
     for (const entry of plan.drop) {
       await this.api.deleteEntry(entry.timeID)

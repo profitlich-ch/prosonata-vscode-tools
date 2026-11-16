@@ -158,6 +158,54 @@ describe('planning a deletion', () => {
     expect(planRemoval([remote(1, 1, { isInvoiced: true })])).toBeNull()
     expect(planRemoval([])).toBeNull()
   })
+
+  // The next write of its branch would create it again, with all its hours.
+  it('leaves an open entry standing and says so', () => {
+    const plan = planRemoval([remote(1, 1), remote(2, 1, { detail: '[LAUFEND] Arbeit' })])
+
+    expect(plan?.remove.map((entry) => entry.timeID)).toEqual([1])
+    expect(plan?.open.map((entry) => entry.timeID)).toEqual([2])
+    expect(planRemoval([remote(2, 1, { detail: '[LAUFEND] Arbeit' })])).toBeNull()
+  })
+})
+
+/*
+ * Which entry stays decides the number on the invoice, the category and the
+ * branch the entry belongs to. A person may choose it — except where the
+ * choice would delete an entry its branch still writes to.
+ */
+describe('choosing the entry that stays', () => {
+  const open = (timeID: number) => remote(timeID, 1, { detail: '[LAUFEND] Arbeit' })
+
+  it('keeps the oldest when nobody chose', () => {
+    expect(planMerge([remote(3, 1), remote(1, 1), remote(2, 1)], new Map(), quarter)?.keep.timeID).toBe(1)
+  })
+
+  it('keeps the one chosen, and deletes the others', () => {
+    const plan = planMerge([remote(1, 1), remote(2, 1), remote(3, 1)], new Map(), quarter, { keep: 2 })!
+
+    expect(plan.keep.timeID).toBe(2)
+    expect(plan.drop.map((entry) => entry.timeID)).toEqual([1, 3])
+  })
+
+  it('does not keep a chosen entry that is not part of the merge', () => {
+    expect(planMerge([remote(1, 1), remote(2, 1), remote(9, 1, { isInvoiced: true })], new Map(), quarter, { keep: 9 })?.keep.timeID).toBe(1)
+  })
+
+  it('keeps an open entry whatever was chosen', () => {
+    expect(planMerge([remote(1, 1), open(2)], new Map(), quarter, { keep: 1 })?.keep.timeID).toBe(2)
+  })
+
+  it('refuses two open entries, since one of them would be deleted', () => {
+    expect(planMerge([open(1), open(2), remote(3, 1)], new Map(), quarter)).toBeNull()
+  })
+
+  it('asks the caller what is open, where the marker word is not the default one', () => {
+    const plan = planMerge([remote(1, 1), remote(2, 1, { detail: '[OFFEN] Arbeit' })], new Map(), quarter, {
+      isOpen: (entry) => entry.detail.startsWith('[OFFEN]'),
+    })
+    expect(plan?.keep.timeID).toBe(2)
+  })
 })
 
 /*

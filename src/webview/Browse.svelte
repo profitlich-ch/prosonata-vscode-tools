@@ -40,6 +40,10 @@
   let selected = $state<number[]>(saved?.selected ?? [])
 
   let preview = $state<MergePreview | null>(null)
+  /** Why there is no preview although several rows are ticked, from the host. */
+  let previewReason = $state<string | null>(null)
+  /** The entry chosen to stay; undefined leaves it to the host, which takes the oldest. */
+  let keepChoice = $state<number | undefined>(undefined)
   let merging = $state<{ text: string; hours: string; invalid: boolean } | null>(null)
   let editing = $state<{ timeID: number; field: 'text' | 'hours'; value: string; start: string } | null>(null)
   let failure = $state<{ message: string; timeID?: number; field?: 'text' | 'hours' } | null>(null)
@@ -49,6 +53,8 @@
   const groups = $derived(groupRows(visible, grouping, sortKey, direction))
   const picked = $derived(rows.filter((row) => selected.includes(row.timeID)))
   const invoicedRows = $derived(rows.filter((row) => row.invoiced))
+  // An open entry is created anew by its branch's next write, so deleting it undoes itself.
+  const deletable = $derived(picked.filter((row) => !row.open))
   const openSeconds = $derived(sumSeconds(rows) - sumSeconds(invoicedRows))
 
   function send(message: ToHost): void {
@@ -74,7 +80,7 @@
           // A changed selection asks for its preview by itself (the effect
           // below); an unchanged one asks again, since its hours may have moved.
           if (!sameIds(kept, selected)) selected = kept
-          else if (kept.length >= 2) send({ kind: 'preview', ids: kept })
+          else if (kept.length >= 2) send({ kind: 'preview', ids: kept, ...(keepChoice === undefined ? {} : { keep: keepChoice }) })
         }
         break
       case 'busy':
@@ -82,7 +88,11 @@
         break
       case 'preview':
         // An answer to a selection that has changed since is of no use.
-        if (sameIds(message.ids, selected)) preview = message.preview
+        if (sameIds(message.ids, selected)) {
+          preview = message.preview
+          previewReason = message.reason ?? null
+          if (!preview) merging = null
+        }
         break
       case 'failed':
         failure = message
@@ -109,8 +119,16 @@
     const ids = [...selected]
     merging = null
     preview = null
+    previewReason = null
+    keepChoice = undefined
     if (ids.length >= 2) send({ kind: 'preview', ids })
   })
+
+  // The sums do not change with the entry that stays, the plan does: ask again.
+  function chooseKeep(timeID: number): void {
+    keepChoice = timeID
+    send({ kind: 'preview', ids: [...selected], keep: timeID })
+  }
 
   function sameIds(a: number[], b: number[]): boolean {
     const [x, y] = [[...a].sort(), [...b].sort()]
@@ -192,7 +210,7 @@
       merging = { ...merging, invalid: true }
       return
     }
-    send({ kind: 'merge', ids: preview.ids, text: merging.text, hours: merging.hours })
+    send({ kind: 'merge', ids: preview.ids, keep: preview.keep, text: merging.text, hours: merging.hours })
   }
 
   function focus(node: HTMLInputElement): void {
@@ -288,7 +306,7 @@
 
     {#if merging && preview}
       <section class="drawer" aria-labelledby="merge-title">
-        <h2 id="merge-title">{t('Merge {0} entries into #{1}', preview.drop.length + 1, preview.keep)}</h2>
+        <h2 id="merge-title">{t('Merge {0} entries into #{1}', preview.members.length, preview.keep)}</h2>
         <div class="compare">
           <div>
             <small>{t('rounded per entry')}</small>
@@ -311,11 +329,32 @@
             {#if merging.invalid}<span class="error">{t('1:30 or 1.5')}</span>{/if}
           </label>
         </div>
-        <ul class="drops">
-          {#each preview.drop as drop (drop.timeID)}
-            <li>{t('#{0} is deleted · {1} · {2} h', drop.timeID, day(drop.date), drop.hours)}</li>
+        <fieldset class="members">
+          <legend>{t('Which entry stays')}</legend>
+          {#each preview.members as member (member.timeID)}
+            {@const stays = member.timeID === preview.keep}
+            <label class="member" class:stays>
+              <input
+                type="radio"
+                name="keep"
+                checked={stays}
+                disabled={preview.keepFixed || busy}
+                onchange={() => chooseKeep(member.timeID)}
+              />
+              <span class="mono">#{member.timeID}</span>
+              <span>{day(member.date)}</span>
+              <span class="num">{member.hours} h</span>
+              <span class="member-text">
+                {#if member.text}{member.text}{:else}<span class="unknown">{t('(no text)')}</span>{/if}
+              </span>
+              {#if member.open}<span class="chip">{t('open')}</span>{/if}
+              <span class="status">{stays ? t('stays') : t('is deleted')}</span>
+            </label>
           {/each}
-        </ul>
+          {#if preview.keepFixed}
+            <p class="note">{t('The open entry stays: its branch still writes to it.')}</p>
+          {/if}
+        </fieldset>
         <div class="actions">
           <button type="button" onclick={confirmMerge} disabled={busy}>{t('Merge')}</button>
           <button type="button" class="secondary" onclick={() => (merging = null)}>{t('Cancel')}</button>
@@ -475,6 +514,8 @@
               ? t('merged {0} h, rounded once', preview.recomputed)
               : t('merged {0} h, added up from ProSonata', preview.added)}
           </span>
+        {:else if previewReason}
+          <span class="hint warn">{previewReason}</span>
         {/if}
       {/if}
       <span class="spacer"></span>
@@ -483,7 +524,8 @@
         type="button"
         class="secondary"
         onclick={() => send({ kind: 'remove', ids: [...selected] })}
-        disabled={busy || picked.length === 0}
+        disabled={busy || deletable.length === 0}
+        title={picked.length > 0 && deletable.length === 0 ? t('Open entries cannot be deleted here.') : undefined}
       >
         {t('Delete')}
       </button>
@@ -725,10 +767,43 @@
   .fields input {
     width: 100%;
   }
-  .drops {
+  .members {
+    display: grid;
+    gap: 2px;
     margin: 0;
-    padding-left: 18px;
+    padding: 0;
+    border: 0;
+    min-width: 0;
+  }
+  .members legend {
+    padding: 0 0 4px;
     color: var(--vscode-descriptionForeground);
+  }
+  .member {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 2px 4px;
+    border-radius: 2px;
+    color: var(--vscode-descriptionForeground);
+    cursor: pointer;
+  }
+  .member.stays {
+    color: var(--vscode-foreground);
+    background: var(--vscode-list-inactiveSelectionBackground);
+  }
+  .member-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .status {
+    font-size: 0.9em;
+  }
+  .hint.warn {
+    color: var(--vscode-editorWarning-foreground);
   }
   .actions {
     display: flex;
@@ -778,10 +853,17 @@
   .sort:focus-visible {
     outline: 1px solid var(--vscode-focusBorder);
   }
+  /*
+   * Mixed from the text colour rather than taken from a theme colour: the
+   * section-header colours sit within a shade of the editor background in the
+   * dark default themes, and the group row is what the eye scans for.
+   */
   .group td {
+    height: 30px;
     font-weight: 600;
-    background: var(--vscode-sideBarSectionHeader-background, var(--vscode-editorWidget-background));
+    background: color-mix(in srgb, var(--vscode-foreground) 8%, var(--vscode-editor-background));
     border-top: 1px solid var(--vscode-widget-border, var(--vscode-editorGroup-border));
+    border-bottom: 1px solid var(--vscode-widget-border, var(--vscode-editorGroup-border));
   }
   .sum {
     margin-left: 10px;

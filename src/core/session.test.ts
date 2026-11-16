@@ -796,6 +796,69 @@ describe('correcting entries that are already in ProSonata', () => {
     expect(corrections[0]!.seconds).toBe(1800)
   })
 
+  /*
+   * An entry that is still open goes on being written by its branch. The
+   * sender recreates one that is gone from ProSonata with the whole local
+   * total, and writes the local text — so a merge has to leave the open entry
+   * standing and hand it the merged text.
+   */
+  describe('with an entry that is still open', () => {
+    async function openBeside(closedFirst: boolean) {
+      const dir = mkdtempSync(join(tmpdir(), 'prosonata-merge-open-'))
+      const api = new FakeApi()
+      const clock = fixedClock(NINE)
+      const session = new Session(
+        { ...DEFAULTS, baseUrl: 'https://x/api/v1', apiKey: 'k' },
+        {
+          api,
+          clock,
+          store: new StateStore(join(dir, 'state.json')),
+          journal: new Journal(join(dir, 'log.jsonl')),
+          segments: new SegmentLog(join(dir, 'segments.jsonl')),
+        },
+      )
+      const closedEarly = closedFirst ? await entryIn(api, '0.50') : null
+      await session.start(context)
+      clock.advance(3600)
+      session.pause(context)
+      await session.flush(true)
+      const closed = closedEarly ?? (await entryIn(api, '0.50'))
+      const open = (await api.listEntries(166)).find((entry) => entry.timeID !== closed.timeID)!
+      const goOn = async () => {
+        await session.start(context)
+        clock.advance(1800)
+        session.pause(context)
+        await session.flush(true)
+      }
+      return { api, session, closed, open, goOn }
+    }
+
+    it('keeps the open entry even when it is the younger one, so its hours are not booked twice', async () => {
+      // The closed entry has the lower number; before, it was the one kept,
+      // and the open one came back at the next write with all its hours.
+      const { api, session, closed, open, goOn } = await openBeside(true)
+
+      const plan = planMerge([closed, open], new Map(), EXACT, { keep: closed.timeID })!
+      expect(plan.keep.timeID).toBe(open.timeID)
+      await session.applyMerge(plan, 5400, 'Buchungsmodul', EXACT)
+      await goOn()
+
+      const total = (await api.listEntries(166)).reduce((sum, entry) => sum + entry.hours, 0)
+      expect(total).toBe(2)
+    })
+
+    it('hands the merged text to the open entry, so its next write keeps it', async () => {
+      const { api, session, closed, open, goOn } = await openBeside(false)
+
+      await session.applyMerge(planMerge([open, closed], new Map(), EXACT)!, 5400, 'Buchungsmodul', EXACT)
+      await goOn()
+
+      const [stays] = await api.listEntries(166)
+      expect(stays?.detail).toContain('Buchungsmodul')
+      expect(stays?.hours).toBe(2)
+    })
+  })
+
   it('refuses an invoiced entry, because that belongs to the invoice', async () => {
     const api = new FakeApi()
     const entry = await entryIn(api, '2.00')

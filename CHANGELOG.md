@@ -11,6 +11,9 @@ are in German.
 
 - **Possible duplicates are marked** in “Browse Time Entries”: two entries of
   the same branch, day and text.
+- **Choose which entry stays when merging.** The form lists the merged entries
+  with the oldest preselected; the one that stays keeps its number, category
+  and branch.
 
 ### Changed
 
@@ -26,6 +29,15 @@ are in German.
 - **Invoiced entries can't be ticked any more.** They used to show up with a
   checkbox although none of the actions may touch them; now they are hidden
   until “Show invoiced” is ticked, and then stand greyed out without one.
+
+### Fixed
+
+- **Merging no longer books the hours of an open entry twice.** A merge kept
+  the oldest entry, so an open one among them was usually deleted — and the
+  next write of its branch created it again with all its hours, while the
+  merged entry held them already. An open entry now always stays, two open
+  entries are not merged, and its text survives the next write. Deleting leaves
+  open entries standing for the same reason.
 
 ## [2.0.0] — 2026-11-10
 

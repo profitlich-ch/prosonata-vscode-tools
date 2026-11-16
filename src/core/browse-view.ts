@@ -43,7 +43,10 @@ export interface MergePreview {
   /** The rows the preview was made for, so a late answer can be recognised. */
   ids: number[]
   keep: number
-  drop: { timeID: number; date: string; hours: string }[]
+  /** An open entry stays whatever is chosen (merge.ts); the form then offers no choice. */
+  keepFixed: boolean
+  /** Every entry of the merge, the one that stays among them, oldest first. */
+  members: { timeID: number; date: string; hours: string; text: string; open: boolean }[]
   /** What ProSonata holds now, rounded per entry. */
   added: string
   /** Rounded once from the segment log; null when the log does not cover all of them. */
@@ -70,7 +73,7 @@ export interface BrowseData {
 export type ToView =
   | { kind: 'show'; locale: string; strings: Record<string, string>; data: BrowseData }
   | { kind: 'busy'; busy: boolean }
-  | { kind: 'preview'; preview: MergePreview | null; ids: number[] }
+  | { kind: 'preview'; preview: MergePreview | null; ids: number[]; reason?: string }
   | { kind: 'failed'; message: string; timeID?: number; field?: 'text' | 'hours' }
   | { kind: 'saved'; timeID: number }
   | { kind: 'merged' }
@@ -79,9 +82,9 @@ export type ToView =
 export type ToHost =
   | { kind: 'ready' }
   | { kind: 'refresh' }
-  | { kind: 'preview'; ids: number[] }
+  | { kind: 'preview'; ids: number[]; keep?: number }
   | { kind: 'edit'; timeID: number; field: 'text' | 'hours'; value: string }
-  | { kind: 'merge'; ids: number[]; text: string; hours: string }
+  | { kind: 'merge'; ids: number[]; keep: number; text: string; hours: string }
   | { kind: 'remove'; ids: number[] }
 
 export type Grouping = 'branch' | 'week' | 'none'

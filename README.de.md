@@ -382,8 +382,12 @@ bietet drei Aktionen:
   zusammenlegt, sagt, dass die Arbeit in einem Zug getan wurde, und ein Zug wird
   einmal gerundet, nicht dreimal. Decken die Segmente die Einträge nicht ab –
   weil etwa ein anderer Rechner gemessen hat –, wird die Summe aus ProSonata
-  angezeigt, mit einem Hinweis, warum.
-- **Löschen** – nach einer Bestätigung mit den Zahlen.
+  angezeigt, mit einem Hinweis, warum. Welcher Eintrag bleibt – mit seiner
+  Nummer, Kategorie und seinem Branch –, wählst du im Formular; vorgewählt ist
+  der älteste. Ein noch offener Eintrag bleibt immer, weil sein Branch weiter in
+  ihn schreibt.
+- **Löschen** – nach einer Bestätigung mit den Zahlen. Offene Einträge bleiben
+  stehen.
 
 **Fakturierte Einträge lassen sich nicht ankreuzen**: Sie gehören zur Rechnung,
 und keine der drei Aktionen darf sie anfassen. Sie sind ausgeblendet, bis du
