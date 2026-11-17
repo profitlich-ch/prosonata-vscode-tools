@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [2.2.0] — 2026-11-17
+
 ### Added
 
 - **Group time entries by day.** The table offers “Day” between “Week” and
