@@ -7,6 +7,11 @@ are in German.
 
 ## [Unreleased]
 
+### Added
+
+- **Group time entries by day.** The table offers “Day” between “Week” and
+  “nothing”, with a sum per day.
+
 ### Changed
 
 - **The help names the entry reference `id`** instead of `no`, which read as

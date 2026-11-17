@@ -357,7 +357,7 @@ goes out, its time moves to the entry of the commit that replaced it.
 The list icon in the title bar of the ProSonata panel fetches the time entries
 of the current repository from ProSonata into a table in an editor tab; in the
 Command Palette it is called “ProSonata: Browse Time Entries”. The rows are
-grouped by branch — or by week — with a sum per group, and can be searched and
+grouped by branch — or by week or day — with a sum per group, and can be searched and
 sorted. Next to the hours, the table shows what the segment log on this computer
 measured into each entry, and it marks a **possible duplicate**: same branch,
 same day, same text. Above it stand the project's budget and the sum of your own

@@ -983,7 +983,7 @@ Eine QuickPick war sie bis 2.0.0; was sie nicht konnte, ist der Grund für die T
   im alten Marker. Zurückgerechnet wird er aus dem, was hier einen Schlüssel erzeugt haben kann:
   den Einträgen im lokalen Zustand und den lokalen Branches. Was keiner davon erklärt – ein in
   ProSonata erfasster Eintrag, ein Branch, den es hier nie gab –, steht in einer eigenen Gruppe
-  *ohne Branch* am Ende. Gruppiert wird nach Branch oder nach Kalenderwoche, mit Summe.
+  *ohne Branch* am Ende. Gruppiert wird nach Branch, Kalenderwoche oder Tag, mit Summe.
 - **Fakturierte Einträge zeigen, ohne sie wählbar zu machen.** Sie stehen grau und ohne
   Kästchen da, auf Wunsch eingeblendet (Issue #11). Die QuickPick kannte keine gesperrte Zeile
   und liess sie deshalb weg.

@@ -67,6 +67,7 @@
   "Two open entries cannot be merged — one of them would be deleted.": "Zwei offene Einträge lassen sich nicht zusammenlegen — einer davon würde gelöscht.",
   "Week": "Woche",
   "Week {0}": "KW {0}",
+  "Day": "Tag",
   "what should happen to {0}? attach, close or drop": "was soll mit {0} geschehen? attach, close oder drop",
   "discarding held time needs a person — on a terminal or in the editor": "angehaltene Zeit verwerfen kann nur ein Mensch — im Terminal oder im Editor",
   "not a number: {0} — \"prosonata sent [count]\"": "keine Zahl: {0} — \"prosonata sent [Anzahl]\"",

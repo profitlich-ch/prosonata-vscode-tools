@@ -365,7 +365,7 @@ Eintrag des Commits um, der ihn ersetzt hat.
 Das Listen-Symbol in der Titelleiste des ProSonata-Panels holt die Zeiteinträge
 des aktuellen Repositorys aus ProSonata in eine Tabelle in einem Editor-Tab; in
 der Befehlspalette heisst es „ProSonata: Zeiteinträge durchsehen“. Die Zeilen
-sind nach Branch – oder nach Woche – gruppiert, mit einer Summe je Gruppe, und
+sind nach Branch – oder nach Woche oder Tag – gruppiert, mit einer Summe je Gruppe, und
 lassen sich durchsuchen und sortieren. Neben den Stunden zeigt die Tabelle, was
 das Segmentprotokoll auf diesem Rechner in jeden Eintrag gemessen hat, und sie
 markiert ein **mögliches Doppel**: gleicher Branch, gleicher Tag, gleicher Text.

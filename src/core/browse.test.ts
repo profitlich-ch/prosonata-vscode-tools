@@ -160,11 +160,16 @@ describe('looking at the rows', () => {
     ])
   })
 
-  it('groups by week as well, and not at all', () => {
-    const rows = [row(1, { week: '2026-W45', date: '2026-11-05' }), row(2), row(3)]
+  it('groups by week, by day, and not at all', () => {
+    const rows = [row(1, { week: '2026-W45', date: '2026-11-05' }), row(2), row(3, { date: '2026-11-10' })]
     expect(groupRows(rows, 'week', 'date', -1).map((group) => [group.key, group.rows.length])).toEqual([
       ['2026-W46', 2],
       ['2026-W45', 1],
+    ])
+    expect(groupRows(rows, 'day', 'date', -1).map((group) => [group.key, group.rows.length])).toEqual([
+      ['2026-11-12', 1],
+      ['2026-11-10', 1],
+      ['2026-11-05', 1],
     ])
     expect(groupRows(rows, 'none', 'id', 1)).toEqual([{ key: '', rows: [rows[0], rows[1], rows[2]], seconds: 2700 }])
   })

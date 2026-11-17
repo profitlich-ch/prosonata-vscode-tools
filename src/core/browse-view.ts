@@ -87,11 +87,11 @@ export type ToHost =
   | { kind: 'merge'; ids: number[]; keep: number; text: string; hours: string }
   | { kind: 'remove'; ids: number[] }
 
-export type Grouping = 'branch' | 'week' | 'none'
+export type Grouping = 'branch' | 'week' | 'day' | 'none'
 export type SortKey = 'date' | 'hours' | 'id'
 
 export interface RowGroup {
-  /** Branch name, ISO week, or `''` for the one group without either. */
+  /** Branch name, ISO week, date, or `''` for the one group without a branch. */
   key: string
   rows: BrowseRow[]
   seconds: number
@@ -123,7 +123,8 @@ export function sortRows(rows: BrowseRow[], key: SortKey, direction: 1 | -1): Br
  * The rows in groups, newest group first.
  *
  * By branch, because that is the unit of work and of the invoice line; by week
- * for the question "what did I book last week". Rows without a branch form one
+ * for the question "what did I book last week", by day for "what did I book
+ * on Tuesday". Rows without a branch form one
  * group of their own at the end — they are what the table cannot explain, and
  * mixing them in by date would hide that.
  */
@@ -132,7 +133,7 @@ export function groupRows(rows: BrowseRow[], by: Grouping, key: SortKey, directi
 
   const groups = new Map<string, BrowseRow[]>()
   for (const row of rows) {
-    const name = by === 'branch' ? (row.branch ?? '') : row.week
+    const name = by === 'branch' ? (row.branch ?? '') : by === 'week' ? row.week : row.date
     groups.set(name, [...(groups.get(name) ?? []), row])
   }
   const latest = (members: BrowseRow[]) => members.reduce((last, row) => (row.date > last ? row.date : last), '')

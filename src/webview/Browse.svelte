@@ -234,6 +234,14 @@
 
   function groupName(group: RowGroup): string {
     if (grouping === 'week') return t('Week {0}', Number(group.key.slice(6)))
+    if (grouping === 'day') {
+      return new Date(`${group.key}T12:00:00`).toLocaleDateString(locale, {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    }
     return group.key
   }
 </script>
@@ -287,6 +295,7 @@
       <div class="segmented" role="group" aria-labelledby="grouping-label">
         <button type="button" aria-pressed={grouping === 'branch'} onclick={() => (grouping = 'branch')}>{t('Branch')}</button>
         <button type="button" aria-pressed={grouping === 'week'} onclick={() => (grouping = 'week')}>{t('Week')}</button>
+        <button type="button" aria-pressed={grouping === 'day'} onclick={() => (grouping = 'day')}>{t('Day')}</button>
         <button type="button" aria-pressed={grouping === 'none'} onclick={() => (grouping = 'none')}>{t('nothing')}</button>
       </div>
       {#if invoicedRows.length > 0}
