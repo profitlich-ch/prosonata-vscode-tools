@@ -4,7 +4,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { ApiError, type Quotation } from '../core/api.js'
 import { paths } from '../core/config.js'
+import { FakeApi } from '../core/fake-api.js'
 import { describeRepo } from '../core/git.js'
 import { rememberCategory, rememberProject } from '../core/repo-config.js'
 import { Session } from '../core/session.js'
@@ -536,5 +538,136 @@ describe('closing an entry without time', () => {
 
     expect(err).toContain('holds no time yet')
     expect(stored()).toMatchObject({ state: 'open', text: '' })
+  })
+})
+
+describe('quotations', () => {
+  let api: FakeApi
+
+  beforeEach(() => {
+    api = new FakeApi()
+    const open = Session.open.bind(Session)
+    vi.spyOn(Session, 'open').mockImplementation((options = {}) => open({ ...options, api }))
+    rememberProject(repo, { id: 170, name: 'Wartung', no: 'P-2' })
+    git(repo, 'config', '--local', 'prosonata.active', '166')
+    api.quotations = [
+      offer({ quotationID: 1, projectID: 166, quotationName: 'Relaunch', quotationDate: '2026-10-01' }),
+      offer({ quotationID: 2, projectID: 166, quotationName: 'Nachtrag', quotationDate: '2026-11-01' }),
+      offer({ quotationID: 3, projectID: 170, quotationName: 'Hosting', quotationDate: '2026-11-02' }),
+    ]
+  })
+
+  function offer(extra: Partial<Quotation>): Quotation {
+    return {
+      quotationID: 0,
+      quotationName: '',
+      quotationHeadline: '',
+      quotationDate: '',
+      netValue: 100,
+      grossValue: 108.1,
+      currency: 1,
+      isDraft: false,
+      isSent: true,
+      sentDate: null,
+      approved: false,
+      projectID: 0,
+      projectNo: '',
+      projectName: '',
+      customerName: '',
+      quotationComments: '',
+      positions: [],
+      ...extra,
+    }
+  }
+
+  it("lists those of this repository's project, newest first, in one call", async () => {
+    expect(await main(['quotations'], repo)).toBe(0)
+
+    expect(out).toMatch(/^P-1 Shop\n {2}#2 .*Nachtrag\n {2}#1 .*Relaunch\n/)
+    expect(out).not.toContain('Hosting')
+    expect(api.calls).toEqual(['listQuotations 166'])
+  })
+
+  it('lists those of an earlier project of this repository by its number', async () => {
+    expect(await main(['quotations', 'P-2'], repo)).toBe(0)
+
+    expect(out).toContain('Hosting')
+    expect(out).not.toContain('Relaunch')
+  })
+
+  it('refuses a number this repository does not know, without asking ProSonata', async () => {
+    expect(await main(['quotations', 'P-9'], repo)).toBe(2)
+
+    expect(err).toContain('known here: P-1, P-2')
+    expect(api.calls).toEqual([])
+  })
+
+  it('prints JSON for an agent', async () => {
+    expect(await main(['quotations', '--json'], repo)).toBe(0)
+
+    expect((JSON.parse(out) as Quotation[]).map((row) => row.quotationID)).toEqual([2, 1])
+  })
+
+  it('refuses an option it does not know, without asking ProSonata', async () => {
+    expect(await main(['quotations', '--all'], repo)).toBe(2)
+
+    expect(err).toContain('unknown option: --all')
+    expect(api.calls).toEqual([])
+  })
+
+  it('shows one quotation by its id, and says so when ProSonata has none', async () => {
+    expect(await main(['quotation', '#3'], repo)).toBe(0)
+    expect(out).toContain('#3  Hosting')
+
+    expect(await main(['quotation', '99'], repo)).toBe(1)
+    expect(err).toContain('ProSonata has no quotation #99')
+  })
+
+  it('refuses an id that is not a number', async () => {
+    expect(await main(['quotation', 'Relaunch'], repo)).toBe(2)
+
+    expect(api.calls).toEqual([])
+  })
+})
+
+describe('everybody’s entries and a refused quotation', () => {
+  let api: FakeApi
+
+  beforeEach(() => {
+    api = new FakeApi()
+    const open = Session.open.bind(Session)
+    vi.spyOn(Session, 'open').mockImplementation((options = {}) => open({ ...options, api }))
+    api.projectTimes = [
+      { projectID: 166, timeID: 1, date: '2026-11-01', username: 'm.profitlich', category: 7, categoryName: 'Programmierung', hours: 2, detail: 'Login', isInvoiced: false, notInvoiceable: false },
+      { projectID: 166, timeID: 2, date: '2026-11-02', username: 'a.muster', category: 7, categoryName: 'Programmierung', hours: 1, detail: 'Suche', isInvoiced: false, notInvoiceable: false },
+      { projectID: 170, timeID: 3, date: '2026-11-02', username: 'a.muster', category: 7, categoryName: 'Hosting', hours: 1, detail: '', isInvoiced: false, notInvoiceable: false },
+    ]
+  })
+
+  it("lists the entries of everybody on this repository's project, with the sum", async () => {
+    expect(await main(['entries'], repo)).toBe(0)
+
+    expect(out).toContain('a.muster')
+    expect(out).toContain('m.profitlich')
+    expect(out).not.toContain('Hosting')
+    expect(out).toContain('Total           3:00 h')
+    expect(api.calls).toEqual(['listProjectTimes 166'])
+  })
+
+  it('says that the lowest group sees only its own', async () => {
+    api.group = 'Zeiterfasser 1'
+
+    expect(await main(['entries', '--json'], repo)).toBe(0)
+
+    expect(err).toContain('«Zeiterfasser 1» sees only your own entries')
+    expect((JSON.parse(out) as unknown[]).length).toBe(2)
+  })
+
+  it('turns a refusal of quotations into a sentence', async () => {
+    api.failNext = new ApiError(403, 'Access denied.')
+
+    expect(await main(['quotations'], repo)).toBe(1)
+
+    expect(err).toContain('may not read quotations — they open from «Teamleiter» up')
   })
 })

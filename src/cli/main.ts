@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { basename } from 'node:path'
 import { createInterface } from 'node:readline/promises'
 
-import { inProsonataOrder, type Project } from '../core/api.js'
+import { ApiError, inProsonataOrder, type Project } from '../core/api.js'
 import { configWith, MissingConfig, paths, readConfig, writeConfig } from '../core/config.js'
 import { currentBranch, describeRepo, headSha, subjectOf, trailerOf } from '../core/git.js'
 import { installHooks, isInstalled, publishCli, publishedCli, type InstallResult } from '../core/hooks.js'
@@ -32,6 +32,8 @@ import {
 } from '../core/tracking.js'
 import { hoursToSeconds, workingTime, type TimeGrid } from '../core/working-time.js'
 import { describeRejection, type SendResult } from '../core/sender.js'
+import { renderQuotation, renderQuotationList } from '../core/quotations.js'
+import { renderProjectTimes } from '../core/project-times.js'
 import { t } from '../core/l10n.js'
 
 /**
@@ -45,7 +47,7 @@ import { t } from '../core/l10n.js'
 
 /** A function, not a constant: `t()` must run after index.ts has chosen the language. */
 function usage(): string {
-  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hooks\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [id|branch] [text] close the open time entry and send it; with id or branch the one of another branch, without text with the one it has\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [id retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [id close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata held [id attach|close|drop]\n                                    main time held at a squash merge: to the merged branch, own text, discard\n  prosonata sent [count|id text|drop]\n                                    entries sent from here: list, change the text, delete one without time\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n  prosonata post-checkout           called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
+  return t('prosonata — time tracking tied to commits and branches\n\n  prosonata init                    set up the account and this repository, install the hooks\n  prosonata start                   start or resume the timer of this branch\n  prosonata pause [h:mm|minutes]    pause the timer; with a duration only that much is booked\n  prosonata status                  what is running, what is open, what is waiting\n  prosonata send                    send everything that is due\n\n  prosonata project                 choose the project of this repository\n  prosonata category                choose the time category of this project\n  prosonata grid [exact|5|15|30]    round to this many minutes\n  prosonata mode [branch|day|commit] one entry per branch, per branch and day, or per commit\n  prosonata close [id|branch] [text] close the open time entry and send it; with id or branch the one of another branch, without text with the one it has\n  prosonata text <text>             change the text of the open time entry\n  prosonata discard                 discard the running segment without booking it\n  prosonata attach                  attach the time since the last commit to the entry of that commit\n  prosonata take [branch]           take the open entry of another branch onto this one, time and all\n  prosonata resume [add|new]        decide on an entry closed elsewhere\n  prosonata rejected [id retry|move|drop]\n                                    rejected entries: send again, move to another project, discard\n  prosonata resting [id close|keep|drop]\n                                    entries dormant for weeks: close, keep, discard\n  prosonata held [id attach|close|drop]\n                                    main time held at a squash merge: to the merged branch, own text, discard\n  prosonata sent [count|id text|drop]\n                                    entries sent from here: list, change the text, delete one without time\n  prosonata tidy                    remove empty remainders of deleted branches in all repositories\n  prosonata log [branch|all|?]      measured segments, without a branch those of this one\n  prosonata quotations [project-no] [--json]\n                                    quotations of this project, or of an earlier one of this repository by its number\n  prosonata quotation <id> [--json] one quotation with its positions\n  prosonata entries [project-no] [--json]\n                                    time entries of everybody on this project, with the hours per category\n  prosonata adjust <value>          adjust the time: ±25, ±1:30, "from 9:40", "until 9:40"\n\n  prosonata post-commit             called by the hook, not meant for typing\n  prosonata post-checkout           called by the hook, not meant for typing\n\nAnything that takes an argument asks for it when left out.\n')
 }
 
 export async function main(argv: string[], cwd = process.cwd()): Promise<number> {
@@ -101,6 +103,12 @@ export async function main(argv: string[], cwd = process.cwd()): Promise<number>
         return tidy()
       case 'log':
         return log(cwd, argument)
+      case 'quotations':
+        return await quotations(cwd, argv.slice(1))
+      case 'quotation':
+        return await quotation(argv.slice(1))
+      case 'entries':
+        return await entries(cwd, argv.slice(1))
       case 'adjust':
         return adjust(cwd, argument)
       case 'post-commit':
@@ -1078,6 +1086,133 @@ async function sent(cwd: string, argument: string): Promise<number> {
       process.stderr.write(`${t('what should happen to {0}? text or drop', ref ?? '')}\n`)
       return 2
   }
+}
+
+/**
+ * The quotations of this repository's project, or of one it was linked to
+ * before, named by its number (KONZEPT.md §6: a repository keeps every project
+ * it had, one of them active). Read only and one call each: the quota is shared
+ * with the time tracking (KONZEPT.md §9, *`quotations`*).
+ */
+async function quotations(cwd: string, args: string[]): Promise<number> {
+  const options = readOptions(args, 'quotations')
+  if (!options) return 2
+  const session = Session.open()
+  const project = projectNamed(session, cwd, options.rest)
+  if (typeof project === 'number') return project
+
+  const read = await readQuotations(() => session.api.listQuotations(project.id))
+  if (read === null) return 1
+  const list = read.value
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(list, null, 2)}\n`)
+    return 0
+  }
+  if (list.length === 0) {
+    process.stdout.write(`${t('no quotations for {0}', project.name)}\n`)
+    return 0
+  }
+  process.stdout.write(`${project.name}\n${renderQuotationList(list)}\n  ${t('"prosonata quotation <id>"  one with its positions')}\n`)
+  return 0
+}
+
+/** One quotation with its positions, wherever it belongs. */
+async function quotation(args: string[]): Promise<number> {
+  const options = readOptions(args, 'quotation')
+  if (!options) return 2
+  const id = Number(options.rest.replace(/^#/, ''))
+  if (options.rest === '' || !Number.isInteger(id) || id <= 0) {
+    process.stderr.write(`${t('not a quotation id: {0} — "prosonata quotations" lists them', options.rest)}\n`)
+    return 2
+  }
+
+  const session = Session.open()
+  const read = await readQuotations(() => session.api.getQuotation(id))
+  if (read === null) return 1
+  const found = read.value
+  if (!found) {
+    process.stderr.write(`${t('ProSonata has no quotation #{0}', id)}\n`)
+    return 1
+  }
+  process.stdout.write(options.json ? `${JSON.stringify(found, null, 2)}\n` : renderQuotation(found))
+  return 0
+}
+
+/**
+ * Everybody's time on the project, as far as ProSonata lets this key see it —
+ * to hold against a quotation. Read only, one call per thousand entries.
+ */
+async function entries(cwd: string, args: string[]): Promise<number> {
+  const options = readOptions(args, 'entries')
+  if (!options) return 2
+  const session = Session.open()
+  const project = projectNamed(session, cwd, options.rest)
+  if (typeof project === 'number') return project
+
+  const list = await session.api.listProjectTimes(project.id)
+  // The server narrows the list for the lowest group; say so, or the sums look complete.
+  const group = session.api.userGroup()
+  if (group === 'Zeiterfasser 1') {
+    process.stderr.write(`${t('your ProSonata user group «{0}» sees only your own entries', group)}\n`)
+  }
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(list, null, 2)}\n`)
+    return 0
+  }
+  if (list.length === 0) {
+    process.stdout.write(`${t('no time entries for {0}', project.name)}\n`)
+    return 0
+  }
+  process.stdout.write(`${project.name}\n${renderProjectTimes(list)}`)
+  return 0
+}
+
+/**
+ * The repository's active project, or one it was linked to before, named by its
+ * number. The exit code instead when the number is unknown here — nothing was
+ * asked of ProSonata then.
+ */
+function projectNamed(session: Session, cwd: string, number: string): { id: number; name: string } | number {
+  const context = session.context(cwd)
+  if (!context) return notARepo()
+  const project =
+    number === ''
+      ? context.config.projects.find((candidate) => candidate.id === context.projectId)
+      : context.config.projects.find((candidate) => candidate.no === number)
+  if (number !== '' && !project) {
+    const known = context.config.projects.map((candidate) => candidate.no).filter((no) => no !== null)
+    process.stderr.write(
+      `${t('no project {0} in this repository — known here: {1}', number, known.length > 0 ? known.join(', ') : t('none with a number'))}\n`,
+    )
+    return 2
+  }
+  if (!project) return { id: context.projectId, name: t('Project {0}', context.projectId) }
+  return { id: project.id, name: project.no ? `${project.no} ${project.name}` : project.name }
+}
+
+/**
+ * A call on quotations, with ProSonata's refusal turned into a sentence: the
+ * resource opens from «Teamleiter» up, and a bare 403 says nothing about why.
+ * Null when refused — the answer itself is wrapped, since it can be null too.
+ */
+async function readQuotations<T>(call: () => Promise<T>): Promise<{ value: T } | null> {
+  try {
+    return { value: await call() }
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.status !== 403) throw error
+    process.stderr.write(`${t('your ProSonata user group may not read quotations — they open from «Teamleiter» up')}\n`)
+    return null
+  }
+}
+
+/** `--json` and what remains; any other option is refused, nothing is read. */
+function readOptions(args: string[], command: string): { json: boolean; rest: string } | null {
+  const unknown = args.find((arg) => arg.startsWith('-') && arg !== '--json')
+  if (unknown !== undefined) {
+    process.stderr.write(`${t('unknown option: {0} — "prosonata help {1}"', unknown, command)}\n`)
+    return null
+  }
+  return { json: args.includes('--json'), rest: args.filter((arg) => arg !== '--json').join(' ').trim() }
 }
 
 function listHeld(entries: TimeEntry[], indent: string): void {

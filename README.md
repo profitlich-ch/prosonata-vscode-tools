@@ -403,6 +403,24 @@ carries a total and the date of its last write.
 What is recorded is what was measured on this computer. What happened on
 another one is in ProSonata, but not here.
 
+## Quotations
+
+Below the time tracking, the view **Quotations** lists the quotations of the
+current repository's project, newest first, with date, state and net amount.
+A click opens one with its positions as a rendered preview: a table per
+heading, with quantity, unit, unit price and amount. Optional positions are
+marked and left out of the total, as ProSonata does.
+
+The view only reads; quotations are written in ProSonata. It asks ProSonata
+when it is opened, when the project changes and on its refresh button — never on
+a timer, since it shares the quota with the time tracking. It is offered to the
+user groups that may read quotations, from “Teamleiter” up; ProSonata refuses
+everyone else on its own.
+
+The PDF of a quotation also has sections without a number above the headings,
+each with a subtotal. ProSonata's API does not deliver them, so the preview
+leaves them out.
+
 
 ## CLI commands
 
@@ -433,6 +451,11 @@ prosonata sent [count|id text|drop]
                                   entries sent from here: list, change the text, delete one without time
 prosonata tidy                    remove empty leftovers of deleted branches in all repositories
 prosonata log [branch|all|?]      measured segments, this branch's if none is given
+prosonata quotations [project-no] [--json]
+                                  quotations of this project, or of an earlier one of this repository by its number
+prosonata quotation <id> [--json] one quotation with its positions
+prosonata entries [project-no] [--json]
+                                  time entries of everybody on this project, with the hours per category
 prosonata adjust <value>          adjust time: ±25, ±1:30, "from 9:40", "until 9:40"
 ```
 
@@ -460,6 +483,16 @@ done in the output the agent reads at that moment:
 - Where a person has to decide, a line of its own says **Note for AI: ask the
   user to decide.** — for open `main` time, time held at a squash merge, an
   entry closed elsewhere, and `adjust` or discarding without a terminal.
+
+An agent that needs to know what was offered to the customer reads it with
+`prosonata quotations --json` and `prosonata quotation <id> --json`. Both only
+read, with the key `prosonata init` stored, so the key never shows up in the
+agent's output. Each costs one request from the quota the time tracking uses as
+well, so the list carries no positions; those come with the single quotation.
+To hold them against what was booked, `prosonata entries --json` gives the time
+entries of everybody on the project, with person, category and hours. An entry
+names no position, so the agent compares by category and text, and says where it
+had to judge.
 
 What the tool can't see belongs in the agent's instructions. A block for
 `AGENTS.md`:

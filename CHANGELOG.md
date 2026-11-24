@@ -7,6 +7,23 @@ are in German.
 
 ## [Unreleased]
 
+### Added
+
+- **Read the quotations of a project.** `prosonata quotations` lists those of
+  this repository's project — or of one it was linked to before, by its number —
+  with date, state and net amount; `prosonata quotation <id>` shows one with its
+  positions. Both only read, and `--json` prints them for a coding agent.
+- **The view “Quotations”** below the time tracking lists the quotations of the
+  project; a click opens one with its positions in the markdown preview. It is
+  offered from the user group “Teamleiter” up.
+- **`prosonata entries`** lists the time entries of everybody on the project,
+  with the hours per category — for holding a quotation against what was booked.
+
+### Changed
+
+- **The panel is called “Time Tracking”**, without “ProSonata” in front: the
+  side bar names ProSonata already, and “Quotations” stands beside it now.
+
 ## [2.2.0] — 2026-11-17
 
 ### Added

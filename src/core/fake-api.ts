@@ -1,4 +1,14 @@
-import { ApiError, type Api, type Category, type EntryDraft, type Project, type RateLimit, type RemoteEntry } from './api.js'
+import {
+  ApiError,
+  type Api,
+  type Category,
+  type EntryDraft,
+  type Project,
+  type ProjectTime,
+  type Quotation,
+  type RateLimit,
+  type RemoteEntry,
+} from './api.js'
 import { parseWorkingTime } from './working-time.js'
 
 /**
@@ -12,6 +22,12 @@ export class FakeApi implements Api {
   readonly entries = new Map<number, RemoteEntry>()
   projects: Project[] = []
   categories: Category[] = []
+  /** With their positions; the list hands them out without. */
+  quotations: Quotation[] = []
+  /** Everybody's entries, for `listProjectTimes`; apart from `entries`, which are the user's own. */
+  projectTimes: (ProjectTime & { projectID: number })[] = []
+  /** What `meta.usergroupName` would say. */
+  group: string | null = 'Administrator'
 
   /** Set to make the next call fail, e.g. `new ApiError(429, 'slow down')`. */
   failNext: Error | null = null
@@ -132,6 +148,33 @@ export class FakeApi implements Api {
   async deleteEntry(timeId: number): Promise<void> {
     this.record(`deleteEntry ${timeId}`)
     this.entries.delete(timeId)
+  }
+
+  async listQuotations(projectId: number): Promise<Quotation[]> {
+    this.record(`listQuotations ${projectId}`)
+    // The list carries no positions — measured.
+    return this.quotations
+      .filter((quotation) => quotation.projectID === projectId)
+      .sort((a, b) => b.quotationDate.localeCompare(a.quotationDate))
+      .map((quotation) => ({ ...quotation, positions: null }))
+  }
+
+  async listProjectTimes(projectId: number): Promise<ProjectTime[]> {
+    this.record(`listProjectTimes ${projectId}`)
+    return this.projectTimes
+      .filter((time) => time.projectID === projectId)
+      .map(({ projectID: _, ...time }) => time)
+      .sort((a, b) => b.date.localeCompare(a.date) || b.timeID - a.timeID)
+  }
+
+  userGroup(): string | null {
+    return this.group
+  }
+
+  async getQuotation(quotationId: number): Promise<Quotation | null> {
+    this.record(`getQuotation ${quotationId}`)
+    const found = this.quotations.find((quotation) => quotation.quotationID === quotationId)
+    return found ? { ...found, positions: found.positions ?? [] } : null
   }
 
   private record(call: string): void {

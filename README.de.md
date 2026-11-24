@@ -417,6 +417,24 @@ Zeiteintrag trägt nur eine Summe und das Datum seines letzten Schreibens.
 Erfasst ist, was auf diesem Rechner gemessen wurde. Was auf einem anderen geschah,
 steht in ProSonata, aber nicht hier.
 
+## Offerten
+
+Unter der Zeiterfassung listet die Ansicht **Offerten** die Offerten des Projekts
+dieses Repositorys, die neueste zuerst, mit Datum, Status und Nettobetrag. Ein
+Klick öffnet eine davon mit ihren Positionen als gerenderte Vorschau: eine
+Tabelle pro Zwischentitel, mit Menge, Einheit, Einzelpreis und Betrag. Optionale
+Positionen sind markiert und zählen nicht zur Summe, wie in ProSonata.
+
+Die Ansicht liest nur; geschrieben werden Offerten in ProSonata. Sie fragt
+ProSonata, wenn sie aufgeklappt wird, wenn das Projekt wechselt und über ihren
+Knopf zum Neuladen – nie im Takt, weil sie sich das Kontingent mit der
+Zeiterfassung teilt. Angeboten wird sie den Benutzergruppen, die Offerten lesen
+dürfen, ab «Teamleiter»; allen anderen verweigert ProSonata sie ohnehin.
+
+Das PDF einer Offerte hat über den Zwischentiteln noch Abschnitte ohne Nummer,
+jeder mit einer Zwischensumme. Die API von ProSonata liefert sie nicht, deshalb
+fehlen sie in der Vorschau.
+
 
 ## CLI-Befehle
 
@@ -447,6 +465,11 @@ prosonata sent [count|id text|drop]
                                   von hier gesendete Einträge: auflisten, Text ändern, einen ohne Zeit löschen
 prosonata tidy                    leere Reste gelöschter Branches in allen Repositorys entfernen
 prosonata log [branch|all|?]      gemessene Segmente, ohne Angabe die dieses Branches
+prosonata quotations [project-no] [--json]
+                                  Offerten dieses Projekts, oder eines früheren dieses Repositorys über seine Nummer
+prosonata quotation <id> [--json] eine Offerte mit ihren Positionen
+prosonata entries [project-no] [--json]
+                                  Zeiteinträge aller Personen in diesem Projekt, mit den Stunden pro Kategorie
 prosonata adjust <value>          Zeit korrigieren: ±25, ±1:30, "ab 9:40", "bis 9:40"
 ```
 
@@ -477,6 +500,16 @@ der Ausgabe, die der Agent in diesem Moment liest, was zu tun ist:
   um Entscheidung bitten.** – bei offener `main`-Zeit, beim Squash-Merge
   angehaltener Zeit, einem anderswo abgeschlossenen Eintrag und bei `adjust`
   oder Verwerfen ohne Terminal.
+
+Ein Agent, der wissen muss, was dem Kunden offeriert wurde, liest es mit
+`prosonata quotations --json` und `prosonata quotation <id> --json`. Beide lesen
+nur, mit dem Schlüssel, den `prosonata init` gespeichert hat; in der Ausgabe des
+Agenten taucht er nie auf. Jeder Aufruf kostet eine Anfrage aus dem Kontingent,
+das auch die Zeiterfassung braucht. Deshalb trägt die Liste keine Positionen;
+die kommen mit der einzelnen Offerte. Um sie mit dem Gebuchten abzugleichen,
+liefert `prosonata entries --json` die Zeiteinträge aller Personen im Projekt,
+mit Person, Kategorie und Stunden. Ein Eintrag nennt keine Position; der Agent
+vergleicht deshalb über Kategorie und Text und sagt, wo er urteilen musste.
 
 Was das Werkzeug nicht sehen kann, gehört in die Anweisungen des Agenten. Ein
 Block für die `AGENTS.md`:

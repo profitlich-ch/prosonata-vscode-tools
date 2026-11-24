@@ -5,14 +5,13 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/quotations?perPage=10
+  url: {{baseUrl}}/quotations
   body: none
   auth: none
 }
 
 params:query {
-  perPage: 10
-  ~addressID: 
+  ~addressID:
   ~name1: 
   ~projectID: 
   ~projectNo: 
@@ -23,8 +22,10 @@ params:query {
   ~quotationDate: 
   ~createdByUserID: 
   ~currency: 
-  ~approved: 
-  ~orderBy: 
+  ~approved:
+  ~isDraft:
+  ~isQuotationTemplate:
+  ~orderBy:
 }
 
 docs {

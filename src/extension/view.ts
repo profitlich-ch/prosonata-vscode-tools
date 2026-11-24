@@ -221,6 +221,14 @@ export function reload(): void {
 
   draw()
   panel.refresh()
+  for (const listener of reloadListeners) listener()
+}
+
+const reloadListeners: (() => void)[] = []
+
+/** For a view beside the panel that follows what `reload` learns, such as the quotations. */
+export function onReload(listener: () => void): void {
+  reloadListeners.push(listener)
 }
 
 /**

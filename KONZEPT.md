@@ -1892,7 +1892,7 @@ liegen in [bruno/](bruno/).
 - Auth: Header `X-API-Key`, optional `X-APP-ID` bei App-Integration (volle Rechte).
   Beides ginge auch als Query-Parameter – **nicht** verwenden, Keys gehören nicht in URLs
   und damit in Logs.
-- Genutzte Ressourcen: `projects`, `projecttimes`, `projecttimecategories`
+- Genutzte Ressourcen: `projects`, `projecttimes`, `projecttimecategories`, lesend `quotations`
 - **Keine Timer-Ressource** in der öffentlichen API
 - Jede Antwort ist umschlagen in `{ "meta": {…}, "data": […] }`. Nutzdaten stehen unter
   `data`, nie auf oberster Ebene.
@@ -2018,6 +2018,60 @@ liegen in [bruno/](bruno/).
   `linkedCustomerID`. Die Kundenbindung ist im eigenen Konto ungenutzt; für das Dropdown
   genügt `active=1`. Die Auswertung von `linkedCustomerID` bleibt für fremde Konten
   trotzdem nötig.
+
+### `quotations`
+
+Die Offerten, für `prosonata quotations` und `prosonata quotation <id>`. Gedacht für den Agenten,
+der wissen muss, was dem Kunden offeriert wurde, ohne den Schlüssel selbst in die Hand zu
+bekommen.
+
+- **Nur lesend.** Die Ressource kennt GET, POST und PUT; die API legt nur Entwürfe an und ändert
+  nur Entwürfe, finalisiert wird in ProSonata. Das Werkzeug schreibt keine Offerte: Ein `PUT`
+  mit `positions` ersetzt die Positionen – ein leeres Array löscht alle, eine Position ohne
+  `detailID` kommt neu dazu. Ein Agent, der eine Offerte halb zurückschreibt, beschädigt sie.
+- Zugriff ab Benutzergruppe **Teamleiter**. **Gemessen** am 24. November 2026 mit dem
+  persönlichen Key eines Administrators: 200, 21 Offerten.
+- **Gemessen: `perPage` gibt es hier nicht.** `perPage=1` lieferte `perPage: 100` und alle 21
+  Offerten; die Dokumentation der Ressource nennt nur Filter. Anders als in den Grundlagen
+  oben bleibt es bei 100 pro Seite.
+- **Gemessen: Die Liste trägt keine `positions`.** Die kommen nur mit `GET /quotations/{id}`.
+  `quotations` holt deshalb nie die Einzelabrufe zur Liste nach – bei 50 Aufrufen pro
+  Viertelstunde, die auch die Zeiterfassung braucht (*Zugriffsbegrenzung*).
+- Gefiltert wird nach **`projectID`**, nicht `projectNo`: Die ID steht in jeder Repo-Konfiguration,
+  die Nummer erst, seit sie mitgespeichert wird (Abschnitt 6), und ob `projectNo` exakt oder als
+  Teilstring vergleicht, ist nicht gemessen. Vorlagen schliesst `isQuotationTemplate=0` aus.
+- **Gemessen an Offerte 27** (24. November 2026): Der Einzelabruf liefert ein Objekt, keine
+  Liste. Beträge kommen als Strings (`"20412.00"`), `currency` und die Schalter als Zahlen.
+  - `netValue` einer Position ist der **Preis pro Einheit**; die Zeile ergibt sich aus
+    `quantity × netValue`, abzüglich `discountPercent`.
+  - **Optionale Positionen** (`isOptional: 1`) stehen in der Offerte, zählen aber nicht zum
+    Nettobetrag: 20 412.00 = 24 300 − 2 160 (die optionale Position) − 1 728 (Rabatt).
+  - Das PDF hat **drei Ebenen**: unnummerierte Abschnitte («Anpassungen am bestehenden LBM»)
+    mit Zwischensumme, darunter nummerierte Zwischentitel (`1`) und darunter die Positionen
+    (`1.1`). **Die API liefert nur die beiden unteren.** Alle 18 Positionen von Offerte 27
+    sind Zwischentitel oder Positionen; Abschnitte und Zwischensummen fehlen in Positionen wie
+    Kopf. `headline`, `insertSubTotal` und `subTotalSinceHeadline` gibt es nur beim Schreiben.
+  - Ein **Zwischentitel** hat kein eigenes Feld. Er ist eine Position mit `quantity` und
+    `netValue` 0, sein Titel steht in `detail`.
+  - Ein Rabatt kann eine gewöhnliche Position mit negativem Preis sein (`1 % × -1728.00`).
+- Über die API gesetzte Summen prüft ProSonata laut Dokumentation nicht; neu berechnet wird
+  beim Öffnen in der Anwendung. Die Ausgabe vergleicht deshalb die Summe der Positionen mit
+  `netValue` und sagt es, wenn sie abweicht.
+- **Wer die Ansicht «Offerten» sieht.** Die Benutzergruppen von ProSonata sind vordefiniert
+  (Zeiterfasser 1, Zeiterfasser 2, Teamleiter, Verwaltung, Administrator), und jede Antwort
+  nennt die des Schlüssels in `meta.usergroupName`. Die Extension merkt sich den Namen aus der
+  letzten Antwort, ohne eigenen Aufruf, und bietet die Ansicht ab Teamleiter an. Ein Name, den
+  sie nicht kennt, zeigt sie; eine Ablehnung (403) blendet sie bis zum Schliessen des Fensters
+  aus. Das ist Bequemlichkeit, kein Schutz: Die Grenze zieht der Server.
+- **Zeiteinträge aller Personen** für den Abgleich mit einer Offerte (`prosonata entries`):
+  `GET /projecttimes` **ohne** `userID`, nur lesend und in einem eigenen Typ (`ProjectTime`).
+  Alles, was zu einem Schreiben führt, bleibt bei `userID=myself` (Abschnitt 3). Wen der
+  Schlüssel sieht, entscheidet ProSonata; bis «Zeiterfasser 1» nur sich selbst, und die CLI sagt
+  das dazu. Seitenweise zu 1000, höchstens zehn Seiten. Ein Eintrag nennt keine Offertposition;
+  verglichen wird über Kategorie und Text.
+- `currency` ist ein Code: 0 EUR, 1 CHF, 2 USD, 3 GBP, 4 CAD. `detail` einer Position darf
+  HTML enthalten; die Textausgabe macht aus Absätzen und Listenpunkten Zeilen, `--json` gibt
+  es unverändert weiter.
 
 ### Zugriffsbegrenzung
 

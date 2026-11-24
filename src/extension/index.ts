@@ -4,6 +4,7 @@ import { paths, rememberLanguage } from '../core/config.js'
 import { setLanguage } from '../core/l10n.js'
 import { LOG_SCHEME, logDocuments, showLog } from './log-view.js'
 import { Panel } from './panel.js'
+import { QuotationsView, showQuotation } from './quotations-view.js'
 import { adjustTime, discardRunning } from './adjust-ui.js'
 import { browseEntries } from './browse.js'
 import {
@@ -29,6 +30,7 @@ import {
   currentSession,
   draw,
   mount,
+  onReload,
   reload,
   withContext,
   withRepo,
@@ -67,6 +69,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
   mount(context.extensionUri, statusBar, panel)
 
+  const quotations = new QuotationsView(currentSession, currentContext)
+  const quotationsView = vscode.window.createTreeView('prosonata.quotations', { treeDataProvider: quotations })
+  context.subscriptions.push(quotationsView)
+  quotations.attach(quotationsView)
+  onReload(() => quotations.notice())
+
   context.subscriptions.push(
     vscode.workspace.registerTextDocumentContentProvider(LOG_SCHEME, logDocuments),
   )
@@ -94,6 +102,11 @@ export function activate(context: vscode.ExtensionContext): void {
   register(context, 'prosonata.browse', withContext(browseEntries))
   register(context, 'prosonata.adjust', withContext(adjustTime))
   register(context, 'prosonata.discard', withContext((s, c) => discardRunning(s, c, true)))
+  register(context, 'prosonata.refreshQuotations', () => quotations.refresh())
+  register(context, 'prosonata.showQuotation', (quotationId?: number) => {
+    const session = currentSession()
+    if (session && typeof quotationId === 'number') void showQuotation(session, quotationId)
+  })
 
   /*
    * The hook records absolute paths, which break when Node's version changes,

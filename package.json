@@ -67,6 +67,13 @@
           "id": "prosonata.panel",
           "name": "%view.panel.name%",
           "icon": "media/icon-view.svg"
+        },
+        {
+          "id": "prosonata.quotations",
+          "name": "%view.quotations.name%",
+          "icon": "media/icon-view.svg",
+          "when": "prosonata.mayReadQuotations",
+          "visibility": "collapsed"
         }
       ]
     },
@@ -191,10 +198,36 @@
         "title": "%command.browse.title%",
         "icon": "$(list-flat)",
         "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.refreshQuotations",
+        "title": "%command.refreshQuotations.title%",
+        "icon": "$(refresh)",
+        "category": "ProSonata"
+      },
+      {
+        "command": "prosonata.showQuotation",
+        "title": "%command.showQuotation.title%",
+        "category": "ProSonata"
       }
     ],
     "menus": {
+      "commandPalette": [
+        {
+          "command": "prosonata.showQuotation",
+          "when": "false"
+        },
+        {
+          "command": "prosonata.refreshQuotations",
+          "when": "prosonata.mayReadQuotations"
+        }
+      ],
       "view/title": [
+        {
+          "command": "prosonata.refreshQuotations",
+          "when": "view == prosonata.quotations",
+          "group": "navigation@1"
+        },
         {
           "command": "prosonata.browse",
           "when": "view == prosonata.panel && prosonata.hasProject",

@@ -111,3 +111,107 @@ describe('an empty answer', () => {
     await expect(api.listProjects()).rejects.toThrow(/500/)
   })
 })
+
+describe('quotations', () => {
+  function answering(data: unknown, status = 200, seen: string[] = []): HttpApi {
+    return new HttpApi({
+      baseUrl: 'https://x/api/v1',
+      apiKey: 'k',
+      fetch: async (url) => {
+        seen.push(String(url))
+        return new Response(JSON.stringify({ meta: { status }, data }), { status })
+      },
+    })
+  }
+
+  it('asks for one project without templates, newest first, and without perPage', async () => {
+    const seen: string[] = []
+
+    await answering([], 200, seen).listQuotations(166)
+
+    // Measured: the resource ignores perPage, so sending it would only suggest a limit.
+    expect(seen).toEqual(['https://x/api/v1/quotations?projectID=166&isQuotationTemplate=0&orderBy=quotationDate+DESC'])
+  })
+
+  it('reads flags and amounts whatever type they come in, and keeps positions apart from the list', async () => {
+    const [row] = await answering([
+      { quotationID: '412', quotationName: 'Relaunch', netValue: '4250.00', currency: '1', isDraft: '1', approved: 0 },
+    ]).listQuotations(166)
+
+    expect(row).toMatchObject({ quotationID: 412, netValue: 4250, currency: 1, isDraft: true, approved: false, positions: null })
+  })
+
+  it('reads the positions of a single one', async () => {
+    const found = await answering({
+      quotationID: 412,
+      positions: [{ detailID: 7, position: '1', isActive: '0', detail: '<p>x</p>', quantity: '8', netValue: '1200' }],
+    }).getQuotation(412)
+
+    expect(found?.positions).toEqual([
+      { detailID: 7, position: '1', isActive: false, isOptional: false, categoryName: '', detail: '<p>x</p>', quantity: 8, unit: '', netValue: 1200, discountPercent: 0 },
+    ])
+  })
+
+  it('answers null for a quotation ProSonata does not have', async () => {
+    await expect(answering([], 404).getQuotation(9)).resolves.toBeNull()
+  })
+})
+
+describe('everybody’s time on a project', () => {
+  function paging(pages: unknown[][], seen: string[]): HttpApi {
+    return new HttpApi({
+      baseUrl: 'https://x/api/v1',
+      apiKey: 'k',
+      fetch: async (url) => {
+        seen.push(String(url))
+        const page = Number(new URL(String(url)).searchParams.get('page'))
+        return new Response(JSON.stringify({ meta: { usergroupName: 'Teamleiter' }, data: pages[page - 1] ?? [] }))
+      },
+    })
+  }
+
+  it('asks without userID — unlike every call that leads to a write', async () => {
+    const seen: string[] = []
+
+    await paging([[]], seen).listProjectTimes(175)
+
+    expect(seen).toEqual(['https://x/api/v1/projecttimes?projectID=175&perPage=1000&page=1'])
+  })
+
+  it('follows a full page with the next, and keeps who booked what', async () => {
+    const seen: string[] = []
+    const full = Array.from({ length: 1000 }, (_, i) => ({ timeID: i + 1, date: '2026-10-01', username: 'a', workingTime: '1.00' }))
+    const api = paging([full, [{ timeID: 5000, date: '2026-11-01', username: 'b', categoryName: 'Beratung', workingTime: '0.50' }]], seen)
+
+    const times = await api.listProjectTimes(175)
+
+    expect(seen).toHaveLength(2)
+    expect(times).toHaveLength(1001)
+    expect(times[0]).toMatchObject({ timeID: 5000, username: 'b', categoryName: 'Beratung', hours: 0.5 })
+  })
+
+  it('stops after ten pages, so a server ignoring page cannot drain the quota', async () => {
+    const seen: string[] = []
+    const full = Array.from({ length: 1000 }, (_, i) => ({ timeID: i + 1, date: '2026-10-01' }))
+    const api = new HttpApi({
+      baseUrl: 'https://x/api/v1',
+      apiKey: 'k',
+      fetch: async (url) => {
+        seen.push(String(url))
+        return new Response(JSON.stringify({ meta: {}, data: full }))
+      },
+    })
+
+    await api.listProjectTimes(175)
+
+    expect(seen).toHaveLength(10)
+  })
+
+  it('learns the user group from the answer', async () => {
+    const api = paging([[]], [])
+
+    await api.listProjectTimes(175)
+
+    expect(api.userGroup()).toBe('Teamleiter')
+  })
+})

@@ -44,7 +44,15 @@ export async function showLog(session: Session, repo: GitRepo): Promise<void> {
   if (!picked) return
 
   const grid = readRepoConfig(repo.root).grid ?? session.config.grid
-  const uri = logDocuments.set(picked.branch ?? allBranches,renderReport(segments, { branch: picked.branch, grid }))
+  await showMarkdown(picked.branch ?? allBranches, renderReport(segments, { branch: picked.branch, grid }))
+}
+
+/**
+ * Markdown in VS Code's preview, under a title that reuses its tab. The log
+ * and a quotation both go this way: read only, searchable, printable.
+ */
+export async function showMarkdown(title: string, text: string): Promise<void> {
+  const uri = logDocuments.set(title, text)
   try {
     await vscode.commands.executeCommand('markdown.showPreview', uri)
   } catch {

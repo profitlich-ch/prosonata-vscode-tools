@@ -1,6 +1,6 @@
 {
   "description": "Verbindet VS Code mit ProSonata. Zeiterfassung, gebunden an Commits und Branches.",
-  "view.panel.name": "ProSonata Zeiterfassung",
+  "view.panel.name": "Zeiterfassung",
   "command.setup.title": "Konto einrichten",
   "command.start.title": "Timer starten",
   "command.pause.title": "Timer pausieren",
@@ -26,5 +26,8 @@
   "viewsWelcome.noAccount": "Noch kein Konto eingerichtet.\n\nBasis-URL und persönlicher API-Key gehen nach ~/.prosonata/config.json — auch der Hook muss sie lesen können, VS Codes Secret Storage kommt deshalb nicht in Frage.\n\n[Konto einrichten](command:prosonata.setup)",
   "viewsWelcome.noProject": "Dieses Repository hat noch kein Projekt.\n\nMit der Wahl wird auch der post-commit-Hook installiert.\n\n[Projekt wählen](command:prosonata.chooseProject)",
   "viewsWelcome.noFolder": "Öffne einen Ordner, um dafür Zeit zu erfassen.",
-  "command.takeEntry.title": "Offenen Eintrag eines anderen Branches übernehmen"
+  "command.takeEntry.title": "Offenen Eintrag eines anderen Branches übernehmen",
+  "view.quotations.name": "Offerten",
+  "command.refreshQuotations.title": "Offerten neu laden",
+  "command.showQuotation.title": "Offerte anzeigen"
 }

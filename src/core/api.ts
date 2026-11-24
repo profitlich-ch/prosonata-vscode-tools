@@ -91,6 +91,72 @@ export interface EntryDraft {
   apiComments?: string
 }
 
+/**
+ * A quotation, read only (KONZEPT.md §9, *`quotations`*). The field names are
+ * ProSonata's, like those of `Project`, so a reader of the API docs finds them.
+ */
+export interface Quotation {
+  quotationID: number
+  quotationName: string
+  quotationHeadline: string
+  /** `YYYY-MM-DD` as ProSonata sends it. */
+  quotationDate: string
+  netValue: number
+  grossValue: number
+  /** ProSonata's code: 0 EUR, 1 CHF, 2 USD, 3 GBP, 4 CAD. */
+  currency: number
+  isDraft: boolean
+  isSent: boolean
+  sentDate: string | null
+  /** Approved by the customer. */
+  approved: boolean
+  projectID: number
+  projectNo: string
+  projectName: string
+  customerName: string
+  quotationComments: string
+  /** Only the single call carries them — measured: the list leaves them out. Null then. */
+  positions: QuotationPosition[] | null
+}
+
+/**
+ * Measured on quotation 27: a heading has no field of its own — it is a
+ * position with quantity and price 0, its title in `detail`.
+ */
+export interface QuotationPosition {
+  detailID: number
+  position: string
+  isActive: boolean
+  /** Shown, but not in the total — measured: the net value leaves it out. */
+  isOptional: boolean
+  categoryName: string
+  /** May contain HTML, as written in ProSonata's editor. */
+  detail: string
+  quantity: number
+  unit: string
+  /** Per unit, not the line total — measured. */
+  netValue: number
+  discountPercent: number
+}
+
+/**
+ * A time entry of anybody on a project, read only — for comparing what was
+ * offered with what was booked. Not a `RemoteEntry`: those are the user's own,
+ * and everything that writes works on them alone (KONZEPT.md §3).
+ */
+export interface ProjectTime {
+  timeID: number
+  date: string
+  /** Who booked it; the list carries it, a write's answer does not (KONZEPT.md §9). */
+  username: string
+  category: number
+  categoryName: string
+  hours: number
+  detail: string
+  isInvoiced: boolean
+  notInvoiceable: boolean
+}
+
 /** How much of the rate limit is left, from every response (KONZEPT.md §9). */
 export interface RateLimit {
   remaining: number
@@ -128,8 +194,19 @@ export interface Api {
   createEntry(draft: EntryDraft): Promise<RemoteEntry>
   updateEntry(timeId: number, patch: Partial<EntryDraft>): Promise<RemoteEntry>
   deleteEntry(timeId: number): Promise<void>
+  /** The quotations of a project, newest first, templates left out. One call. */
+  listQuotations(projectId: number): Promise<Quotation[]>
+  /** One quotation with its positions, or null when ProSonata has none by this id. */
+  getQuotation(quotationId: number): Promise<Quotation | null>
+  /**
+   * Every entry on a project, of everybody the key may see, newest first.
+   * ProSonata decides who that is: up to «Zeiterfasser 1» only one's own.
+   */
+  listProjectTimes(projectId: number): Promise<ProjectTime[]>
   /** Of the last response, if there was one. */
   rateLimit(): RateLimit | null
+  /** The key's user group, from the last response that named it (KONZEPT.md §9). */
+  userGroup(): string | null
 }
 
 export class ApiError extends Error {
@@ -169,6 +246,7 @@ export interface HttpApiOptions {
 export class HttpApi implements Api {
   private readonly doFetch: typeof globalThis.fetch
   private limit: RateLimit | null = null
+  private group: string | null = null
 
   constructor(private readonly options: HttpApiOptions) {
     this.doFetch = options.fetch ?? globalThis.fetch
@@ -176,6 +254,10 @@ export class HttpApi implements Api {
 
   rateLimit(): RateLimit | null {
     return this.limit
+  }
+
+  userGroup(): string | null {
+    return this.group
   }
 
   async listProjects(): Promise<Project[]> {
@@ -263,6 +345,49 @@ export class HttpApi implements Api {
     }
   }
 
+  /*
+   * By `projectID`, not `projectNo`: the id is what the repository always
+   * stores, the number only once it was saved. `perPage` is left out — measured,
+   * the resource ignores it and sends 100 a page; a project with more is not
+   * expected.
+   */
+  async listQuotations(projectId: number): Promise<Quotation[]> {
+    const rows = await this.request<Record<string, unknown>[]>(
+      'GET',
+      `/quotations?projectID=${projectId}&isQuotationTemplate=0&orderBy=quotationDate+DESC`,
+    )
+    return (rows ?? []).map(toQuotation)
+  }
+
+  async getQuotation(quotationId: number): Promise<Quotation | null> {
+    try {
+      return toQuotation(await this.request<Record<string, unknown>>('GET', `/quotations/${quotationId}`))
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return null
+      throw error
+    }
+  }
+
+  /*
+   * Without `userID`: everybody's, as far as the key may see. Paged, because a
+   * long project can hold more than the 1000 a page allows; a page that comes
+   * back full is followed by the next. At most ten, so a server that ignored
+   * `page` could not spend the quota of the time tracking (KONZEPT.md §9).
+   */
+  async listProjectTimes(projectId: number): Promise<ProjectTime[]> {
+    const PER_PAGE = 1000
+    const all: ProjectTime[] = []
+    for (let page = 1; page <= 10; page++) {
+      const rows = await this.request<Record<string, unknown>[]>(
+        'GET',
+        `/projecttimes?projectID=${projectId}&perPage=${PER_PAGE}&page=${page}`,
+      )
+      all.push(...(rows ?? []).map(toProjectTime))
+      if ((rows ?? []).length < PER_PAGE) break
+    }
+    return all.sort((a, b) => b.date.localeCompare(a.date) || b.timeID - a.timeID)
+  }
+
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     // Without this the URL would be just the path, and fetch would fail with
     // "Failed to parse URL" — which says nothing about the actual problem.
@@ -326,6 +451,8 @@ export class HttpApi implements Api {
         resetSeconds: Number(meta['apiLimitReset'] ?? 0),
       }
     }
+    // A personal key's answers name its group; an app integration's do not (KONZEPT.md §9).
+    if (typeof meta['usergroupName'] === 'string' && meta['usergroupName'] !== '') this.group = meta['usergroupName']
 
     if (!response.ok) {
       const message = typeof meta['message'] === 'string' ? meta['message'] : `HTTP ${response.status}`
@@ -362,6 +489,64 @@ function toCategory(row: Record<string, unknown>): Category {
     group: row['group'] === null || row['group'] === undefined || row['group'] === '' ? null : Number(row['group']),
     groupName: row['groupName'] === null || row['groupName'] === undefined ? null : String(row['groupName']),
   }
+}
+
+// Amounts come as strings ("20412.00"), `currency` and the flags as numbers —
+// measured; `Number()` takes either.
+function toQuotation(row: Record<string, unknown>): Quotation {
+  const positions = row['positions']
+  return {
+    quotationID: Number(row['quotationID']),
+    quotationName: text(row['quotationName']),
+    quotationHeadline: text(row['quotationHeadline']),
+    quotationDate: text(row['quotationDate']),
+    netValue: Number(row['netValue'] ?? 0),
+    grossValue: Number(row['grossValue'] ?? 0),
+    currency: Number(row['currency'] ?? 0),
+    isDraft: Number(row['isDraft'] ?? 0) === 1,
+    isSent: Number(row['isSent'] ?? 0) === 1,
+    sentDate: typeof row['sentDate'] === 'string' && row['sentDate'] !== '' ? row['sentDate'] : null,
+    approved: Number(row['approved'] ?? 0) === 1,
+    projectID: Number(row['projectID'] ?? 0),
+    projectNo: text(row['projectNo']),
+    projectName: text(row['projectName']),
+    customerName: text(row['customerName']),
+    quotationComments: text(row['quotationComments']),
+    positions: Array.isArray(positions) ? positions.map((item) => toPosition(item as Record<string, unknown>)) : null,
+  }
+}
+
+function toPosition(row: Record<string, unknown>): QuotationPosition {
+  return {
+    detailID: Number(row['detailID'] ?? 0),
+    position: text(row['position']),
+    isActive: Number(row['isActive'] ?? 1) === 1,
+    isOptional: Number(row['isOptional'] ?? 0) === 1,
+    categoryName: text(row['categoryName']),
+    detail: text(row['detail']),
+    quantity: Number(row['quantity'] ?? 0),
+    unit: text(row['unit']),
+    netValue: Number(row['netValue'] ?? 0),
+    discountPercent: Number(row['discountPercent'] ?? 0),
+  }
+}
+
+function toProjectTime(row: Record<string, unknown>): ProjectTime {
+  return {
+    timeID: Number(row['timeID']),
+    date: text(row['date']),
+    username: text(row['username']),
+    category: Number(row['category'] ?? 0),
+    categoryName: text(row['categoryName']),
+    hours: parseWorkingTime(row['workingTime']),
+    detail: text(row['detail']),
+    isInvoiced: Number(row['isInvoiced'] ?? 0) === 1,
+    notInvoiceable: Number(row['notInvoiceable'] ?? 0) === 1,
+  }
+}
+
+function text(value: unknown): string {
+  return value === null || value === undefined ? '' : String(value)
 }
 
 function toEntry(row: Record<string, unknown>): RemoteEntry {

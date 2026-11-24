@@ -5,13 +5,9 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/quotations?perPage=10
+  url: {{baseUrl}}/quotations
   body: none
   auth: none
-}
-
-params:query {
-  perPage: 10
 }
 
 assert {
@@ -22,7 +18,8 @@ docs {
   `GET /api/v1/quotations`
 
   Antwortumschlag `{ meta, data }`; in `meta` stehen `perPage`, `page`, `totalCount`,
-  `apiLimitRemaining` und `apiLimitReset`.
+  `apiLimitRemaining` und `apiLimitReset`. Gemessen: `perPage` wirkt hier nicht, es bleibt bei
+  100 pro Seite, und die Liste trägt keine `positions` (KONZEPT.md §9, *`quotations`*).
 
   Die ID für den Einzelabruf hier entnehmen und als `quotationId` in die `.env` eintragen.
 }
