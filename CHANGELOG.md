@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-11-24
+
 ### Changed
 
 - **A follow-up commit on the main branch joins the entry before.** A second
