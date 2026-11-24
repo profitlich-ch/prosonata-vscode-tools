@@ -241,7 +241,11 @@ export interface HttpApiOptions {
   apiKey: string
   appId?: string
   fetch?: typeof globalThis.fetch
+  /** How long a call may wait for its answer; 30 seconds when not given. */
+  timeoutMs?: number
 }
+
+const TIMEOUT_MS = 30_000
 
 export class HttpApi implements Api {
   private readonly doFetch: typeof globalThis.fetch
@@ -407,18 +411,35 @@ export class HttpApi implements Api {
     // Without the query: it carries search terms, and the journal needs the call, not them.
     const call = `${method} ${path.split('?')[0]}`
 
+    /*
+     * A call that never answers holds up whoever waits for it — the table in
+     * the editor refuses every further click until then. Every call gets a
+     * limit except the create: aborted, it may still have been made over
+     * there, and the next round would create it a second time (KONZEPT.md §7).
+     * A PUT writes the absolute sum and a DELETE accepts "already gone", so
+     * repeating either costs nothing.
+     */
+    const timeoutMs = this.options.timeoutMs ?? TIMEOUT_MS
+    const signal = method === 'POST' ? undefined : AbortSignal.timeout(timeoutMs)
+    const failed = (cause: unknown): ApiError =>
+      (cause as Error).name === 'TimeoutError'
+        ? new ApiError(0, t('ProSonata did not answer within {0} seconds', Math.round(timeoutMs / 1000)), undefined, call)
+        : new ApiError(0, t('no connection to ProSonata: {0}', (cause as Error).message))
+
     let response: Response
+    let text: string
     try {
       response = await this.doFetch(`${this.options.baseUrl}${path}`, {
         method,
         headers,
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(signal ? { signal } : {}),
       })
+      // Inside the same guard: the limit covers the body, which can stall as well.
+      text = await response.text()
     } catch (cause) {
-      throw new ApiError(0, t('no connection to ProSonata: {0}', (cause as Error).message))
+      throw failed(cause)
     }
-
-    const text = await response.text()
 
     /*
      * A search that finds nothing answers `204 No Content` with an empty body —

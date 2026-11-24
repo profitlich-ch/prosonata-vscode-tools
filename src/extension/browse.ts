@@ -135,9 +135,18 @@ class EntryTable {
   #budgetAsked = false
 
   async #receive(message: ToHost): Promise<void> {
+    // A click the page could still make — it was built afresh after the tab was
+    // hidden — is answered, not dropped: a button that does nothing explains nothing.
+    if (this.#busy && message.kind !== 'ready' && message.kind !== 'preview') {
+      this.#post({ kind: 'failed', message: t('ProSonata: still waiting for the previous answer — try again in a moment.') })
+      return
+    }
+
     switch (message.kind) {
       case 'ready':
         if (this.#shown) this.#post(this.#shown)
+        // VS Code throws the page away while the tab is hidden; the new one starts idle.
+        this.#post({ kind: 'busy', busy: this.#busy })
         return
       case 'refresh':
         return this.load()

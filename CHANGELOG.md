@@ -7,6 +7,17 @@ are in German.
 
 ## [Unreleased]
 
+### Fixed
+
+- **A button in the time-entry table no longer does nothing without a word.**
+  A call to ProSonata that never answered kept the table busy for good; after
+  the tab had been hidden and shown again, its buttons looked ready but every
+  click was dropped — merging two entries simply did not happen. Calls now give
+  up after 30 seconds with a message, a click while the table is still waiting
+  says so, and a table shown again knows it is waiting. Creating an entry keeps
+  waiting as long as it takes: aborted, it may still have been made in
+  ProSonata, and the next try would create it a second time.
+
 ## [2.4.0] — 2026-11-24
 
 ### Changed

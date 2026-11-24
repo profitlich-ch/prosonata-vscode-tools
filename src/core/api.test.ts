@@ -112,6 +112,48 @@ describe('an empty answer', () => {
   })
 })
 
+/**
+ * A call that never answers must end as an error, or whoever waits for it —
+ * the table in the editor — refuses every further click without a word. The
+ * create is the exception: aborted, it may still have been made over there.
+ */
+describe('a call that never answers', () => {
+  /** A fetch that answers only to its signal, the way a stalled connection does. */
+  const stalled: typeof globalThis.fetch = (_url, init) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(init.signal?.reason))
+    })
+
+  it('ends as a transient error once the limit has passed', async () => {
+    const api = new HttpApi({ baseUrl: 'https://x/api/v1', apiKey: 'k', fetch: stalled, timeoutMs: 20 })
+
+    const error = await api.listEntries(166).catch((caught: unknown) => caught)
+    expect(error).toBeInstanceOf(ApiError)
+    expect((error as ApiError).transient).toBe(true)
+    expect((error as ApiError).message).toMatch(/did not answer/)
+  })
+
+  it('gives every call a limit except the create', async () => {
+    const methods = new Map<string, boolean>()
+    const api = new HttpApi({
+      baseUrl: 'https://x/api/v1',
+      apiKey: 'k',
+      fetch: async (_url, init) => {
+        const method = init?.method ?? 'GET'
+        methods.set(method, init?.signal !== undefined)
+        return new Response(JSON.stringify({ data: method === 'GET' ? [] : { timeID: 1 } }))
+      },
+    })
+
+    await api.listEntries(166)
+    await api.updateEntry(1, { detail: 'x' })
+    await api.deleteEntry(1)
+    await api.createEntry({ projectID: 166, categoryID: 72, date: '2026-11-24', detail: 'x', workingTime: '00:01:00' } as never)
+
+    expect(Object.fromEntries(methods)).toEqual({ GET: true, PUT: true, DELETE: true, POST: false })
+  })
+})
+
 describe('quotations', () => {
   function answering(data: unknown, status = 200, seen: string[] = []): HttpApi {
     return new HttpApi({
