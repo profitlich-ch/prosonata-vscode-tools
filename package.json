@@ -2,7 +2,7 @@
   "name": "prosonata-vscode-tools",
   "displayName": "ProSonata Tools",
   "description": "%description%",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "publisher": "Profitlich",
   "repository": {
     "type": "git",

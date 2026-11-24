@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-11-24
+
 ### Added
 
 - **Read the quotations of a project.** `prosonata quotations` lists those of
