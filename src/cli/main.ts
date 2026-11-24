@@ -1260,7 +1260,12 @@ async function postCommit(cwd: string): Promise<number> {
     }
     if (outcome.booked > 0) {
       const booked = format(outcome.booked)
-      process.stderr.write(`prosonata: ${outcome.closed ? t('{0} booked, entry closed', booked) : t('{0} booked', booked)}\n`)
+      const line = outcome.joined
+        ? t('{0} booked onto the entry of the commit before — same text', booked)
+        : outcome.closed
+          ? t('{0} booked, entry closed', booked)
+          : t('{0} booked', booked)
+      process.stderr.write(`prosonata: ${line}\n`)
     }
     if (!fromTrailer) warnAboutMissingTrailer(session, context, outcome.closed, text)
     if (outcome.heldFor !== null) {

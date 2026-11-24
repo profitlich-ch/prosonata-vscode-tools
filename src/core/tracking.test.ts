@@ -174,6 +174,118 @@ describe('a commit on the main branch', () => {
   })
 })
 
+/*
+ * A second commit under the same text, a minute after the first: one invoice
+ * line, not two (KONZEPT.md §3, *Folgecommit*). The case it comes from: ddev
+ * changed, then the forgotten .gitignore — 1573 s and 70 s, both lines
+ * "Lokale Entwicklungsumgebung an den Server angeglichen".
+ */
+describe('a follow-up commit on the main branch', () => {
+  const TEXT = 'Lokale Entwicklungsumgebung an den Server angeglichen'
+  const commitAs = (state: State, when: number, text: string, sha: string) =>
+    commit(state, {
+      scope: main,
+      mode: 'commit',
+      text,
+      fromTrailer: true,
+      sha,
+      at: when,
+      newId,
+      projectId: 166,
+      categoryId: 70,
+      key: 'a3f9c1',
+    })
+
+  function firstCommit() {
+    const clock = fixedClock(NINE)
+    const state = startOn(emptyState(), clock, main)
+    clock.advance(1560)
+    const first = commitAs(state, at(9, 26), TEXT, 'aaa')
+    return { clock, state: first.state, first: first.closed! }
+  }
+
+  it('joins the entry of the commit before when the timer ran through', () => {
+    const { state, first } = firstCommit()
+
+    const result = commitAs(state, at(9, 27), TEXT, 'bbb')
+
+    expect(result.joined?.id).toBe(first.id)
+    expect(result.closed).toBeNull()
+    expect(result.booked).toBe(60)
+    const closed = result.state.entries.filter((entry) => entry.state === 'closed')
+    expect(closed.map((entry) => [entry.id, entry.seconds, entry.sha])).toEqual([[first.id, 1620, 'bbb']])
+    expect(closed[0]?.lastActivity).toBe(at(9, 27))
+
+    // The open entry stays behind empty, and the timer runs on into it.
+    const successor = openEntry(result.state, main)
+    expect(successor?.seconds).toBe(0)
+    expect(result.state.timers[0]?.entryId).toBe(successor?.id)
+    expect(result.state.timers[0]?.startedAt).toBe(at(9, 27))
+  })
+
+  it('makes the closing write due anew from the follow-up', () => {
+    const { state, first } = firstCommit()
+
+    const result = commitAs(state, at(9, 27), TEXT, 'bbb')
+
+    expect(result.state.pending).toEqual([{ entryId: first.id, since: at(9, 27), closing: true }])
+  })
+
+  it('joins a third one as well', () => {
+    const { state, first } = firstCommit()
+
+    const second = commitAs(state, at(9, 27), TEXT, 'bbb').state
+    const third = commitAs(second, at(9, 30), TEXT, 'ccc')
+
+    expect(third.joined?.id).toBe(first.id)
+    expect(third.state.entries.filter((entry) => entry.state === 'closed').map((entry) => entry.seconds)).toEqual([1800])
+  })
+
+  it('closes a line of its own under another text', () => {
+    const { state } = firstCommit()
+
+    const result = commitAs(state, at(9, 27), 'Formular: Pflichtfelder markiert', 'bbb')
+
+    expect(result.joined).toBeUndefined()
+    expect(result.state.entries.filter((entry) => entry.state === 'closed').map((entry) => entry.seconds)).toEqual([1560, 60])
+  })
+
+  it('closes a line of its own after a pause, so the span stays true', () => {
+    // Paused right at the commit: the open entry holds nothing but the segment
+    // after the pause, and only the gap tells the two apart.
+    const { clock, state: afterFirst } = firstCommit()
+    let state = pause(afterFirst, clock, main)
+    clock.advance(600)
+    state = startOn(state, clock, main)
+
+    const result = commitAs(state, at(9, 37), TEXT, 'bbb')
+
+    expect(result.joined).toBeUndefined()
+    expect(result.state.entries.filter((entry) => entry.state === 'closed')).toHaveLength(2)
+  })
+
+  it('closes a line of its own when the open entry holds other time, taken from elsewhere', () => {
+    const { state } = firstCommit()
+    const taken = structuredClone(state)
+    openEntry(taken, main)!.seconds = 900
+
+    const result = commitAs(taken, at(9, 27), TEXT, 'bbb')
+
+    expect(result.joined).toBeUndefined()
+    expect(result.state.entries.filter((entry) => entry.state === 'closed').map((entry) => entry.seconds)).toEqual([1560, 960])
+  })
+
+  it('closes a line of its own once the entry before has gone out', () => {
+    const { state } = firstCommit()
+    const sent: State = { ...state, pending: [] }
+
+    const result = commitAs(sent, at(9, 27), TEXT, 'bbb')
+
+    expect(result.joined).toBeUndefined()
+    expect(result.state.entries.filter((entry) => entry.state === 'closed')).toHaveLength(2)
+  })
+})
+
 describe('a commit without a running timer', () => {
   it('books nothing and says so', () => {
     const result = commitOn(emptyState(), scope, at(9, 30), 'fix: aus dem Terminal')

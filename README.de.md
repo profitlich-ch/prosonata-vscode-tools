@@ -358,7 +358,10 @@ Ein Merge mit `--no-ff` erzeugt einen Merge-Commit, für den Git keinen Hook
 aufruft, den dieses Werkzeug installiert; die offene Zeit auf `main` bleibt
 einfach offen. Ein Amend oder ein Reset eines Commits auf `main` kurz nach dem
 Committen braucht nichts: Bevor sein Eintrag rausgeht, zieht seine Zeit in den
-Eintrag des Commits um, der ihn ersetzt hat.
+Eintrag des Commits um, der ihn ersetzt hat. Ebenso wenig ein zweiter Commit unter
+demselben Text gleich nach dem ersten, etwa für die darin vergessene Datei: Solange
+der Timer durchlief und der erste Eintrag noch nicht rausgegangen ist, geht seine
+Zeit in diesen Eintrag statt in eine eigene Zeile.
 
 ## Zeiteinträge durchsehen
 

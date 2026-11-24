@@ -7,6 +7,16 @@ are in German.
 
 ## [Unreleased]
 
+### Changed
+
+- **A follow-up commit on the main branch joins the entry before.** A second
+  commit under the same text — the file forgotten in the first — used to close
+  an invoice line of its own beside it, with the same text and a minute on it.
+  Its time now goes into the earlier entry, as long as the timer ran through
+  between the two and that entry has not gone out yet; the hook says so. After
+  a pause, under another text, or once the entry is sent, it stays a line of its
+  own.
+
 ## [2.3.0] — 2026-11-24
 
 ### Added

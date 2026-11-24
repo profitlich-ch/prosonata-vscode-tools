@@ -141,10 +141,11 @@ export interface CommitOptions {
 export function commit(
   state: State,
   options: CommitOptions,
-): { state: State; booked: number; closed: TimeEntry | null; held?: TimeEntry; hadTimer: boolean } {
+): { state: State; booked: number; closed: TimeEntry | null; held?: TimeEntry; joined?: TimeEntry; hadTimer: boolean } {
   const next = structuredClone(state)
   const timer = findTimerIn(next, options.scope)
   const hadTimer = isRunning(timer)
+  const segmentFrom = isRunning(timer) ? timer.startedAt : null
 
   let booked = 0
   let entry = openEntry(next, options.scope)
@@ -194,6 +195,9 @@ export function commit(
   }
 
   if (options.mode === 'commit') {
+    const previous = followUpOf(next, entry, segmentFrom, booked, options)
+    if (previous) return { state: join(next, previous, entry, options), booked, closed: null, joined: previous, hadTimer }
+
     entry.text = options.text
     entry.sha = options.sha
     return { state: closeEntry(next, entry, options.newId), booked, closed: entry, hadTimer }
@@ -204,6 +208,69 @@ export function commit(
 
   queueWrite(next, entry.id, options.at, false)
   return { state: next, booked, closed: null, hadTimer }
+}
+
+/*
+ * A follow-up commit (KONZEPT.md §3, *Folgecommit*).
+ *
+ * In `commit` mode every commit closes an entry of its own. A second commit
+ * under the same text a minute later — the file forgotten in the first — then
+ * put a second invoice line beside the first, with the same text and seventy
+ * seconds on it. Nobody wants that line, and the text says so plainly.
+ *
+ * So the commit goes into the entry before it, but only where nothing is lost
+ * by that: the timer ran through from the earlier commit to this one, so the
+ * span of the working day stays true, and the earlier entry has not gone out,
+ * so no finished `timeID` is written again. Everything else — a pause between
+ * the two, a text that differs, an entry already sent — is a line of its own,
+ * as before.
+ */
+function followUpOf(
+  state: State,
+  entry: TimeEntry,
+  segmentFrom: number | null,
+  booked: number,
+  options: CommitOptions,
+): TimeEntry | undefined {
+  const text = options.text.trim()
+  if (segmentFrom === null || text === '') return undefined
+  // The open entry holds this one segment and nothing else.
+  if (entry.seconds !== booked || entry.foreignSeconds > 0 || entry.timeId !== null || entry.creating !== undefined) {
+    return undefined
+  }
+
+  const index = state.entries.findIndex((candidate) => candidate.id === entry.id)
+  const previous = state.entries
+    .slice(0, index)
+    .reverse()
+    .find((candidate) => candidate.state === 'closed' && sameScope(candidate.scope, entry.scope))
+  if (!previous || previous.text.trim() !== text) return undefined
+  if (previous.lastActivity !== segmentFrom) return undefined
+  if (!state.pending.some((write) => write.entryId === previous.id && write.closing)) return undefined
+  if (previous.foreignSeconds > 0 || previous.rejected || previous.awaitingDecision || previous.day !== undefined) {
+    return undefined
+  }
+  if (previous.projectId !== options.projectId || previous.categoryId !== options.categoryId) return undefined
+  return previous
+}
+
+/**
+ * Moves the segment just booked onto the entry before, which now ends at this
+ * commit. Its closing write is due anew from here, so a third follow-up within
+ * the delay joins as well — and a send under way, which carries the old sum,
+ * does not take the write off (`applySend`). The open entry stays behind empty,
+ * as a successor would be.
+ */
+function join(state: State, previous: TimeEntry, entry: TimeEntry, options: CommitOptions): State {
+  previous.seconds += entry.seconds
+  if (entry.lastActivity !== undefined) previous.lastActivity = entry.lastActivity
+  previous.sha = options.sha
+  entry.seconds = 0
+  delete entry.lastActivity
+
+  const write = state.pending.find((candidate) => candidate.entryId === previous.id)
+  if (write) write.since = options.at
+  return state
 }
 
 /*

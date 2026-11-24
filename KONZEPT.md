@@ -454,7 +454,7 @@ Platzhalter als Text; der Commit schliesst sie, die Kennung bleibt im Feld.
 | Fall | Wirkung |
 |---|---|
 | **Commit auf einem Branch** | Das laufende Segment wird geschnitten, seine Zeit fliesst in den Branch-Eintrag. Der bleibt **offen**. Ein Trailer ersetzt seinen Text. |
-| **Commit auf dem Hauptbranch** | Das Segment wird geschnitten, seine Zeit wird als eigener Zeiteintrag **abgeschlossen**. `detail` = Trailer, sonst Subject. |
+| **Commit auf dem Hauptbranch** | Das Segment wird geschnitten, seine Zeit wird als eigener Zeiteintrag **abgeschlossen**. `detail` = Trailer, sonst Subject. Ein Folgecommit unter demselben Text geht in den Eintrag davor (unten). |
 | **Commit ohne laufenden Timer** | Keine Zeit zu buchen. Hinweis mit Angebot, die Zeit seit dem letzten Commit nachzutragen. *(Angebot noch nicht gebaut; der Hook meldet nur, dass nichts gebucht wurde.)* |
 
 Ein laufender Timer wird durch keinen dieser Fälle angehalten; das nächste Segment gehört zum
@@ -462,6 +462,50 @@ nächsten Zeiteintrag.
 
 **Geschnitten wird am Commit-Zeitpunkt.** Beispiel: 9:00 Start, 10:00 Pause, 10:30 Start,
 11:15 Commit → 1,75 h fliessen in den Zeiteintrag, danach läuft das nächste Segment ab 11:15.
+
+### Folgecommit
+
+Auf dem Hauptbranch schliesst jeder Commit seinen eigenen Eintrag ab. Kommt eine Minute später ein
+zweiter Commit unter demselben Text, etwa für die im ersten vergessene Datei, stand daneben eine
+zweite Rechnungszeile mit demselben Text und siebzig Sekunden darauf. Gemessen am 24. November
+2026 in `siaa-triulzi.ch`: ddev-Umstellung und `.gitignore`, 1573 s und 70 s, beide mit dem Text
+«Lokale Entwicklungsumgebung an den Server angeglichen». Derselbe Text zweimal ist auch der
+Schaden, den *Offene `main`-Zeit beim Squash-Merge* abwendet.
+
+**Ein solcher Commit geht deshalb in den Eintrag davor**, statt einen eigenen abzuschliessen.
+Alle vier Bedingungen müssen gelten:
+
+- **Derselbe Text:** Trailer, sonst Subject, verglichen ohne Leerraum an den Rändern. Es zählt
+  der Rechnungstext und nicht die Herkunft: Zwei gleiche Zeilen will auch niemand, der ohne
+  Trailer committet.
+- **Lückenlos:** Das Segment beginnt dort, wo der Eintrag davor endet (`lastActivity`), und der
+  offene Eintrag hält nichts ausser diesem Segment. Dazwischen lag also keine Pause, kein Schlaf
+  und keine Korrektur. Nur so bleibt die Tagesspanne wahr: Beim Abrechnen nach Zeit ist sie der
+  Nachweis, und eine Mittagspause darin wäre eine falsche Angabe.
+- **Noch nicht gesendet:** Der Abschluss des Eintrags davor wartet noch auf den Versand. Ein
+  gesendeter Eintrag gehört dem Benutzer, und `close()` verspricht, ihn nie wieder zu schreiben.
+  Dafür bleibt das Zuschlagen von Hand (*Nacharbeit einem geschlossenen Eintrag zuschlagen*).
+- **Gleiches Projekt, gleiche Kategorie, kein fremder Anteil**, und der Eintrag davor ist weder
+  abgelehnt noch geparkt.
+
+Der Eintrag übernimmt die SHA des neuen Commits, denn eine Rückroll-Prüfung trifft meist den
+jüngsten. Wird dieser später per Amend ersetzt, greift *Zurückgerollte Commits* wie gewohnt; ein
+Amend unter demselben Text ist ohnehin wieder ein Folgecommit. **Die Wartezeit des Versands
+beginnt neu**, sodass auch ein dritter Nachtrag innerhalb der Frist noch dazukommt. Das Segment
+wird im Protokoll unter dem Eintrag davor geführt, aus dem sich die Tagesspanne ergibt. Die
+Abschlusszeile folgt ein zweites Mal, mit der neuen Summe. Der Hook meldet den Fall mit «auf
+den Eintrag des vorigen Commits gebucht — gleicher Text».
+
+**Ein Versand, der gerade läuft, nimmt den Schreibzugriff nicht weg.** Fällt der Folgecommit in
+die HTTP-Runde, in der der Abschluss mit der alten Summe hinausgeht, entfernte `applySend` bisher
+den wartenden Schreibzugriff, und die neue Summe ginge nie hinaus. Ein Schreibzugriff, dessen
+`since` sich seit Beginn des Versands verschoben hat, bleibt deshalb stehen (Abschnitt 7,
+*Der Compare-and-Swap schützt die Datei, nicht den API-Aufruf*).
+
+**Verworfen:** eine Regel für Claude, Nachträge vor dem Push per `--amend` in den ersten Commit
+zu nehmen. Sie hinge am Erinnern, und sie zieht die Grenze falsch: Für das Werkzeug zählt nicht
+der Push, sondern der Versand. Ein Amend nach Ablauf der Wartezeit ergibt ebenfalls zwei Zeilen,
+und eine davon trägt den Text eines Commits, den es nicht mehr gibt.
 
 ### Abschluss eines Branch-Eintrags
 

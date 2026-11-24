@@ -581,6 +581,31 @@ describe('the entry a segment is filed under', () => {
     expect(line?.from).toBeUndefined()
   })
 
+  /*
+   * A follow-up under the same text joins the entry before (KONZEPT.md §3,
+   * *Folgecommit*). Its segment has to be logged there too — the span of the
+   * working day is read from the log, and it would end at the first commit.
+   */
+  it('is the entry before for a follow-up under the same text', async () => {
+    const { session, segments, clock } = loggingSession()
+
+    await session.start(main)
+    clock.advance(1560)
+    const first = session.commit(main, { text: 'Kirby Update', fromTrailer: true, sha: 'aaa' })
+    clock.advance(70)
+    const second = session.commit(main, { text: 'Kirby Update', fromTrailer: true, sha: 'bbb' })
+
+    const closed = second.state.entries.filter((entry) => entry.state === 'closed')
+    expect(first.closed).toBe(true)
+    expect(second.joined).toBe(true)
+    expect(closed.map((entry) => entry.seconds)).toEqual([1630])
+    expect(segments.read().filter((segment) => segment.reason === 'commit').map((segment) => segment.entryId)).toEqual([
+      closed[0]?.id,
+      closed[0]?.id,
+    ])
+    expect(session.spanFor(closed[0]!)).toEqual({ start: '09:00', end: '09:27' })
+  })
+
   it('gets one when somebody closes an entry by hand', async () => {
     const { session, segments, clock } = loggingSession()
 

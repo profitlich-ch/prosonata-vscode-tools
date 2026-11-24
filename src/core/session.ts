@@ -588,6 +588,8 @@ export class Session {
     booked: number
     hadTimer: boolean
     closed: boolean
+    /** A follow-up under the same text: its time went into the entry of the commit before. */
+    joined: boolean
     branchSwitched: boolean
     /** The branch whose squash merge this was, when main time was held for it. */
     heldFor: string | null
@@ -597,8 +599,9 @@ export class Session {
     let booked = 0
     let hadTimer = false
     let closed = false
+    let joined = false
     let squashed: string | null = null
-    /** Where the time went — the entry that was closed, or the one still open. */
+    /** Where the time went — the entry that was closed or joined, or the one still open. */
     let bookedInto: string | undefined
 
     const switched = this.reconcileBranchSwitch(context)
@@ -624,19 +627,21 @@ export class Session {
       booked = outcome.booked
       hadTimer = outcome.hadTimer
       closed = outcome.closed !== null
+      joined = outcome.joined !== undefined
       held = outcome.held
-      bookedInto = outcome.closed?.id ?? outcome.held?.id ?? openEntry(outcome.state, context.scope)?.id
+      const finished = outcome.closed ?? outcome.joined
+      bookedInto = finished?.id ?? outcome.held?.id ?? openEntry(outcome.state, context.scope)?.id
 
-      if (outcome.closed) {
+      if (finished) {
         this.journal.append({
           kind: 'commit',
-          entryId: outcome.closed.id,
+          entryId: finished.id,
           key: context.key,
           projectId: context.projectId,
           categoryId: context.categoryId,
-          seconds: outcome.closed.seconds,
+          seconds: finished.seconds,
           date: this.clock.today(),
-          text: outcome.closed.text,
+          text: finished.text,
           sha: options.sha,
         })
       } else if (booked > 0) {
@@ -665,7 +670,8 @@ export class Session {
       this.journal.append({ kind: 'note', entryId: held.id, ...template('held at the squash merge of {0}', held.heldAtMerge.branch) })
     }
     // On the main branch every commit closes an entry, so the log gets its
-    // closing line here rather than only where somebody closes one by hand.
+    // closing line here rather than only where somebody closes one by hand. A
+    // follow-up writes it again for the same entry, with the total it now has.
     const finished = state.entries.find((entry) => entry.id === bookedInto && entry.state === 'closed')
     if (finished) this.recordEntryClosed(finished)
     return {
@@ -673,6 +679,7 @@ export class Session {
       booked,
       hadTimer,
       closed,
+      joined,
       branchSwitched: switched !== null,
       heldFor: held?.heldAtMerge?.branch ?? null,
       squashed,

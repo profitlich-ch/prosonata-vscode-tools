@@ -678,6 +678,21 @@ describe('folding a send onto the state as it stands now', () => {
     expect(merged.entries.find((candidate) => candidate.id === 'e2')?.seconds).toBe(600)
   })
 
+  it('keeps a write that became due anew while the send was in flight', () => {
+    const before = stateWith(entry({ seconds: 1560, state: 'closed' }))
+    const after = stateWith(entry({ seconds: 1560, state: 'closed', timeId: 2100, lastWritten: 1560 }))
+    // A follow-up commit joined the entry in the meantime; the send carried 1560.
+    const current: State = {
+      ...stateWith(entry({ seconds: 1620, state: 'closed' })),
+      pending: [{ entryId: 'e1', since: NINE + 60_000, closing: true }],
+    }
+
+    const merged = applySend(current, before, after, sent)
+
+    expect(merged.entries[0]?.timeId).toBe(2100)
+    expect(merged.pending).toEqual([{ entryId: 'e1', since: NINE + 60_000, closing: true }])
+  })
+
   it('applies the invoiced remainder as a difference, not as a value', () => {
     // 5000 s were billed, so the follow-up entry starts at the remainder 1000.
     const before = stateWith(entry({ seconds: 5000, lastWritten: 4000 }))

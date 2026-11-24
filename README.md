@@ -350,7 +350,10 @@ The order at the end of a package, after a squash merge:
 A merge with `--no-ff` creates a merge commit, for which git calls no hook this
 tool installs; the open time on `main` simply stays open. An amend or a reset of
 a commit on `main` shortly after committing needs nothing: before its entry
-goes out, its time moves to the entry of the commit that replaced it.
+goes out, its time moves to the entry of the commit that replaced it. Neither
+does a second commit under the same text, made right after the first — the file
+forgotten in it: as long as the timer ran through and the first entry has not
+gone out, its time goes into that entry instead of a line of its own.
 
 ## Browsing time entries
 

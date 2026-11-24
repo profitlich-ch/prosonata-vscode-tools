@@ -369,7 +369,12 @@ export function applySend(current: State, before: State, after: State, result: S
     if (now.awaitingDecision !== undefined) mine.awaitingDecision = now.awaitingDecision
     if (now.remoteFinalSeconds !== undefined) mine.remoteFinalSeconds = now.remoteFinalSeconds
 
-    next.pending = next.pending.filter((write) => write.entryId !== entryId)
+    // A write due anew since the send began stays: it is for a change the send
+    // did not carry — a follow-up commit that joined a closed entry (tracking.ts).
+    const sentSince = before.pending.find((write) => write.entryId === entryId)?.since
+    next.pending = next.pending.filter(
+      (write) => write.entryId !== entryId || (sentSince !== undefined && write.since !== sentSince),
+    )
   }
 
   // The refusal is taken over as a value — it is a fact about the last call, not

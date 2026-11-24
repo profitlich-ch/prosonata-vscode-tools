@@ -115,6 +115,7 @@
   "{0} belongs to the repository — this tool does not write there": "{0} gehört zum Repository — dort schreibt dieses Werkzeug nicht hinein",
   "{0} booked": "{0} gebucht",
   "{0} booked, entry closed": "{0} gebucht, Eintrag abgeschlossen",
+  "{0} booked onto the entry of the commit before — same text": "{0} auf den Eintrag des vorigen Commits gebucht — gleicher Text",
   "{0} discarded — paused, {1} on {2}": "{0} verworfen — pausiert, {1} auf {2}",
   "{0} entries rejected by ProSonata": "{0} Einträge von ProSonata abgelehnt",
   "{0} entries to {1} {2}": "{0} Einträge nach {1} {2}",
