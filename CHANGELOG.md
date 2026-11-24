@@ -7,6 +7,8 @@ are in German.
 
 ## [Unreleased]
 
+## [2.4.1] — 2026-11-24
+
 ### Fixed
 
 - **A button in the time-entry table no longer does nothing without a word.**
